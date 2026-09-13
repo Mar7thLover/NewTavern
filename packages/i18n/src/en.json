@@ -29,7 +29,16 @@
     "comingSoon": "This module will arrive in a later milestone.",
     "serverStatus": "Server status",
     "online": "Online",
-    "offline": "Offline"
+    "offline": "Offline",
+    "close": "Close",
+    "retry": "Retry",
+    "dismiss": "Dismiss",
+    "processing": "Working…",
+    "updated": "Updated",
+    "loadFailed": "Failed to load: {{message}}",
+    "importing": "Importing…",
+    "importingProgress": "Importing {{current}}/{{total}}…",
+    "importFailed": "Some files could not be imported"
   },
   "settings": {
     "general": "General",
@@ -39,5 +48,95 @@
     "themeDark": "Dark",
     "themeSystem": "System",
     "languageDescription": "Language of the UI and built-in prompts."
+  },
+  "library": {
+    "characters": {
+      "import": "Import characters",
+      "count": "{{total}} in total",
+      "emptyTitle": "No characters yet",
+      "emptyHint": "Import SillyTavern / Character Card V2 or V3 files (.png, .charx, .json). You can select several at once.",
+      "noDetails": "This character card has no descriptive fields.",
+      "exportAs": "Export {{format}}",
+      "deleteTitle": "Delete character?",
+      "deleteMessage": "“{{name}}” will be permanently deleted. This cannot be undone.",
+      "fields": {
+        "description": "Description",
+        "personality": "Personality",
+        "scenario": "Scenario",
+        "first_mes": "First message",
+        "mes_example": "Example dialogue",
+        "creator_notes": "Creator notes"
+      }
+    },
+    "presets": {
+      "import": "Import presets",
+      "count": "{{total}} in total",
+      "emptyTitle": "No presets yet",
+      "emptyHint": "Import SillyTavern Chat Completion preset files (.json).",
+      "apiFamily": "API",
+      "anyApi": "Any",
+      "deleteTitle": "Delete preset?",
+      "deleteMessage": "“{{name}}” will be permanently deleted. This cannot be undone.",
+      "formats": {
+        "st-openai": "SillyTavern",
+        "native": "Native"
+      }
+    },
+    "lorebooks": {
+      "import": "Import lorebooks",
+      "count": "{{total}} in total",
+      "emptyTitle": "No lorebooks yet",
+      "emptyHint": "Import SillyTavern World Info files (.json).",
+      "entryCount": "{{total}} entries",
+      "noEntries": "This lorebook has no entries.",
+      "untitled": "(untitled)",
+      "unknownPosition": "Position {{value}}",
+      "deleteTitle": "Delete lorebook?",
+      "deleteMessage": "“{{name}}” and all of its entries will be permanently deleted. This cannot be undone.",
+      "scopes": {
+        "global": "Global",
+        "char": "Character",
+        "chat": "Chat"
+      },
+      "status": {
+        "constant": "Constant",
+        "active": "Keyword-triggered",
+        "disabled": "Disabled"
+      },
+      "columns": {
+        "status": "Status",
+        "title": "Title / keys",
+        "content": "Content",
+        "position": "Position",
+        "depth": "Depth",
+        "probability": "Probability"
+      },
+      "positions": {
+        "0": "Before character",
+        "1": "After character",
+        "2": "Before author's note",
+        "3": "After author's note",
+        "4": "At depth",
+        "5": "Before examples",
+        "6": "After examples",
+        "7": "Outlet"
+      }
+    },
+    "personas": {
+      "create": "New persona",
+      "count": "{{total}} in total",
+      "emptyTitle": "No personas yet",
+      "emptyHint": "A persona describes who you are in the story; it is inserted into prompts as {{macro}}.",
+      "createTitle": "New persona",
+      "editTitle": "Edit persona",
+      "name": "Name",
+      "namePlaceholder": "The name characters will call you",
+      "description": "Description",
+      "descriptionPlaceholder": "Appearance, personality, background…",
+      "nameRequired": "Name is required.",
+      "noDescription": "No description",
+      "deleteTitle": "Delete persona?",
+      "deleteMessage": "“{{name}}” will be permanently deleted. This cannot be undone."
+    }
   }
 }

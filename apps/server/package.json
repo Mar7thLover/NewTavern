@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@hono/node-server": "^1.19.5",
+    "@newtavern/compat": "workspace:*",
     "@newtavern/core": "workspace:*",
     "@newtavern/i18n": "workspace:*",
     "@newtavern/providers": "workspace:*",

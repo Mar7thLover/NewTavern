@@ -7,23 +7,41 @@ import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 
 import type { Db } from './db/client.js';
+import { createAssetsRoutes } from './routes/assets.js';
+import { createCharactersRoutes } from './routes/characters.js';
+import { createImportRoutes } from './routes/import.js';
+import { createLorebooksRoutes } from './routes/lorebooks.js';
+import { createPersonasRoutes } from './routes/personas.js';
+import { createPresetsRoutes } from './routes/presets.js';
 import { createSettingsRoutes } from './routes/settings.js';
+import { createAssetsService } from './services/assets.js';
+import { createImporter } from './services/importer.js';
 
 export interface AppOptions {
   db: Db;
+  /** 数据目录（assets/ 等二进制落盘处） */
+  dataDir: string;
   /** 前端构建产物目录；提供时静态托管并做 SPA 回退 */
   webDist?: string;
 }
 
-export function createApp({ db, webDist }: AppOptions) {
+export function createApp({ db, dataDir, webDist }: AppOptions) {
   const app = new Hono();
+  const assets = createAssetsService(db, dataDir);
+  const importer = createImporter(db, assets, dataDir);
 
   app.use('/api/*', logger());
   app.use('/api/*', cors());
 
   const api = new Hono()
     .get('/health', (c) => c.json({ ok: true, name: 'newtavern', time: new Date().toISOString() }))
-    .route('/settings', createSettingsRoutes(db));
+    .route('/settings', createSettingsRoutes(db))
+    .route('/personas', createPersonasRoutes(db))
+    .route('/characters', createCharactersRoutes(db, importer))
+    .route('/presets', createPresetsRoutes(db, importer))
+    .route('/lorebooks', createLorebooksRoutes(db, importer))
+    .route('/import', createImportRoutes(importer))
+    .route('/assets', createAssetsRoutes(assets));
 
   app.route('/api', api);
 

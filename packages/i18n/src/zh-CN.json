@@ -29,7 +29,16 @@
     "comingSoon": "此模块将在后续里程碑中提供。",
     "serverStatus": "服务端状态",
     "online": "在线",
-    "offline": "离线"
+    "offline": "离线",
+    "close": "关闭",
+    "retry": "重试",
+    "dismiss": "知道了",
+    "processing": "处理中…",
+    "updated": "更新于",
+    "loadFailed": "加载失败：{{message}}",
+    "importing": "导入中…",
+    "importingProgress": "导入中 {{current}}/{{total}}…",
+    "importFailed": "部分文件导入失败"
   },
   "settings": {
     "general": "通用",
@@ -39,5 +48,95 @@
     "themeDark": "深色",
     "themeSystem": "跟随系统",
     "languageDescription": "界面语言与内置提示词语言。"
+  },
+  "library": {
+    "characters": {
+      "import": "导入角色",
+      "count": "共 {{total}} 个",
+      "emptyTitle": "还没有角色",
+      "emptyHint": "导入 SillyTavern / 角色卡 V2、V3 文件（.png、.charx、.json），支持一次选择多个。",
+      "noDetails": "这张角色卡没有描述类字段。",
+      "exportAs": "导出 {{format}}",
+      "deleteTitle": "删除角色？",
+      "deleteMessage": "将永久删除「{{name}}」，此操作无法撤销。",
+      "fields": {
+        "description": "描述",
+        "personality": "性格",
+        "scenario": "场景",
+        "first_mes": "开场白",
+        "mes_example": "对话示例",
+        "creator_notes": "作者注释"
+      }
+    },
+    "presets": {
+      "import": "导入预设",
+      "count": "共 {{total}} 个",
+      "emptyTitle": "还没有预设",
+      "emptyHint": "导入 SillyTavern 聊天补全（Chat Completion）预设文件（.json）。",
+      "apiFamily": "API",
+      "anyApi": "不限",
+      "deleteTitle": "删除预设？",
+      "deleteMessage": "将永久删除「{{name}}」，此操作无法撤销。",
+      "formats": {
+        "st-openai": "SillyTavern",
+        "native": "原生"
+      }
+    },
+    "lorebooks": {
+      "import": "导入世界书",
+      "count": "共 {{total}} 本",
+      "emptyTitle": "还没有世界书",
+      "emptyHint": "导入 SillyTavern 世界书文件（.json）。",
+      "entryCount": "{{total}} 个条目",
+      "noEntries": "这本世界书没有条目。",
+      "untitled": "（无标题）",
+      "unknownPosition": "位置 {{value}}",
+      "deleteTitle": "删除世界书？",
+      "deleteMessage": "将永久删除「{{name}}」及其全部条目，此操作无法撤销。",
+      "scopes": {
+        "global": "全局",
+        "char": "角色",
+        "chat": "对话"
+      },
+      "status": {
+        "constant": "常驻",
+        "active": "关键词触发",
+        "disabled": "已禁用"
+      },
+      "columns": {
+        "status": "状态",
+        "title": "标题 / 关键词",
+        "content": "内容",
+        "position": "插入位置",
+        "depth": "深度",
+        "probability": "概率"
+      },
+      "positions": {
+        "0": "角色定义之前",
+        "1": "角色定义之后",
+        "2": "作者注释之前",
+        "3": "作者注释之后",
+        "4": "指定深度",
+        "5": "示例消息之前",
+        "6": "示例消息之后",
+        "7": "出口（Outlet）"
+      }
+    },
+    "personas": {
+      "create": "新建档案",
+      "count": "共 {{total}} 个",
+      "emptyTitle": "还没有用户档案",
+      "emptyHint": "用户档案描述你在故事中的身份，会以 {{macro}} 的形式注入提示词。",
+      "createTitle": "新建用户档案",
+      "editTitle": "编辑用户档案",
+      "name": "名称",
+      "namePlaceholder": "角色对你的称呼",
+      "description": "描述",
+      "descriptionPlaceholder": "外貌、性格、背景……",
+      "nameRequired": "请填写名称。",
+      "noDescription": "暂无描述",
+      "deleteTitle": "删除用户档案？",
+      "deleteMessage": "将永久删除「{{name}}」，此操作无法撤销。"
+    }
   }
 }

@@ -1,14 +1,354 @@
-import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { randomUUID } from 'node:crypto';
+
+import { index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
 /**
- * KV 设置表：连接档案之外的全局配置、全局系统提示词覆盖层等。
- * 领域表（characters / presets / lorebooks / chats / message_nodes …）自 M1 起添加，
- * 完整清单见 docs/PLAN.md §3.3。
+ * 领域模型表。见 docs/PLAN.md §3.3。
+ * 灵活字段用 JSON 列，可查询字段拉平。DB 是唯一真源，文件系统只存二进制与原始导入件。
+ * writing_projects/documents/game_states 等 M7/M8 表届时再加。
  */
+
+const id = () =>
+  text('id')
+    .primaryKey()
+    .$defaultFn(() => randomUUID());
+
+const createdAt = () =>
+  integer('created_at', { mode: 'timestamp_ms' })
+    .notNull()
+    .$defaultFn(() => new Date());
+
+const updatedAt = () =>
+  integer('updated_at', { mode: 'timestamp_ms' })
+    .notNull()
+    .$defaultFn(() => new Date());
+
+/** KV 设置：连接档案之外的全局配置、全局系统提示词覆盖层等 */
 export const settings = sqliteTable('settings', {
   key: text('key').primaryKey(),
   value: text('value', { mode: 'json' }).notNull(),
-  updatedAt: integer('updated_at', { mode: 'timestamp' })
+  updatedAt: updatedAt(),
+});
+
+/** 内容寻址的二进制资产：头像、背景、立绘、生图结果、卡内资源 */
+export const assets = sqliteTable(
+  'assets',
+  {
+    id: id(),
+    kind: text('kind', {
+      enum: ['avatar', 'background', 'emotion', 'generated', 'upload', 'card_embedded'],
+    }).notNull(),
+    mime: text('mime').notNull(),
+    /** 相对数据目录的路径（assets/<sha256 前两位>/<sha256>） */
+    path: text('path').notNull(),
+    sha256: text('sha256').notNull(),
+    width: integer('width'),
+    height: integer('height'),
+    /** 来源说明：import / upload / generated:<jobId> / card:<characterId> */
+    source: text('source'),
+    meta: text('meta', { mode: 'json' }).$type<Record<string, unknown>>(),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex('assets_sha256_idx').on(t.sha256)],
+);
+
+/** 角色卡：data 为完整 CCv3 data JSON，未知字段原样保留 */
+export const characters = sqliteTable(
+  'characters',
+  {
+    id: id(),
+    name: text('name').notNull(),
+    spec: text('spec', { enum: ['v2', 'v3'] }).notNull(),
+    data: text('data', { mode: 'json' }).notNull(),
+    /** 内嵌世界书抽到 lorebooks 后的关联（scope='char'） */
+    bookId: text('book_id'),
+    avatarAssetId: text('avatar_asset_id'),
+    /** 原始导入件相对路径（未修改则导出原件） */
+    sourcePath: text('source_path'),
+    originalHash: text('original_hash'),
+    tags: text('tags', { mode: 'json' }).$type<string[]>().notNull().default([]),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index('characters_name_idx').on(t.name)],
+);
+
+export const presets = sqliteTable('presets', {
+  id: id(),
+  name: text('name').notNull(),
+  format: text('format', { enum: ['st-openai', 'native'] }).notNull(),
+  /** openai-chat / openai-responses / anthropic / google */
+  apiFamily: text('api_family'),
+  data: text('data', { mode: 'json' }).notNull(),
+  sampling: text('sampling', { mode: 'json' }).$type<Record<string, unknown>>(),
+  layoutPolicy: text('layout_policy', { mode: 'json' }).$type<Record<string, unknown>>(),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+export const lorebooks = sqliteTable('lorebooks', {
+  id: id(),
+  name: text('name').notNull(),
+  scope: text('scope', { enum: ['global', 'char', 'chat'] })
     .notNull()
-    .$defaultFn(() => new Date()),
+    .default('global'),
+  /** scan_depth / token_budget / recursive_scanning 等书级设置 */
+  settings: text('settings', { mode: 'json' }).$type<Record<string, unknown>>(),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+/** 世界书条目：ST 字段逐列拉平，装饰器与未知字段进 JSON 兜底 */
+export const lorebookEntries = sqliteTable(
+  'lorebook_entries',
+  {
+    id: id(),
+    bookId: text('book_id')
+      .notNull()
+      .references(() => lorebooks.id, { onDelete: 'cascade' }),
+    /** ST 原生 uid（往返保留） */
+    uid: integer('uid'),
+    keys: text('keys', { mode: 'json' }).$type<string[]>().notNull().default([]),
+    secondaryKeys: text('secondary_keys', { mode: 'json' }).$type<string[]>().notNull().default([]),
+    content: text('content').notNull().default(''),
+    comment: text('comment'),
+    constant: integer('constant', { mode: 'boolean' }).notNull().default(false),
+    selective: integer('selective', { mode: 'boolean' }).notNull().default(false),
+    selectiveLogic: integer('selective_logic'),
+    position: integer('position').notNull().default(0),
+    depth: integer('depth'),
+    entryOrder: integer('order').notNull().default(100),
+    probability: integer('probability'),
+    group: text('group'),
+    groupOverride: integer('group_override', { mode: 'boolean' }),
+    groupWeight: integer('group_weight'),
+    scanDepth: integer('scan_depth'),
+    caseSensitive: integer('case_sensitive', { mode: 'boolean' }),
+    matchWholeWords: integer('match_whole_words', { mode: 'boolean' }),
+    useGroupScoring: integer('use_group_scoring', { mode: 'boolean' }),
+    automationId: text('automation_id'),
+    role: text('role'),
+    disabled: integer('disabled', { mode: 'boolean' }).notNull().default(false),
+    sticky: integer('sticky'),
+    cooldown: integer('cooldown'),
+    delay: integer('delay'),
+    excludeRecursion: integer('exclude_recursion', { mode: 'boolean' }),
+    preventRecursion: integer('prevent_recursion', { mode: 'boolean' }),
+    delayUntilRecursion: integer('delay_until_recursion', { mode: 'boolean' }),
+    ignoreBudget: integer('ignore_budget', { mode: 'boolean' }),
+    /** CCv3 装饰器归一化结果（@@depth 等） */
+    decorators: text('decorators', { mode: 'json' }).$type<Record<string, unknown>>(),
+    /** { stKey, raw }：原始 ST 条目与其在 entries 中的 key；导出时以 raw 为底叠加列值，保证无损 */
+    extra: text('extra', { mode: 'json' }).$type<Record<string, unknown>>(),
+    displayIndex: integer('display_index'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index('lorebook_entries_book_idx').on(t.bookId)],
+);
+
+export const personas = sqliteTable('personas', {
+  id: id(),
+  name: text('name').notNull(),
+  description: text('description').notNull().default(''),
+  avatarAssetId: text('avatar_asset_id'),
+  position: integer('position').notNull().default(0),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+export const chats = sqliteTable('chats', {
+  id: id(),
+  title: text('title').notNull().default(''),
+  mode: text('mode', { enum: ['roleplay', 'writing', 'crpg'] })
+    .notNull()
+    .default('roleplay'),
+  characterIds: text('character_ids', { mode: 'json' }).$type<string[]>().notNull().default([]),
+  personaId: text('persona_id'),
+  presetId: text('preset_id'),
+  overrides: text('overrides', { mode: 'json' }).$type<Record<string, unknown>>(),
+  /** 消息树根/当前头指针 */
+  rootNodeId: text('root_node_id'),
+  headNodeId: text('head_node_id'),
+  metadata: text('metadata', { mode: 'json' }).$type<Record<string, unknown>>(),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+export const chatLorebooks = sqliteTable(
+  'chat_lorebooks',
+  {
+    chatId: text('chat_id')
+      .notNull()
+      .references(() => chats.id, { onDelete: 'cascade' }),
+    bookId: text('book_id')
+      .notNull()
+      .references(() => lorebooks.id, { onDelete: 'cascade' }),
+  },
+  (t) => [uniqueIndex('chat_lorebooks_pair_idx').on(t.chatId, t.bookId)],
+);
+
+/**
+ * 消息节点：树结构。无后代的兄弟即 swipe，有后代即分支；切换 head 即切换分支。
+ */
+export const messageNodes = sqliteTable(
+  'message_nodes',
+  {
+    id: id(),
+    chatId: text('chat_id')
+      .notNull()
+      .references(() => chats.id, { onDelete: 'cascade' }),
+    parentId: text('parent_id'),
+    siblingSeq: integer('sibling_seq').notNull().default(0),
+    role: text('role', { enum: ['user', 'assistant', 'system'] }).notNull(),
+    name: text('name'),
+    parts: text('parts', { mode: 'json' }).notNull(),
+    /** { text?, provider?, model?, opaque?[] } */
+    reasoning: text('reasoning', { mode: 'json' }).$type<Record<string, unknown>>(),
+    /** 消息级变量快照（MVU commit 结果） */
+    variables: text('variables', { mode: 'json' }).$type<Record<string, unknown>>(),
+    /** sticky/cooldown/delay 快照（按节点起算，swipe/重生从父节点恢复） */
+    wiState: text('wi_state', { mode: 'json' }).$type<Record<string, unknown>>(),
+    usage: text('usage', { mode: 'json' }).$type<Record<string, unknown>>(),
+    provider: text('provider'),
+    model: text('model'),
+    isHidden: integer('is_hidden', { mode: 'boolean' }).notNull().default(false),
+    extra: text('extra', { mode: 'json' }).$type<Record<string, unknown>>(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index('message_nodes_chat_idx').on(t.chatId),
+    index('message_nodes_parent_idx').on(t.parentId),
+  ],
+);
+
+export const variables = sqliteTable(
+  'variables',
+  {
+    id: id(),
+    scope: text('scope', { enum: ['global', 'character', 'chat', 'script'] }).notNull(),
+    ownerId: text('owner_id').notNull().default(''),
+    key: text('key').notNull(),
+    value: text('value', { mode: 'json' }),
+    updatedAt: updatedAt(),
+  },
+  (t) => [uniqueIndex('variables_scope_owner_key_idx').on(t.scope, t.ownerId, t.key)],
+);
+
+/** 变量事务日志（MVU 审计/回放） */
+export const variableEvents = sqliteTable('variable_events', {
+  id: id(),
+  scope: text('scope').notNull(),
+  ownerId: text('owner_id').notNull().default(''),
+  nodeId: text('node_id'),
+  op: text('op').notNull(),
+  path: text('path').notNull(),
+  oldValue: text('old_value', { mode: 'json' }),
+  newValue: text('new_value', { mode: 'json' }),
+  createdAt: createdAt(),
+});
+
+export const connections = sqliteTable('connections', {
+  id: id(),
+  provider: text('provider').notNull(),
+  label: text('label').notNull().default(''),
+  baseUrl: text('base_url').notNull(),
+  /** 主密钥加密后的多 Key 列表 */
+  keysEnc: text('keys_enc').notNull().default(''),
+  headers: text('headers', { mode: 'json' }).$type<Record<string, string>>(),
+  proxy: text('proxy'),
+  quirks: text('quirks', { mode: 'json' }).$type<Record<string, boolean>>(),
+  modelOverrides: text('model_overrides', { mode: 'json' }).$type<Record<string, unknown>>(),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+export const modelCache = sqliteTable('model_cache', {
+  id: id(),
+  connectionId: text('connection_id')
+    .notNull()
+    .references(() => connections.id, { onDelete: 'cascade' }),
+  models: text('models', { mode: 'json' }).$type<unknown[]>().notNull().default([]),
+  fetchedAt: integer('fetched_at', { mode: 'timestamp_ms' }),
+});
+
+export const generationLog = sqliteTable(
+  'generation_log',
+  {
+    id: id(),
+    nodeId: text('node_id'),
+    provider: text('provider').notNull(),
+    model: text('model').notNull(),
+    usage: text('usage', { mode: 'json' }).$type<Record<string, unknown>>(),
+    cost: integer('cost'),
+    latencyMs: integer('latency_ms'),
+    layoutMode: text('layout_mode', { enum: ['strict', 'cache-aware'] }),
+    createdAt: createdAt(),
+  },
+  (t) => [index('generation_log_node_idx').on(t.nodeId)],
+);
+
+export const regexScripts = sqliteTable('regex_scripts', {
+  id: id(),
+  scope: text('scope', { enum: ['global', 'character'] })
+    .notNull()
+    .default('global'),
+  ownerId: text('owner_id'),
+  scriptName: text('script_name').notNull(),
+  findRegex: text('find_regex').notNull(),
+  replaceString: text('replace_string').notNull().default(''),
+  placement: text('placement', { mode: 'json' }).$type<number[]>().notNull().default([]),
+  direction: text('direction', { enum: ['prompt', 'display', 'both'] })
+    .notNull()
+    .default('both'),
+  disabled: integer('disabled', { mode: 'boolean' }).notNull().default(false),
+  runOnEdit: integer('run_on_edit', { mode: 'boolean' }).notNull().default(false),
+  minDepth: integer('min_depth'),
+  maxDepth: integer('max_depth'),
+  trimStrings: text('trim_strings', { mode: 'json' }).$type<string[]>(),
+  substituteRegex: integer('substitute_regex'),
+  extra: text('extra', { mode: 'json' }).$type<Record<string, unknown>>(),
+  displayOrder: integer('display_order').notNull().default(0),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+/** 预设/角色/世界书版本历史，支撑工作台 AI 编辑撤销 */
+export const entityVersions = sqliteTable(
+  'entity_versions',
+  {
+    id: id(),
+    entityType: text('entity_type').notNull(),
+    entityId: text('entity_id').notNull(),
+    version: integer('version').notNull(),
+    data: text('data', { mode: 'json' }).notNull(),
+    author: text('author', { enum: ['user', 'ai'] })
+      .notNull()
+      .default('user'),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex('entity_versions_idx').on(t.entityType, t.entityId, t.version)],
+);
+
+/** 可复用提示片段 */
+export const promptLibrary = sqliteTable('prompt_library', {
+  id: id(),
+  name: text('name').notNull(),
+  content: text('content').notNull().default(''),
+  role: text('role'),
+  tags: text('tags', { mode: 'json' }).$type<string[]>().notNull().default([]),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+export const jobs = sqliteTable('jobs', {
+  id: id(),
+  kind: text('kind', { enum: ['image_gen', 'summary', 'import'] }).notNull(),
+  status: text('status', { enum: ['pending', 'running', 'done', 'failed'] })
+    .notNull()
+    .default('pending'),
+  payload: text('payload', { mode: 'json' }).$type<Record<string, unknown>>(),
+  result: text('result', { mode: 'json' }).$type<Record<string, unknown>>(),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
 });
