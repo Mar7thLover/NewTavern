@@ -1,0 +1,4 @@
+{
+  "extends": "@newtavern/config/tsconfig/web.json",
+  "include": ["src", "vite.config.ts"]
+}

@@ -1,0 +1,43 @@
+{
+  "app": {
+    "name": "新酒馆",
+    "tagline": "AI 创意角色扮演与写作前端"
+  },
+  "nav": {
+    "chat": "对话",
+    "characters": "角色",
+    "presets": "预设",
+    "lorebooks": "世界书",
+    "personas": "用户档案",
+    "studio": "工作台",
+    "writing": "写作",
+    "connections": "连接与模型",
+    "settings": "设置",
+    "migration": "迁移向导"
+  },
+  "common": {
+    "language": "语言",
+    "save": "保存",
+    "cancel": "取消",
+    "confirm": "确认",
+    "delete": "删除",
+    "edit": "编辑",
+    "import": "导入",
+    "export": "导出",
+    "search": "搜索",
+    "loading": "加载中…",
+    "comingSoon": "此模块将在后续里程碑中提供。",
+    "serverStatus": "服务端状态",
+    "online": "在线",
+    "offline": "离线"
+  },
+  "settings": {
+    "general": "通用",
+    "appearance": "外观",
+    "theme": "主题",
+    "themeLight": "浅色",
+    "themeDark": "深色",
+    "themeSystem": "跟随系统",
+    "languageDescription": "界面语言与内置提示词语言。"
+  }
+}

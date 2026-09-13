@@ -1,0 +1,43 @@
+{
+  "app": {
+    "name": "NewTavern",
+    "tagline": "An AI frontend for creative roleplay and writing"
+  },
+  "nav": {
+    "chat": "Chat",
+    "characters": "Characters",
+    "presets": "Presets",
+    "lorebooks": "Lorebooks",
+    "personas": "Personas",
+    "studio": "Studio",
+    "writing": "Writing",
+    "connections": "Connections",
+    "settings": "Settings",
+    "migration": "Migration"
+  },
+  "common": {
+    "language": "Language",
+    "save": "Save",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "delete": "Delete",
+    "edit": "Edit",
+    "import": "Import",
+    "export": "Export",
+    "search": "Search",
+    "loading": "Loading…",
+    "comingSoon": "This module will arrive in a later milestone.",
+    "serverStatus": "Server status",
+    "online": "Online",
+    "offline": "Offline"
+  },
+  "settings": {
+    "general": "General",
+    "appearance": "Appearance",
+    "theme": "Theme",
+    "themeLight": "Light",
+    "themeDark": "Dark",
+    "themeSystem": "System",
+    "languageDescription": "Language of the UI and built-in prompts."
+  }
+}

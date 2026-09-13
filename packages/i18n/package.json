@@ -1,0 +1,19 @@
+{
+  "name": "@newtavern/i18n",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./prompts/*": "./prompts/*"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@newtavern/config": "workspace:*",
+    "typescript": "~5.9.3",
+    "vitest": "^3.2.4"
+  }
+}

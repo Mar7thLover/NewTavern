@@ -1,0 +1,54 @@
+{
+  "$schema": "./catalog.schema.json",
+  "version": 1,
+  "updated": "2026-09-12",
+  "defaults": {
+    "thinking": "none",
+    "caching": "none",
+    "systemInMessages": false,
+    "reasoningRoundtrip": "none",
+    "imageIn": false,
+    "imageOut": false,
+    "documentIn": false,
+    "tools": false,
+    "structuredOutput": false,
+    "prefill": false,
+    "maxContext": 32768,
+    "maxOutput": 4096
+  },
+  "providers": {
+    "anthropic": {
+      "match": "claude-*",
+      "capabilities": {
+        "caching": "breakpoints",
+        "maxBreakpoints": 4,
+        "cacheMinTokens": 1024,
+        "imageIn": true,
+        "documentIn": true,
+        "tools": true,
+        "structuredOutput": true
+      }
+    },
+    "openai-chat": {
+      "match": "gpt-*",
+      "capabilities": {
+        "caching": "prefix-auto",
+        "cacheMinTokens": 1024,
+        "imageIn": true,
+        "tools": true,
+        "structuredOutput": true
+      }
+    },
+    "google": {
+      "match": "gemini-*",
+      "capabilities": {
+        "caching": "prefix-auto",
+        "imageIn": true,
+        "documentIn": true,
+        "tools": true,
+        "structuredOutput": true
+      }
+    }
+  },
+  "models": []
+}

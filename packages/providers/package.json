@@ -1,0 +1,23 @@
+{
+  "name": "@newtavern/providers",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./catalog.json": "./src/catalog.json"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@newtavern/core": "workspace:*",
+    "zod": "^4.1.11"
+  },
+  "devDependencies": {
+    "@newtavern/config": "workspace:*",
+    "typescript": "~5.9.3",
+    "vitest": "^3.2.4"
+  }
+}

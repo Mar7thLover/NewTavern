@@ -1,0 +1,23 @@
+node_modules/
+dist/
+dist-ssr/
+*.local
+.env
+.env.*
+!.env.example
+
+# 数据目录（运行时生成）
+data/
+
+# Drizzle 运行时产物（migrations SQL 本身提交）
+apps/server/drizzle/meta/_journal.json.bak
+
+# 日志与缓存
+*.log
+.cache/
+.vite/
+coverage/
+
+# 系统
+.DS_Store
+Thumbs.db

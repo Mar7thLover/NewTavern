@@ -1,0 +1,4 @@
+{
+  "extends": "@newtavern/config/tsconfig/base.json",
+  "include": ["src"]
+}
