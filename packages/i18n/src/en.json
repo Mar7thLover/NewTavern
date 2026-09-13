@@ -138,5 +138,162 @@
       "deleteTitle": "Delete persona?",
       "deleteMessage": "“{{name}}” will be permanently deleted. This cannot be undone."
     }
+  },
+  "chat": {
+    "you": "You",
+    "defaultUserName": "User",
+    "assistant": "Assistant",
+    "system": "System",
+    "generating": "Generating…",
+    "scrollToBottom": "Back to bottom",
+    "emptyTitle": "Start the conversation",
+    "emptyWithCharacterHint": "This card has no first message. Send something to begin.",
+    "emptyBlankHint": "A blank chat has no character. Just type what you want to say.",
+    "list": {
+      "title": "Chats",
+      "new": "New chat",
+      "empty": "No chats yet",
+      "untitled": "Untitled chat",
+      "noMessages": "No messages",
+      "deleteTitle": "Delete chat?",
+      "deleteMessage": "“{{name}}” and all of its messages will be permanently deleted. This cannot be undone."
+    },
+    "start": {
+      "title": "Pick a character to start",
+      "hint": "Click a card to open a new chat, or start from blank.",
+      "blank": "Blank chat",
+      "noCharactersTitle": "No characters yet",
+      "noCharactersHint": "Import a character card in the library first, then come back."
+    },
+    "composer": {
+      "placeholder": "Say something…",
+      "send": "Send",
+      "stop": "Stop generating",
+      "hint": "Enter to send, Shift+Enter for a new line"
+    },
+    "message": {
+      "copy": "Copy",
+      "copied": "Copied",
+      "regenerate": "Regenerate",
+      "empty": "(this message is empty)",
+      "editHint": "Ctrl+Enter to save, Esc to cancel",
+      "deleteTitle": "Delete this message?",
+      "deleteMessage": "Every message after this one will be deleted as well. This cannot be undone."
+    },
+    "reasoning": {
+      "title": "Reasoning",
+      "thinking": "Thinking…",
+      "empty": "No reasoning content"
+    },
+    "swipe": {
+      "prev": "Previous",
+      "next": "Next",
+      "new": "Generate another",
+      "branched": "Branch",
+      "branchedHint": "Some of these candidates already have replies; switching changes the rest of the chat."
+    },
+    "panel": {
+      "title": "Session",
+      "noCharacter": "This is a blank chat with no character attached.",
+      "noDescription": "No description",
+      "connection": "Connection",
+      "connectionUnset": "Not set",
+      "addConnection": "Add a connection first",
+      "model": "Model",
+      "modelPlaceholder": "Search or type a model name",
+      "persona": "Persona",
+      "none": "None",
+      "preset": "Preset",
+      "builtinPreset": "Built-in default",
+      "layoutMode": "Prompt layout",
+      "layout": {
+        "strict": "Strict",
+        "cacheAware": "Cache-aware",
+        "strictHint": "Assemble exactly in preset order, with no adjustments for caching.",
+        "cacheAwareHint": "Place cache breakpoints without changing segment order, to cut the cost of repeated input."
+      },
+      "usage": "Usage",
+      "lastTurn": "Last turn",
+      "sessionTotal": "Session total",
+      "noUsage": "No usage data yet",
+      "messages": "{{total}} messages",
+      "cacheHit": "Cache read share of input",
+      "tokens": {
+        "input": "Input",
+        "output": "Output",
+        "cacheRead": "Cache read",
+        "cacheWrite": "Cache write",
+        "reasoning": "Reasoning"
+      }
+    }
+  },
+  "connections": {
+    "count": "{{total}} in total",
+    "create": "New connection",
+    "createTitle": "New connection",
+    "editTitle": "Edit connection",
+    "emptyTitle": "No connections yet",
+    "emptyHint": "Add an API connection before chatting. OpenAI-compatible endpoints, OpenAI Responses, Anthropic and Google are supported.",
+    "provider": "Protocol",
+    "providers": {
+      "openai-chat": "OpenAI compatible",
+      "openai-responses": "OpenAI Responses",
+      "anthropic": "Anthropic",
+      "google": "Google Gemini"
+    },
+    "endpoints": "Common endpoints",
+    "label": "Name",
+    "labelPlaceholder": "e.g. “OpenRouter main”",
+    "labelRequired": "Name is required.",
+    "baseUrl": "Base URL",
+    "apiKeys": "API key",
+    "apiKeysPlaceholder": "One key per line; several keys are rotated",
+    "apiKeysHint": "Keys are encrypted on your local server and never sent back to the browser.",
+    "apiKeysKeepHint": "{{total}} key(s) stored; leave empty to keep them.",
+    "clearKeys": "Clear the stored keys",
+    "advanced": "Advanced",
+    "headers": "Custom headers",
+    "headersHint": "One k=v per line.",
+    "quirks": "Endpoint quirks",
+    "quirksHint": "Leave on Auto to infer from the base URL.",
+    "quirkAuto": "Auto",
+    "quirkOn": "On",
+    "quirkOff": "Off",
+    "quirkNames": {
+      "developerRole": "developer role",
+      "reasoningContent": "reasoning_content field",
+      "prefill": "Assistant prefill",
+      "streamUsage": "Usage in stream",
+      "reasoningEffort": "reasoning_effort param"
+    },
+    "test": "Test",
+    "testing": "Testing…",
+    "testOk": "Connection works, {{ms}} ms",
+    "testFailed": "Test failed: {{message}}",
+    "models": "Models",
+    "refreshModels": "Refresh models",
+    "searchModels": "Search models",
+    "noModels": "No matching models.",
+    "modelsFailed": "Could not load the model list",
+    "fetchedAt": "Updated {{time}}",
+    "setDefault": "Use as default model",
+    "isDefault": "Default",
+    "keyCount": "{{total}} key(s) {{hints}}",
+    "noKeys": "No key configured",
+    "deleteTitle": "Delete connection?",
+    "deleteMessage": "“{{name}}” and its stored keys will be permanently deleted. This cannot be undone."
+  },
+  "errors": {
+    "no_connection": "No usable connection",
+    "provider_error": "The provider returned an error",
+    "auth": "Authentication failed — check the API key",
+    "rateLimit": "Too many requests, try again shortly",
+    "overloaded": "The upstream service is overloaded, try again shortly",
+    "contextLength": "The context exceeds the model limit",
+    "filter": "The provider blocked this content",
+    "invalid": "The request was rejected as invalid",
+    "network": "Network error",
+    "not_found": "Not found",
+    "unknown": "Something went wrong"
   }
 }

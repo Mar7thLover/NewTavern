@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { NavLink, Outlet } from 'react-router';
+import { NavLink, Outlet, useLocation } from 'react-router';
 
 import { useUiStore } from './store/ui';
 import { Button } from '../components/ui/button';
@@ -27,6 +27,8 @@ export function AppLayout() {
   const language = useUiStore((s) => s.language);
   const setLanguage = useUiStore((s) => s.setLanguage);
   const health = useServerHealth();
+  // 对话页自己管三栏与滚动，外壳不加内边距、不撑高
+  const fullBleed = useLocation().pathname === '/';
 
   useEffect(() => {
     applyTheme(theme);
@@ -34,7 +36,7 @@ export function AppLayout() {
   }, [theme]);
 
   return (
-    <div className="flex min-h-dvh">
+    <div className={cn('flex', fullBleed ? 'h-dvh overflow-hidden' : 'min-h-dvh')}>
       <aside className="hidden w-52 shrink-0 flex-col border-r border-border bg-card p-4 md:flex">
         <div className="mb-6">
           <div className="text-lg font-bold">{t('app.name')}</div>
@@ -61,9 +63,10 @@ export function AppLayout() {
         </nav>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between gap-3 border-b border-border px-4 py-2">
-          <nav className="flex gap-1 overflow-x-auto md:hidden">
+          {/* min-w-0：不加的话 flex 子项按 max-content 撑宽，窄屏整页横向溢出 */}
+          <nav className="flex min-w-0 gap-1 overflow-x-auto md:hidden">
             {NAV_ITEMS.map(({ to, key }) => (
               <NavLink
                 key={to}
@@ -80,7 +83,7 @@ export function AppLayout() {
               </NavLink>
             ))}
           </nav>
-          <div className="ml-auto flex items-center gap-3">
+          <div className="ml-auto flex shrink-0 items-center gap-3">
             <span
               className={cn(
                 'inline-flex items-center gap-1.5 text-xs',
@@ -105,7 +108,7 @@ export function AppLayout() {
           </div>
         </header>
 
-        <main className="min-w-0 flex-1 p-4 md:p-6">
+        <main className={cn('min-w-0 flex-1', fullBleed ? 'min-h-0' : 'p-4 md:p-6')}>
           <Outlet />
         </main>
       </div>

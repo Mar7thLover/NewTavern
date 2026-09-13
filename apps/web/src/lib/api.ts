@@ -1,3 +1,4 @@
+import type { Part } from '@newtavern/core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 /* ------------------------------------------------------------------ */
@@ -184,6 +185,210 @@ export interface PersonaInput {
 }
 
 /* ------------------------------------------------------------------ */
+/* 连接与模型（M2 契约 §3.2）                                           */
+/* ------------------------------------------------------------------ */
+
+export type ProviderId = 'openai-chat' | 'openai-responses' | 'anthropic' | 'google';
+
+export const PROVIDER_IDS: ProviderId[] = [
+  'openai-chat',
+  'openai-responses',
+  'anthropic',
+  'google',
+];
+
+/** 与 `packages/providers` 的 `ModelCapabilities` 同构；UI 只读展示，故字段全部可选 */
+export interface ModelCapabilities {
+  thinking?: 'none' | 'budget' | 'effort' | 'level' | 'adaptive';
+  effortLevels?: string[];
+  caching?: 'none' | 'prefix-auto' | 'breakpoints' | 'explicit-object';
+  cacheMinTokens?: number;
+  maxBreakpoints?: number;
+  systemInMessages?: boolean;
+  reasoningRoundtrip?: 'none' | 'signature' | 'encrypted' | 'thoughtSignature';
+  imageIn?: boolean;
+  imageOut?: boolean;
+  documentIn?: boolean;
+  tools?: boolean;
+  structuredOutput?: boolean;
+  prefill?: boolean;
+  maxContext?: number;
+  maxOutput?: number;
+}
+
+export interface ModelInfo {
+  id: string;
+  name?: string;
+  contextLength?: number;
+  maxOutput?: number;
+}
+
+export interface ConnectionInput {
+  provider: ProviderId;
+  label: string;
+  baseUrl?: string;
+  /** 缺省表示不改动；`[]` 表示清空 */
+  apiKeys?: string[];
+  headers?: Record<string, string>;
+  proxy?: string | null;
+  quirks?: Record<string, boolean>;
+  modelOverrides?: Record<string, Partial<ModelCapabilities>>;
+}
+
+export interface ConnectionSummary extends Omit<ConnectionInput, 'apiKeys'> {
+  id: string;
+  keyCount: number;
+  /** 每个 Key 的末 4 位 */
+  keyHints: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ConnectionModelsResponse {
+  models: ModelInfo[];
+  fetchedAt: string | null;
+  source: 'cache' | 'remote';
+}
+
+export interface ConnectionTestResult {
+  ok: true;
+  latencyMs: number;
+  modelCount?: number;
+}
+
+/** 设置 KV `generation.default` */
+export interface GenerationDefault {
+  connectionId: string | null;
+  model: string | null;
+}
+
+/** `GET /api/models/catalog` 的条目 */
+export interface CatalogModel {
+  provider: string;
+  match: string;
+  capabilities: Partial<ModelCapabilities>;
+}
+
+/* ------------------------------------------------------------------ */
+/* 聊天与消息树（M2 契约 §3.4）                                         */
+/* ------------------------------------------------------------------ */
+
+export type MessageRole = 'user' | 'assistant' | 'system';
+
+export interface Usage {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  reasoning: number;
+}
+
+export interface ChatOverrides {
+  connectionId?: string | null;
+  model?: string | null;
+  sampling?: Record<string, unknown>;
+  thinking?: { effort?: string; budgetTokens?: number };
+  layoutMode?: LayoutMode;
+}
+
+export type LayoutMode = 'strict' | 'cache-aware';
+
+export interface MessageNode {
+  id: string;
+  chatId: string;
+  parentId: string | null;
+  siblingSeq: number;
+  role: MessageRole;
+  name: string | null;
+  parts: Part[];
+  reasoning: { text?: string; opaque?: unknown[] } | null;
+  usage: Usage | null;
+  provider: string | null;
+  model: string | null;
+  isHidden: boolean;
+  extra: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+export interface ChatSummary {
+  id: string;
+  title: string | null;
+  mode: string;
+  characterIds: string[];
+  personaId: string | null;
+  presetId: string | null;
+  overrides: ChatOverrides | null;
+  rootNodeId: string | null;
+  headNodeId: string | null;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+  updatedAt: string;
+  character?: { id: string; name: string; avatarAssetId: string | null } | null;
+  messageCount: number;
+  lastMessageAt: string | null;
+  /** head 节点文本前 120 字 */
+  preview: string | null;
+}
+
+export interface ChatDetail extends ChatSummary {
+  nodes: MessageNode[];
+}
+
+export interface CreateChatInput {
+  characterIds?: string[];
+  personaId?: string | null;
+  presetId?: string | null;
+  title?: string;
+  mode?: 'roleplay';
+}
+
+export interface PatchChatInput {
+  title?: string;
+  personaId?: string | null;
+  presetId?: string | null;
+  headNodeId?: string;
+  overrides?: ChatOverrides;
+}
+
+export interface PostMessageInput {
+  role: MessageRole;
+  text: string;
+  parentId?: string | null;
+  name?: string;
+}
+
+export interface PatchNodeInput {
+  text?: string;
+  isHidden?: boolean;
+  name?: string;
+}
+
+/** `POST /api/chats/:id/generate` 的请求体 */
+export interface GenerateBody {
+  userMessage?: { text: string; name?: string } | null;
+  parentId?: string | null;
+  connectionId?: string;
+  model?: string;
+  layoutMode?: LayoutMode;
+}
+
+/** 生成 SSE 的 error 事件载荷 */
+export interface GenerationError {
+  kind: string;
+  message: string;
+  status?: number;
+}
+
+/** 消息节点的纯文本（多个 text part 直接拼接） */
+export function nodeText(node: Pick<MessageNode, 'parts'>): string {
+  let text = '';
+  for (const part of node.parts) {
+    if (part.type === 'text') text += part.text;
+  }
+  return text;
+}
+
+/* ------------------------------------------------------------------ */
 /* Query keys 与 URL                                                    */
 /* ------------------------------------------------------------------ */
 
@@ -196,6 +401,13 @@ export const queryKeys = {
   lorebooks: ['lorebooks'] as const,
   lorebook: (id: string) => ['lorebooks', id] as const,
   personas: ['personas'] as const,
+  chats: ['chats'] as const,
+  chat: (id: string) => ['chats', id] as const,
+  connections: ['connections'] as const,
+  connection: (id: string) => ['connections', id] as const,
+  connectionModels: (id: string) => ['connections', id, 'models'] as const,
+  generationDefault: ['settings', 'generation.default'] as const,
+  catalogModels: ['models', 'catalog'] as const,
 };
 
 export const apiUrls = {
@@ -322,4 +534,257 @@ export function useDeletePersona() {
     mutationFn: (id: string) => mutate(`/api/personas/${enc(id)}`, 'DELETE'),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.personas }),
   });
+}
+
+/* ------------------------------------------------------------------ */
+/* 连接与模型 hooks                                                     */
+/* ------------------------------------------------------------------ */
+
+export function useConnections() {
+  return useQuery({
+    queryKey: queryKeys.connections,
+    queryFn: () => fetchJson<ConnectionSummary[]>('/api/connections'),
+  });
+}
+
+export function useConnection(id: string | null) {
+  return useQuery({
+    queryKey: queryKeys.connection(id ?? ''),
+    queryFn: () => fetchJson<ConnectionSummary>(`/api/connections/${enc(id ?? '')}`),
+    enabled: id !== null,
+  });
+}
+
+export function useCreateConnection() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: ConnectionInput) =>
+      mutate<ConnectionSummary>('/api/connections', 'POST', input),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.connections }),
+  });
+}
+
+export function useUpdateConnection() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...patch }: Partial<ConnectionInput> & { id: string }) =>
+      mutate<ConnectionSummary>(`/api/connections/${enc(id)}`, 'PUT', patch),
+    onSuccess: (data) => {
+      queryClient.setQueryData(queryKeys.connection(data.id), data);
+      return queryClient.invalidateQueries({ queryKey: queryKeys.connections });
+    },
+  });
+}
+
+export function useDeleteConnection() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => mutate(`/api/connections/${enc(id)}`, 'DELETE'),
+    onSuccess: (_data, id) => {
+      queryClient.removeQueries({ queryKey: queryKeys.connection(id) });
+      return queryClient.invalidateQueries({ queryKey: queryKeys.connections });
+    },
+  });
+}
+
+/**
+ * 连接下的模型列表。`refresh` 为 true 时强制远端拉取（另开缓存键，避免污染常规列表）。
+ */
+export function useConnectionModels(id: string | null) {
+  return useQuery({
+    queryKey: queryKeys.connectionModels(id ?? ''),
+    queryFn: () => fetchJson<ConnectionModelsResponse>(`/api/connections/${enc(id ?? '')}/models`),
+    enabled: id !== null,
+    staleTime: 5 * 60_000,
+  });
+}
+
+/** 强制刷新模型列表并写回缓存 */
+export function useRefreshConnectionModels() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      fetchJson<ConnectionModelsResponse>(`/api/connections/${enc(id)}/models?refresh=1`),
+    onSuccess: (data, id) => queryClient.setQueryData(queryKeys.connectionModels(id), data),
+  });
+}
+
+export function useTestConnection() {
+  return useMutation({
+    mutationFn: ({ id, model }: { id: string; model?: string }) =>
+      mutate<ConnectionTestResult>(`/api/connections/${enc(id)}/test`, 'POST', { model }),
+  });
+}
+
+const GENERATION_DEFAULT_URL = '/api/settings/generation.default';
+
+const EMPTY_GENERATION_DEFAULT: GenerationDefault = { connectionId: null, model: null };
+
+/** 设置路由统一返回 `{ key, value }`，这里剥掉外层并补齐缺省值 */
+function toGenerationDefault(value: unknown): GenerationDefault {
+  const record = (value ?? {}) as { connectionId?: unknown; model?: unknown };
+  return {
+    connectionId: typeof record.connectionId === 'string' ? record.connectionId : null,
+    model: typeof record.model === 'string' ? record.model : null,
+  };
+}
+
+export function useGenerationDefault() {
+  return useQuery({
+    queryKey: queryKeys.generationDefault,
+    queryFn: async () => {
+      try {
+        const row = await fetchJson<{ key: string; value: unknown }>(GENERATION_DEFAULT_URL);
+        return toGenerationDefault(row.value);
+      } catch (error) {
+        // 从未设置过默认值时设置路由返回 404，视为「未设置」而不是错误
+        if (error instanceof ApiError && error.status === 404) return EMPTY_GENERATION_DEFAULT;
+        throw error;
+      }
+    },
+  });
+}
+
+export function useSetGenerationDefault() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (value: GenerationDefault) => {
+      const row = await mutate<{ key: string; value: unknown }>(
+        GENERATION_DEFAULT_URL,
+        'PUT',
+        value,
+      );
+      return toGenerationDefault(row.value);
+    },
+    onSuccess: (data) => queryClient.setQueryData(queryKeys.generationDefault, data),
+  });
+}
+
+export function useCatalogModels() {
+  return useQuery({
+    queryKey: queryKeys.catalogModels,
+    queryFn: () => fetchJson<CatalogModel[]>('/api/models/catalog'),
+    staleTime: Infinity,
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/* 聊天 hooks                                                           */
+/* ------------------------------------------------------------------ */
+
+export function useChats() {
+  return useQuery({
+    queryKey: queryKeys.chats,
+    queryFn: () => fetchJson<ChatSummary[]>('/api/chats'),
+  });
+}
+
+export function useChat(id: string | null) {
+  return useQuery({
+    queryKey: queryKeys.chat(id ?? ''),
+    queryFn: () => fetchJson<ChatDetail>(`/api/chats/${enc(id ?? '')}`),
+    enabled: id !== null,
+    // 流式期间由 useGeneration 直接写缓存，重新聚焦时的自动刷新会丢字
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useCreateChat() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateChatInput) => mutate<ChatDetail>('/api/chats', 'POST', input),
+    onSuccess: (data) => {
+      queryClient.setQueryData(queryKeys.chat(data.id), data);
+      return queryClient.invalidateQueries({ queryKey: queryKeys.chats, exact: true });
+    },
+  });
+}
+
+export function usePatchChat() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...patch }: PatchChatInput & { id: string }) =>
+      mutate<ChatDetail>(`/api/chats/${enc(id)}`, 'PATCH', patch),
+    onSuccess: (data) => {
+      // PATCH 返回 ChatDetail；服务端若省略 nodes 则保留缓存里的
+      queryClient.setQueryData<ChatDetail>(queryKeys.chat(data.id), (previous) => ({
+        ...data,
+        nodes: data.nodes ?? previous?.nodes ?? [],
+      }));
+      return queryClient.invalidateQueries({ queryKey: queryKeys.chats, exact: true });
+    },
+  });
+}
+
+export function useDeleteChat() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => mutate(`/api/chats/${enc(id)}`, 'DELETE'),
+    onSuccess: (_data, id) => {
+      queryClient.removeQueries({ queryKey: queryKeys.chat(id) });
+      return queryClient.invalidateQueries({ queryKey: queryKeys.chats, exact: true });
+    },
+  });
+}
+
+export function usePostMessage() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ chatId, ...input }: PostMessageInput & { chatId: string }) =>
+      mutate<{ node: MessageNode; chat: ChatSummary }>(
+        `/api/chats/${enc(chatId)}/messages`,
+        'POST',
+        input,
+      ),
+    onSuccess: ({ node, chat }) => {
+      queryClient.setQueryData<ChatDetail>(queryKeys.chat(chat.id), (previous) =>
+        previous ? mergeNode(previous, node, chat) : previous,
+      );
+      return queryClient.invalidateQueries({ queryKey: queryKeys.chats, exact: true });
+    },
+  });
+}
+
+export function usePatchNode() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      chatId,
+      nodeId,
+      ...patch
+    }: PatchNodeInput & { chatId: string; nodeId: string }) =>
+      mutate<MessageNode>(`/api/chats/${enc(chatId)}/nodes/${enc(nodeId)}`, 'PATCH', patch),
+    onSuccess: (node, { chatId }) => {
+      queryClient.setQueryData<ChatDetail>(queryKeys.chat(chatId), (previous) =>
+        previous ? mergeNode(previous, node) : previous,
+      );
+      return queryClient.invalidateQueries({ queryKey: queryKeys.chats, exact: true });
+    },
+  });
+}
+
+export function useDeleteNode() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ chatId, nodeId }: { chatId: string; nodeId: string }) =>
+      mutate<{ chat: ChatSummary }>(`/api/chats/${enc(chatId)}/nodes/${enc(nodeId)}`, 'DELETE'),
+    onSuccess: (result, { chatId }) => {
+      // 删的是子树，剩下哪些节点由服务端决定 —— 直接重新拉详情
+      queryClient.setQueryData<ChatDetail>(queryKeys.chat(chatId), (previous) =>
+        previous && result?.chat ? { ...previous, ...result.chat } : previous,
+      );
+      void queryClient.invalidateQueries({ queryKey: queryKeys.chat(chatId) });
+      return queryClient.invalidateQueries({ queryKey: queryKeys.chats, exact: true });
+    },
+  });
+}
+
+/** 把一个节点写入 ChatDetail 缓存（存在则替换），并可选合并聊天摘要字段 */
+export function mergeNode(detail: ChatDetail, node: MessageNode, chat?: ChatSummary): ChatDetail {
+  const index = detail.nodes.findIndex((item) => item.id === node.id);
+  const nodes =
+    index === -1
+      ? [...detail.nodes, node]
+      : detail.nodes.map((item, i) => (i === index ? node : item));
+  return { ...detail, ...(chat ?? {}), nodes };
 }

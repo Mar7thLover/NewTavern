@@ -9,6 +9,8 @@ export type ProviderId = 'openai-chat' | 'openai-responses' | 'anthropic' | 'goo
 export interface Connection {
   id: string;
   provider: ProviderId;
+  /** 用户可见的连接名 */
+  label?: string;
   baseUrl: string;
   /** 轮换/故障转移的多 Key 由服务端在发请求时解析注入 */
   apiKey?: string;
@@ -16,6 +18,8 @@ export interface Connection {
   proxy?: string;
   /** OpenAI 兼容端点自动识别/用户覆盖的 quirks（developer 角色、reasoning_content、prefill 等） */
   quirks?: Record<string, boolean>;
+  /** 按模型覆盖 catalog 能力（合并顺序最后一位） */
+  modelOverrides?: Record<string, Partial<ModelCapabilities>>;
 }
 
 export interface ModelInfo {
@@ -49,6 +53,13 @@ export interface ProviderRequest {
   url: string;
   headers: Record<string, string>;
   body: unknown;
+  /** buildRequest 过程中被丢弃/降级的参数说明，供检查器展示 */
+  warnings?: string[];
+}
+
+/** buildRequest 的可选参数：由聊天覆盖项（ChatOverrides.thinking）传入 */
+export interface BuildOptions {
+  thinking?: { effort?: string; budgetTokens?: number };
 }
 
 export type ProviderErrorKind =
@@ -90,7 +101,7 @@ export interface ProviderAdapter {
   /** catalog.json + 远端探测 + 用户覆盖 + 端点 quirks 合并 */
   capabilities(model: string, conn: Connection): ModelCapabilities;
   /** 纯函数：web 端可预览、可做黄金测试 */
-  buildRequest(ir: PromptIR, conn: Connection, model: string): ProviderRequest;
+  buildRequest(ir: PromptIR, conn: Connection, model: string, opts?: BuildOptions): ProviderRequest;
   stream(conn: Connection, req: ProviderRequest, signal: AbortSignal): AsyncIterable<GenEvent>;
   countTokens?(conn: Connection, req: ProviderRequest): Promise<number>;
   normalizeError(e: unknown): ProviderError;

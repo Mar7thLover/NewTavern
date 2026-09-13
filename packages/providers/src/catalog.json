@@ -1,7 +1,20 @@
 {
-  "$schema": "./catalog.schema.json",
-  "version": 1,
-  "updated": "2026-09-12",
+  "_notes": [
+    "模型能力目录 version 2，数据时点 2026-09-13。",
+    "合并顺序：defaults → providers[providerId].capabilities → models[] 逐条匹配（后写覆盖）→ conn.modelOverrides[model]。",
+    "match 为 glob（仅支持 * 通配，大小写不敏感）。",
+    "来源：Anthropic 官方 Claude API 文档（模型表、adaptive thinking、output_config.effort、cache_control/ttl、messages 内 role:'system'、4.6+ 取消 prefill、refusal stop reason）；",
+    "OpenAI 平台文档（chat completions、prompt caching、reasoning_effort）；Google Gemini API 文档（thinkingConfig、隐式缓存）；DeepSeek 平台文档。",
+    "假设与保守取值：",
+    "- GPT-6 / GPT-5.6 等本目录写入时尚未有稳定公开规格的型号，沿用 GPT-5 的保守数值（400K 上下文 / 128K 输出），待实测修正。",
+    "- o 系列、DeepSeek 的 maxOutput 取厂商公布值中的较小档。",
+    "- Gemini 3.x thinking 视为 'level'，effortLevels 只写已公开的 low/high。",
+    "- 任何未列入 models[] 的模型只会拿到 providers[] 的保守默认值（caching 视 provider 而定，thinking='none'）。",
+    "- imageOut 一律 false：M2 不处理原生生图，M4 再开。",
+    "- glm-*（Z.AI / 智谱，既有 Anthropic 兼容端点也有 OpenAI 兼容端点）：Anthropic 侧实测返回带 signature 的 thinking 块，thinking 用 {type:'enabled',budget_tokens}；OpenAI 侧走 reasoning_content。上下文/输出上限按 200K/32K 保守取值。"
+  ],
+  "version": 2,
+  "updated": "2026-09-13",
   "defaults": {
     "thinking": "none",
     "caching": "none",
@@ -18,37 +31,497 @@
   },
   "providers": {
     "anthropic": {
-      "match": "claude-*",
       "capabilities": {
         "caching": "breakpoints",
         "maxBreakpoints": 4,
         "cacheMinTokens": 1024,
+        "reasoningRoundtrip": "signature",
         "imageIn": true,
         "documentIn": true,
         "tools": true,
-        "structuredOutput": true
+        "structuredOutput": true,
+        "prefill": true,
+        "maxContext": 200000,
+        "maxOutput": 8192
       }
     },
     "openai-chat": {
-      "match": "gpt-*",
       "capabilities": {
         "caching": "prefix-auto",
         "cacheMinTokens": 1024,
         "imageIn": true,
         "tools": true,
-        "structuredOutput": true
+        "structuredOutput": true,
+        "prefill": true,
+        "maxContext": 128000,
+        "maxOutput": 8192
       }
     },
-    "google": {
-      "match": "gemini-*",
+    "openai-responses": {
       "capabilities": {
         "caching": "prefix-auto",
+        "cacheMinTokens": 1024,
+        "reasoningRoundtrip": "encrypted",
         "imageIn": true,
         "documentIn": true,
         "tools": true,
-        "structuredOutput": true
+        "structuredOutput": true,
+        "prefill": false,
+        "maxContext": 128000,
+        "maxOutput": 8192
+      }
+    },
+    "google": {
+      "capabilities": {
+        "caching": "prefix-auto",
+        "cacheMinTokens": 2048,
+        "reasoningRoundtrip": "thoughtSignature",
+        "imageIn": true,
+        "documentIn": true,
+        "tools": true,
+        "structuredOutput": true,
+        "prefill": true,
+        "maxContext": 1000000,
+        "maxOutput": 8192
       }
     }
   },
-  "models": []
+  "models": [
+    {
+      "provider": "anthropic",
+      "match": "claude-3*",
+      "capabilities": {
+        "maxContext": 200000,
+        "maxOutput": 4096,
+        "prefill": true
+      }
+    },
+    {
+      "provider": "anthropic",
+      "match": "claude-haiku-4-5*",
+      "capabilities": {
+        "thinking": "budget",
+        "prefill": true,
+        "maxContext": 200000,
+        "maxOutput": 64000
+      }
+    },
+    {
+      "provider": "anthropic",
+      "match": "claude-sonnet-4-5*",
+      "capabilities": {
+        "thinking": "budget",
+        "prefill": true,
+        "maxContext": 200000,
+        "maxOutput": 64000
+      }
+    },
+    {
+      "provider": "anthropic",
+      "match": "claude-opus-4-5*",
+      "capabilities": {
+        "thinking": "budget",
+        "effortLevels": ["low", "medium", "high"],
+        "prefill": true,
+        "maxContext": 200000,
+        "maxOutput": 64000
+      }
+    },
+    {
+      "provider": "anthropic",
+      "match": "claude-sonnet-4-6*",
+      "capabilities": {
+        "thinking": "adaptive",
+        "effortLevels": ["low", "medium", "high", "max"],
+        "prefill": false,
+        "maxContext": 1000000,
+        "maxOutput": 128000
+      }
+    },
+    {
+      "provider": "anthropic",
+      "match": "claude-opus-4-6*",
+      "capabilities": {
+        "thinking": "adaptive",
+        "effortLevels": ["low", "medium", "high", "max"],
+        "prefill": false,
+        "maxContext": 1000000,
+        "maxOutput": 128000
+      }
+    },
+    {
+      "provider": "anthropic",
+      "match": "claude-opus-4-7*",
+      "capabilities": {
+        "thinking": "adaptive",
+        "effortLevels": ["low", "medium", "high", "xhigh", "max"],
+        "prefill": false,
+        "maxContext": 1000000,
+        "maxOutput": 128000
+      }
+    },
+    {
+      "provider": "anthropic",
+      "match": "claude-opus-4-8*",
+      "capabilities": {
+        "thinking": "adaptive",
+        "effortLevels": ["low", "medium", "high", "xhigh", "max"],
+        "systemInMessages": true,
+        "prefill": false,
+        "maxContext": 1000000,
+        "maxOutput": 128000
+      }
+    },
+    {
+      "provider": "anthropic",
+      "match": "claude-sonnet-5*",
+      "capabilities": {
+        "thinking": "adaptive",
+        "effortLevels": ["low", "medium", "high", "xhigh", "max"],
+        "prefill": false,
+        "maxContext": 1000000,
+        "maxOutput": 128000
+      }
+    },
+    {
+      "provider": "anthropic",
+      "match": "claude-opus-5*",
+      "capabilities": {
+        "thinking": "adaptive",
+        "effortLevels": ["low", "medium", "high", "xhigh", "max"],
+        "systemInMessages": true,
+        "prefill": false,
+        "maxContext": 1000000,
+        "maxOutput": 128000
+      }
+    },
+    {
+      "provider": "anthropic",
+      "match": "claude-fable-5*",
+      "capabilities": {
+        "thinking": "adaptive",
+        "effortLevels": ["low", "medium", "high", "xhigh", "max"],
+        "systemInMessages": true,
+        "prefill": false,
+        "maxContext": 1000000,
+        "maxOutput": 128000
+      }
+    },
+    {
+      "provider": "anthropic",
+      "match": "claude-mythos-5*",
+      "capabilities": {
+        "thinking": "adaptive",
+        "effortLevels": ["low", "medium", "high", "xhigh", "max"],
+        "systemInMessages": true,
+        "prefill": false,
+        "maxContext": 1000000,
+        "maxOutput": 128000
+      }
+    },
+    {
+      "provider": "anthropic",
+      "match": "glm-*",
+      "capabilities": {
+        "thinking": "budget",
+        "reasoningRoundtrip": "signature",
+        "caching": "breakpoints",
+        "maxBreakpoints": 4,
+        "systemInMessages": false,
+        "prefill": true,
+        "imageIn": false,
+        "documentIn": false,
+        "maxContext": 200000,
+        "maxOutput": 32768
+      }
+    },
+    {
+      "provider": "openai-chat",
+      "match": "glm-*",
+      "capabilities": {
+        "thinking": "none",
+        "caching": "prefix-auto",
+        "cacheMinTokens": 1024,
+        "imageIn": false,
+        "prefill": true,
+        "maxContext": 200000,
+        "maxOutput": 32768
+      }
+    },
+    {
+      "provider": "openai-chat",
+      "match": "gpt-4o*",
+      "capabilities": {
+        "maxContext": 128000,
+        "maxOutput": 16384
+      }
+    },
+    {
+      "provider": "openai-chat",
+      "match": "gpt-4.1*",
+      "capabilities": {
+        "maxContext": 1000000,
+        "maxOutput": 32768
+      }
+    },
+    {
+      "provider": "openai-chat",
+      "match": "o1*",
+      "capabilities": {
+        "thinking": "effort",
+        "effortLevels": ["low", "medium", "high"],
+        "prefill": false,
+        "maxContext": 200000,
+        "maxOutput": 100000
+      }
+    },
+    {
+      "provider": "openai-chat",
+      "match": "o3*",
+      "capabilities": {
+        "thinking": "effort",
+        "effortLevels": ["low", "medium", "high"],
+        "prefill": false,
+        "maxContext": 200000,
+        "maxOutput": 100000
+      }
+    },
+    {
+      "provider": "openai-chat",
+      "match": "o4-mini*",
+      "capabilities": {
+        "thinking": "effort",
+        "effortLevels": ["low", "medium", "high"],
+        "prefill": false,
+        "maxContext": 200000,
+        "maxOutput": 100000
+      }
+    },
+    {
+      "provider": "openai-chat",
+      "match": "gpt-5*",
+      "capabilities": {
+        "thinking": "effort",
+        "effortLevels": ["minimal", "low", "medium", "high"],
+        "prefill": false,
+        "maxContext": 400000,
+        "maxOutput": 128000
+      }
+    },
+    {
+      "provider": "openai-chat",
+      "match": "gpt-6*",
+      "capabilities": {
+        "thinking": "effort",
+        "effortLevels": ["minimal", "low", "medium", "high"],
+        "prefill": false,
+        "maxContext": 400000,
+        "maxOutput": 128000
+      }
+    },
+    {
+      "provider": "openai-chat",
+      "match": "deepseek-chat*",
+      "capabilities": {
+        "caching": "prefix-auto",
+        "cacheMinTokens": 64,
+        "imageIn": false,
+        "prefill": true,
+        "maxContext": 128000,
+        "maxOutput": 8192
+      }
+    },
+    {
+      "provider": "openai-chat",
+      "match": "deepseek-reasoner*",
+      "capabilities": {
+        "caching": "prefix-auto",
+        "cacheMinTokens": 64,
+        "imageIn": false,
+        "prefill": false,
+        "maxContext": 128000,
+        "maxOutput": 32768
+      }
+    },
+    {
+      "provider": "openai-responses",
+      "match": "gpt-4.1*",
+      "capabilities": {
+        "maxContext": 1000000,
+        "maxOutput": 32768
+      }
+    },
+    {
+      "provider": "openai-responses",
+      "match": "o3*",
+      "capabilities": {
+        "thinking": "effort",
+        "effortLevels": ["low", "medium", "high"],
+        "maxContext": 200000,
+        "maxOutput": 100000
+      }
+    },
+    {
+      "provider": "openai-responses",
+      "match": "gpt-5*",
+      "capabilities": {
+        "thinking": "effort",
+        "effortLevels": ["minimal", "low", "medium", "high"],
+        "maxContext": 400000,
+        "maxOutput": 128000
+      }
+    },
+    {
+      "provider": "openai-responses",
+      "match": "gpt-6*",
+      "capabilities": {
+        "thinking": "effort",
+        "effortLevels": ["minimal", "low", "medium", "high"],
+        "maxContext": 400000,
+        "maxOutput": 128000
+      }
+    },
+    {
+      "provider": "google",
+      "match": "gemini-2.0*",
+      "capabilities": {
+        "maxContext": 1000000,
+        "maxOutput": 8192
+      }
+    },
+    {
+      "provider": "google",
+      "match": "gemini-2.5-flash*",
+      "capabilities": {
+        "thinking": "budget",
+        "maxContext": 1000000,
+        "maxOutput": 65536
+      }
+    },
+    {
+      "provider": "google",
+      "match": "gemini-2.5-pro*",
+      "capabilities": {
+        "thinking": "budget",
+        "maxContext": 1000000,
+        "maxOutput": 65536
+      }
+    },
+    {
+      "provider": "google",
+      "match": "gemini-3*",
+      "capabilities": {
+        "thinking": "level",
+        "effortLevels": ["low", "high"],
+        "maxContext": 1000000,
+        "maxOutput": 65536
+      }
+    },
+    {
+      "provider": "openai-responses",
+      "match": "gpt-4o*",
+      "capabilities": {
+        "maxContext": 128000,
+        "maxOutput": 16384
+      }
+    },
+    {
+      "provider": "openai-responses",
+      "match": "o1*",
+      "capabilities": {
+        "thinking": "effort",
+        "effortLevels": ["low", "medium", "high"],
+        "maxContext": 200000,
+        "maxOutput": 100000
+      }
+    },
+    {
+      "provider": "openai-responses",
+      "match": "o4-mini*",
+      "capabilities": {
+        "thinking": "effort",
+        "effortLevels": ["low", "medium", "high"],
+        "maxContext": 200000,
+        "maxOutput": 100000
+      }
+    },
+    {
+      "provider": "openai-responses",
+      "match": "gpt-5.1*",
+      "capabilities": {
+        "thinking": "effort",
+        "effortLevels": ["none", "minimal", "low", "medium", "high", "xhigh"],
+        "maxContext": 400000,
+        "maxOutput": 128000
+      }
+    },
+    {
+      "provider": "openai-responses",
+      "match": "gpt-image-*",
+      "capabilities": {
+        "imageOut": true,
+        "maxContext": 128000,
+        "maxOutput": 4096
+      }
+    },
+    {
+      "provider": "google",
+      "match": "gemini-2.5-flash-lite*",
+      "capabilities": {
+        "thinking": "budget",
+        "maxContext": 1000000,
+        "maxOutput": 65536
+      }
+    },
+    {
+      "provider": "google",
+      "match": "gemini-3-flash*",
+      "capabilities": {
+        "thinking": "level",
+        "effortLevels": ["low", "high"],
+        "maxContext": 1000000,
+        "maxOutput": 65536
+      }
+    },
+    {
+      "provider": "google",
+      "match": "gemini-2.0-flash*image*",
+      "capabilities": {
+        "thinking": "none",
+        "imageOut": true,
+        "maxContext": 32768,
+        "maxOutput": 8192
+      }
+    },
+    {
+      "provider": "google",
+      "match": "gemini-2.5-flash-image*",
+      "capabilities": {
+        "thinking": "none",
+        "imageOut": true,
+        "maxContext": 32768,
+        "maxOutput": 8192
+      }
+    },
+    {
+      "provider": "google",
+      "match": "gemini-3-pro-image*",
+      "capabilities": {
+        "thinking": "none",
+        "imageOut": true,
+        "maxContext": 1000000,
+        "maxOutput": 8192
+      }
+    },
+    {
+      "provider": "google",
+      "match": "gemini-3.1-flash-image*",
+      "capabilities": {
+        "thinking": "none",
+        "imageOut": true,
+        "maxContext": 1000000,
+        "maxOutput": 8192
+      }
+    }
+  ]
 }

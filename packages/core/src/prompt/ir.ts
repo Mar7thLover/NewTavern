@@ -49,6 +49,8 @@ export interface Segment {
   id: string;
   role: Role;
   parts: Part[];
+  /** 历史消息的发言者名，适配器可选用于 OpenAI `name` */
+  name?: string;
   origin: { kind: SegmentOriginKind; ref?: string };
   /** ST 原始位置，strict 模式与 diff 的依据 */
   anchor: { slot: 'system' | 'history'; depth?: number; order: number };

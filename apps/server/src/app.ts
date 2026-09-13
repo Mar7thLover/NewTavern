@@ -9,13 +9,18 @@ import { logger } from 'hono/logger';
 import type { Db } from './db/client.js';
 import { createAssetsRoutes } from './routes/assets.js';
 import { createCharactersRoutes } from './routes/characters.js';
+import { createChatsRoutes } from './routes/chats.js';
+import { createConnectionsRoutes } from './routes/connections.js';
 import { createImportRoutes } from './routes/import.js';
 import { createLorebooksRoutes } from './routes/lorebooks.js';
+import { createModelsRoutes } from './routes/models.js';
 import { createPersonasRoutes } from './routes/personas.js';
 import { createPresetsRoutes } from './routes/presets.js';
 import { createSettingsRoutes } from './routes/settings.js';
 import { createAssetsService } from './services/assets.js';
 import { createImporter } from './services/importer.js';
+import { createProviderService, ensureBuiltinAdapters } from './services/providers.js';
+import { createSecrets } from './services/secrets.js';
 
 export interface AppOptions {
   db: Db;
@@ -29,6 +34,10 @@ export function createApp({ db, dataDir, webDist }: AppOptions) {
   const app = new Hono();
   const assets = createAssetsService(db, dataDir);
   const importer = createImporter(db, assets, dataDir);
+  const secrets = createSecrets(dataDir);
+  const providers = createProviderService(db, secrets);
+  // 内置适配器由 packages/providers 注册；未就绪时静默跳过（契约 §5 [S→P]）
+  void ensureBuiltinAdapters();
 
   app.use('/api/*', logger());
   app.use('/api/*', cors());
@@ -41,7 +50,10 @@ export function createApp({ db, dataDir, webDist }: AppOptions) {
     .route('/presets', createPresetsRoutes(db, importer))
     .route('/lorebooks', createLorebooksRoutes(db, importer))
     .route('/import', createImportRoutes(importer))
-    .route('/assets', createAssetsRoutes(assets));
+    .route('/assets', createAssetsRoutes(assets))
+    .route('/connections', createConnectionsRoutes(db, secrets, providers))
+    .route('/chats', createChatsRoutes(db, providers))
+    .route('/models', createModelsRoutes());
 
   app.route('/api', api);
 

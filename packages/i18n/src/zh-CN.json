@@ -138,5 +138,162 @@
       "deleteTitle": "删除用户档案？",
       "deleteMessage": "将永久删除「{{name}}」，此操作无法撤销。"
     }
+  },
+  "chat": {
+    "you": "你",
+    "defaultUserName": "旅人",
+    "assistant": "助手",
+    "system": "系统",
+    "generating": "正在生成…",
+    "scrollToBottom": "回到底部",
+    "emptyTitle": "开始这段对话",
+    "emptyWithCharacterHint": "这张角色卡没有开场白，发一条消息就能开始。",
+    "emptyBlankHint": "空白对话没有角色设定，直接输入你想说的内容。",
+    "list": {
+      "title": "会话",
+      "new": "新建对话",
+      "empty": "还没有会话",
+      "untitled": "未命名对话",
+      "noMessages": "暂无消息",
+      "deleteTitle": "删除会话？",
+      "deleteMessage": "将永久删除「{{name}}」及其全部消息，此操作无法撤销。"
+    },
+    "start": {
+      "title": "选择角色开始",
+      "hint": "点一张角色卡新建对话，或者从空白开始。",
+      "blank": "空白对话",
+      "noCharactersTitle": "还没有角色",
+      "noCharactersHint": "先到角色库导入角色卡，再回来开始对话。"
+    },
+    "composer": {
+      "placeholder": "说点什么…",
+      "send": "发送",
+      "stop": "停止生成",
+      "hint": "Enter 发送，Shift+Enter 换行"
+    },
+    "message": {
+      "copy": "复制",
+      "copied": "已复制",
+      "regenerate": "重新生成",
+      "empty": "（这条消息没有内容）",
+      "editHint": "Ctrl+Enter 保存，Esc 取消",
+      "deleteTitle": "删除这条消息？",
+      "deleteMessage": "这条消息之后的所有消息也会一并删除，此操作无法撤销。"
+    },
+    "reasoning": {
+      "title": "推理过程",
+      "thinking": "思考中…",
+      "empty": "没有推理内容"
+    },
+    "swipe": {
+      "prev": "上一条",
+      "next": "下一条",
+      "new": "再生成一条",
+      "branched": "分叉",
+      "branchedHint": "这些候选下已经有后续消息，切换会改变整段对话。"
+    },
+    "panel": {
+      "title": "会话面板",
+      "noCharacter": "这是一个空白对话，没有关联角色。",
+      "noDescription": "暂无描述",
+      "connection": "连接",
+      "connectionUnset": "未设置",
+      "addConnection": "先添加一个连接",
+      "model": "模型",
+      "modelPlaceholder": "搜索或直接输入模型名",
+      "persona": "用户档案",
+      "none": "不使用",
+      "preset": "预设",
+      "builtinPreset": "内置默认预设",
+      "layoutMode": "提示词布局",
+      "layout": {
+        "strict": "严格保真",
+        "cacheAware": "缓存感知",
+        "strictHint": "完全按预设顺序组装，不为缓存做任何调整。",
+        "cacheAwareHint": "在不改变段序的前提下安排缓存断点，降低重复输入的费用。"
+      },
+      "usage": "用量",
+      "lastTurn": "上一轮",
+      "sessionTotal": "本会话累计",
+      "noUsage": "还没有用量数据",
+      "messages": "{{total}} 条消息",
+      "cacheHit": "缓存命中占输入",
+      "tokens": {
+        "input": "输入",
+        "output": "输出",
+        "cacheRead": "缓存读取",
+        "cacheWrite": "缓存写入",
+        "reasoning": "推理"
+      }
+    }
+  },
+  "connections": {
+    "count": "共 {{total}} 个",
+    "create": "新建连接",
+    "createTitle": "新建连接",
+    "editTitle": "编辑连接",
+    "emptyTitle": "还没有连接",
+    "emptyHint": "添加一个 API 连接后才能开始对话。支持 OpenAI 兼容端点、OpenAI Responses、Anthropic 与 Google。",
+    "provider": "协议",
+    "providers": {
+      "openai-chat": "OpenAI 兼容",
+      "openai-responses": "OpenAI Responses",
+      "anthropic": "Anthropic",
+      "google": "Google Gemini"
+    },
+    "endpoints": "常见端点",
+    "label": "名称",
+    "labelPlaceholder": "例如「OpenRouter 主号」",
+    "labelRequired": "请填写名称。",
+    "baseUrl": "Base URL",
+    "apiKeys": "API Key",
+    "apiKeysPlaceholder": "一行一个 Key，多个 Key 会轮换使用",
+    "apiKeysHint": "Key 加密存储在本地服务端，不会返回到浏览器。",
+    "apiKeysKeepHint": "已保存 {{total}} 个 Key；留空表示不修改。",
+    "clearKeys": "清空已保存的 Key",
+    "advanced": "高级选项",
+    "headers": "自定义 Header",
+    "headersHint": "一行一个 k=v。",
+    "quirks": "端点适配",
+    "quirksHint": "留空表示按 Base URL 自动判断。",
+    "quirkAuto": "自动",
+    "quirkOn": "开启",
+    "quirkOff": "关闭",
+    "quirkNames": {
+      "developerRole": "developer 角色",
+      "reasoningContent": "reasoning_content 推理字段",
+      "prefill": "助手消息预填",
+      "streamUsage": "流式返回用量",
+      "reasoningEffort": "reasoning_effort 参数"
+    },
+    "test": "测试",
+    "testing": "测试中…",
+    "testOk": "连接正常，耗时 {{ms}} ms",
+    "testFailed": "测试失败：{{message}}",
+    "models": "模型",
+    "refreshModels": "刷新模型",
+    "searchModels": "搜索模型",
+    "noModels": "没有匹配的模型。",
+    "modelsFailed": "模型列表拉取失败",
+    "fetchedAt": "更新于 {{time}}",
+    "setDefault": "设为默认模型",
+    "isDefault": "默认",
+    "keyCount": "{{total}} 个 Key {{hints}}",
+    "noKeys": "未配置 Key",
+    "deleteTitle": "删除连接？",
+    "deleteMessage": "将永久删除「{{name}}」及其保存的 Key，此操作无法撤销。"
+  },
+  "errors": {
+    "no_connection": "没有可用的连接",
+    "provider_error": "提供商返回错误",
+    "auth": "鉴权失败，请检查 API Key",
+    "rateLimit": "请求过于频繁，稍后再试",
+    "overloaded": "上游服务过载，稍后再试",
+    "contextLength": "上下文超出模型限制",
+    "filter": "内容被提供商拦截",
+    "invalid": "请求不合法",
+    "network": "网络错误",
+    "not_found": "资源不存在",
+    "unknown": "发生未知错误"
   }
 }
