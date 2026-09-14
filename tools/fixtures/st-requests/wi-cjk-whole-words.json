@@ -1,0 +1,95 @@
+{
+  "id": "wi-cjk-whole-words",
+  "description": "CJK 整词匹配与子串匹配",
+  "stVersion": "1.18.0",
+  "capturedAt": "2026-09-14T02:14:32.254Z",
+  "inputs": {
+    "card": "kanata",
+    "preset": "baseline",
+    "worldbooks": [
+      "cjk"
+    ],
+    "characterBook": null,
+    "chatLorebook": null,
+    "globalRegex": [],
+    "chat": "kanata-cjk",
+    "persona": "xiaohe",
+    "settings": {},
+    "authorsNote": null,
+    "priorUserMessages": [],
+    "userMessage": "灯笼底下有一壶茶，漕运的船刚过。"
+  },
+  "expect": [
+    "CJK-WHOLE / CJK-ONE / CJK-SUB 全部激活"
+  ],
+  "request": {
+    "messages": [
+      {
+        "role": "system",
+        "content": "Write 奏太's next reply in a fictional chat between 奏太 and 小禾. Keep it grounded and concrete."
+      },
+      {
+        "role": "system",
+        "content": "CJK-SUB · 漕运在春汛之后开闸。The canal opens after the spring flood.\nCJK-ONE · 茶汤要滚三次。The tea must boil three times.\nCJK-WHOLE · 灯笼在檐下摇。The lantern sways under the eaves."
+      },
+      {
+        "role": "system",
+        "content": "小禾是替人跑腿的信客，记性好，脚程快。Xiaohe runs errands and letters; good memory, fast feet."
+      },
+      {
+        "role": "system",
+        "content": "奏太是漕运码头的记账少年，写字比说话快。Kanata keeps tallies at the canal wharf; he writes faster than he speaks."
+      },
+      {
+        "role": "system",
+        "content": "寡言、好奇、怕雷。Quiet, curious, afraid of thunder."
+      },
+      {
+        "role": "system",
+        "content": "漕运开闸的第一天，码头挤满了人。"
+      },
+      {
+        "role": "system",
+        "content": "[Example Chat]"
+      },
+      {
+        "role": "system",
+        "content": "今天几船？",
+        "name": "example_user"
+      },
+      {
+        "role": "system",
+        "content": "「七船。有一船没报关。」",
+        "name": "example_assistant"
+      },
+      {
+        "role": "system",
+        "content": "[Start a new Chat]"
+      },
+      {
+        "role": "assistant",
+        "content": "*他把算盘抱在胸前。*「你、你要记账吗？」"
+      },
+      {
+        "role": "user",
+        "content": "今天几船？"
+      },
+      {
+        "role": "assistant",
+        "content": "「七船。有一船没报关。」"
+      },
+      {
+        "role": "user",
+        "content": "灯笼底下有一壶茶，漕运的船刚过。"
+      }
+    ],
+    "model": "newtavern-golden-mock",
+    "temperature": 0.8,
+    "max_tokens": 400,
+    "stream": false,
+    "presence_penalty": 0.2,
+    "frequency_penalty": 0.1,
+    "top_p": 0.95
+  },
+  "notes": []
+}

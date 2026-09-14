@@ -1,0 +1,1552 @@
+{
+  "$schema": "见 tools/fixtures/README.md §用例清单格式",
+  "stVersion": "1.18.0",
+  "license": "CC0-1.0",
+  "cases": [
+    {
+      "id": "preset-default-minimal",
+      "description": "默认预设 + 极简卡 + 两条历史；黄金测试的最小基线",
+      "inputs": {
+        "card": "quill",
+        "preset": "baseline",
+        "worldbooks": [],
+        "characterBook": null,
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "quill-basic",
+        "persona": "wren",
+        "settings": {},
+        "authorsNote": null,
+        "priorUserMessages": [],
+        "userMessage": "Then swim. What did the harbourmaster say?"
+      },
+      "expect": [
+        "system 段顺序：main → personaDescription → charDescription → charPersonality → scenario",
+        "示例对话前有 [Example Chat]，历史前有 [Start a new Chat]"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "preset-depth-injection",
+      "description": "预设自定义 prompt 的 injection_position=1 深度注入（depth 0/2/4、三种 role、同深度不同 order）",
+      "inputs": {
+        "card": "quill",
+        "preset": "depth-inject",
+        "worldbooks": [],
+        "characterBook": null,
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "quill-long",
+        "persona": "wren",
+        "settings": {},
+        "authorsNote": null,
+        "priorUserMessages": [],
+        "userMessage": "Where do we cross?"
+      },
+      "expect": [
+        "depth 0 的 system 段在最后一条消息之后",
+        "同为 depth 2 的两段按 injection_order 50 → 150 排列"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "preset-squash-system",
+      "description": "squash_system_messages=true：相邻 system 消息合并为一条",
+      "inputs": {
+        "card": "quill",
+        "preset": "squash-system",
+        "worldbooks": [],
+        "characterBook": null,
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "quill-basic",
+        "persona": "wren",
+        "settings": {},
+        "authorsNote": null,
+        "priorUserMessages": [],
+        "userMessage": "Which crate?"
+      },
+      "expect": [
+        "开头多条 system 被合并为单条，内容以 \\n 连接"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "preset-card-override-allowed",
+      "description": "卡的 system_prompt / post_history_instructions 覆盖预设 main / jailbreak",
+      "inputs": {
+        "card": "lin-yueyao",
+        "preset": "baseline",
+        "worldbooks": [],
+        "characterBook": "yueyao-inn",
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "yueyao-basic",
+        "persona": "wren",
+        "settings": {},
+        "authorsNote": null,
+        "priorUserMessages": [],
+        "userMessage": "那笔旧债还能拖多久？"
+      },
+      "expect": [
+        "main 段是卡内 system_prompt",
+        "末尾 jailbreak 段是卡内 post_history_instructions"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "preset-forbid-overrides",
+      "description": "forbid_overrides=true 时卡的覆盖不生效",
+      "inputs": {
+        "card": "lin-yueyao",
+        "preset": "forbid-overrides",
+        "worldbooks": [],
+        "characterBook": "yueyao-inn",
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "yueyao-basic",
+        "persona": "wren",
+        "settings": {},
+        "authorsNote": null,
+        "priorUserMessages": [],
+        "userMessage": "那笔旧债还能拖多久？"
+      },
+      "expect": [
+        "main 与 jailbreak 都用预设文本，卡内文本不出现"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "preset-empty-and-disabled",
+      "description": "空 main + 被 prompt_order 关闭的段 + send_if_empty",
+      "inputs": {
+        "card": "quill",
+        "preset": "empty-and-disabled",
+        "worldbooks": [],
+        "characterBook": null,
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "quill-basic",
+        "persona": "wren",
+        "settings": {},
+        "authorsNote": null,
+        "priorUserMessages": [],
+        "userMessage": "Show me the coastline."
+      },
+      "expect": [
+        "空内容的 main 不产生消息",
+        "nsfw 与 charPersonality 被关闭，不出现"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "preset-custom-formats",
+      "description": "自定义 new_chat_prompt / new_example_chat_prompt / wi_format / scenario_format / personality_format",
+      "inputs": {
+        "card": "lin-yueyao",
+        "preset": "custom-formats",
+        "worldbooks": [
+          "positions"
+        ],
+        "characterBook": "yueyao-inn",
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "yueyao-basic",
+        "persona": "wren",
+        "settings": {},
+        "authorsNote": null,
+        "priorUserMessages": [],
+        "userMessage": "The lantern by the pier is lit. 账本呢？"
+      },
+      "expect": [
+        "世界书段被 <世界设定> 包裹",
+        "场景段前缀「【场景】」，性格段前缀「【性格】」",
+        "新对话分隔用 [新对话开始 · New scene starts here]"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "preset-names-completion",
+      "description": "names_behavior=2（消息带 name 字段）",
+      "inputs": {
+        "card": "quill",
+        "preset": "names-completion",
+        "worldbooks": [],
+        "characterBook": null,
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "quill-basic",
+        "persona": "wren",
+        "settings": {},
+        "authorsNote": null,
+        "priorUserMessages": [],
+        "userMessage": "Who signed the manifest?"
+      },
+      "expect": [
+        "历史消息带 name 字段"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "preset-examples-multi-block",
+      "description": "多段 <START> 示例对话",
+      "inputs": {
+        "card": "lin-yueyao",
+        "preset": "baseline",
+        "worldbooks": [],
+        "characterBook": "yueyao-inn",
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "yueyao-basic",
+        "persona": "wren",
+        "settings": {},
+        "authorsNote": null,
+        "priorUserMessages": [],
+        "userMessage": "再来一碗茶。"
+      },
+      "expect": [
+        "三段示例各自前置 [Example Chat]"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "wi-position-before-after",
+      "description": "WI position 0 / 1：角色定义前后各一段",
+      "inputs": {
+        "card": "quill",
+        "preset": "baseline",
+        "worldbooks": [
+          "positions"
+        ],
+        "characterBook": null,
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "quill-basic",
+        "persona": "wren",
+        "settings": {},
+        "authorsNote": null,
+        "priorUserMessages": [],
+        "userMessage": "I need the lantern and the ledger."
+      },
+      "expect": [
+        "lantern 条目落在 charDescription 之前",
+        "ledger 条目落在角色定义之后"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "wi-position-at-depth",
+      "description": "WI position 4：按 depth/role 注入历史",
+      "inputs": {
+        "card": "quill",
+        "preset": "baseline",
+        "worldbooks": [
+          "positions"
+        ],
+        "characterBook": null,
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "quill-long",
+        "persona": "wren",
+        "settings": {},
+        "authorsNote": null,
+        "priorUserMessages": [],
+        "userMessage": "A seagull passed, then a whistle."
+      },
+      "expect": [
+        "seagull 以 system 注入 depth 2",
+        "whistle 以 user 注入 depth 1"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "wi-position-example-wrap",
+      "description": "WI position 5 / 6：包裹示例对话",
+      "inputs": {
+        "card": "quill",
+        "preset": "baseline",
+        "worldbooks": [
+          "positions"
+        ],
+        "characterBook": null,
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "quill-basic",
+        "persona": "wren",
+        "settings": {},
+        "authorsNote": null,
+        "priorUserMessages": [],
+        "userMessage": "Stack the saltcask beside the tarrope."
+      },
+      "expect": [
+        "saltcask 在示例块之前",
+        "tarrope 在示例块之后"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "wi-order-sorting",
+      "description": "同一 position 内按 order 排序",
+      "inputs": {
+        "card": "quill",
+        "preset": "baseline",
+        "worldbooks": [
+          "positions"
+        ],
+        "characterBook": null,
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "quill-basic",
+        "persona": "wren",
+        "settings": {},
+        "authorsNote": null,
+        "priorUserMessages": [],
+        "userMessage": "orderlow, twice over."
+      },
+      "expect": [
+        "order 20 的条目在 order 300 的条目之前"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "wi-constant",
+      "description": "constant 条目无需关键词即激活；disabled 的 constant 不激活",
+      "inputs": {
+        "card": "quill",
+        "preset": "baseline",
+        "worldbooks": [
+          "constant"
+        ],
+        "characterBook": null,
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "quill-basic",
+        "persona": "wren",
+        "settings": {},
+        "authorsNote": null,
+        "priorUserMessages": [],
+        "userMessage": "Anything at all."
+      },
+      "expect": [
+        "CONST0 与 CONST1 出现",
+        "NEVER 与 DISABLED 不出现"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "wi-selective-and-any",
+      "description": "selectiveLogic 0 AND_ANY",
+      "inputs": {
+        "card": "quill",
+        "preset": "baseline",
+        "worldbooks": [
+          "logic"
+        ],
+        "characterBook": null,
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "quill-basic",
+        "persona": "wren",
+        "settings": {},
+        "authorsNote": null,
+        "priorUserMessages": [],
+        "userMessage": "The anchor is covered in rust."
+      },
+      "expect": [
+        "AND_ANY 条目激活"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "wi-selective-not-all",
+      "description": "selectiveLogic 1 NOT_ALL",
+      "inputs": {
+        "card": "quill",
+        "preset": "baseline",
+        "worldbooks": [
+          "logic"
+        ],
+        "characterBook": null,
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "quill-basic",
+        "persona": "wren",
+        "settings": {},
+        "authorsNote": null,
+        "priorUserMessages": [],
+        "userMessage": "The beacon is streaked with rust."
+      },
+      "expect": [
+        "NOT_ALL 条目激活（rust 有、salt 无）"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "wi-selective-not-any",
+      "description": "selectiveLogic 2 NOT_ANY",
+      "inputs": {
+        "card": "quill",
+        "preset": "baseline",
+        "worldbooks": [
+          "logic"
+        ],
+        "characterBook": null,
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "quill-basic",
+        "persona": "wren",
+        "settings": {},
+        "authorsNote": null,
+        "priorUserMessages": [],
+        "userMessage": "The cistern is empty tonight."
+      },
+      "expect": [
+        "NOT_ANY 条目激活（两个副键都不出现）"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "wi-selective-and-all",
+      "description": "selectiveLogic 3 AND_ALL",
+      "inputs": {
+        "card": "quill",
+        "preset": "baseline",
+        "worldbooks": [
+          "logic"
+        ],
+        "characterBook": null,
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "quill-basic",
+        "persona": "wren",
+        "settings": {},
+        "authorsNote": null,
+        "priorUserMessages": [],
+        "userMessage": "In the drydock: rust and salt everywhere."
+      },
+      "expect": [
+        "AND_ALL 条目激活；AND_ANY 未触发（主键 anchor 不在）"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "wi-regex-key",
+      "description": "正则键 /gull(s)?\\b/i",
+      "inputs": {
+        "card": "quill",
+        "preset": "baseline",
+        "worldbooks": [
+          "logic"
+        ],
+        "characterBook": null,
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "quill-basic",
+        "persona": "wren",
+        "settings": {},
+        "authorsNote": null,
+        "priorUserMessages": [],
+        "userMessage": "Two gulls landed on the bollard."
+      },
+      "expect": [
+        "REGEX 条目激活"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "wi-case-sensitive",
+      "description": "条目级 caseSensitive 覆盖全局",
+      "inputs": {
+        "card": "quill",
+        "preset": "baseline",
+        "worldbooks": [
+          "logic"
+        ],
+        "characterBook": null,
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "quill-basic",
+        "persona": "wren",
+        "settings": {},
+        "authorsNote": null,
+        "priorUserMessages": [],
+        "userMessage": "The Harbourmaster refused."
+      },
+      "expect": [
+        "CASE 条目激活"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "wi-case-sensitive-miss",
+      "description": "条目级 caseSensitive：小写不匹配",
+      "inputs": {
+        "card": "quill",
+        "preset": "baseline",
+        "worldbooks": [
+          "logic"
+        ],
+        "characterBook": null,
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "quill-basic",
+        "persona": "wren",
+        "settings": {},
+        "authorsNote": null,
+        "priorUserMessages": [],
+        "userMessage": "the harbourmaster refused."
+      },
+      "expect": [
+        "CASE 条目不激活"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "wi-whole-words",
+      "description": "条目级 matchWholeWords",
+      "inputs": {
+        "card": "quill",
+        "preset": "baseline",
+        "worldbooks": [
+          "logic"
+        ],
+        "characterBook": null,
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "quill-basic",
+        "persona": "wren",
+        "settings": {},
+        "authorsNote": null,
+        "priorUserMessages": [],
+        "userMessage": "He lost an oar in the dark."
+      },
+      "expect": [
+        "WHOLE 条目激活"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "wi-scan-depth-shallow",
+      "description": "world_info_depth=2：更早的消息不进扫描缓冲",
+      "inputs": {
+        "card": "quill",
+        "preset": "baseline",
+        "worldbooks": [
+          "positions"
+        ],
+        "characterBook": null,
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "quill-basic",
+        "persona": "wren",
+        "settings": {
+          "world_info_depth": 2
+        },
+        "authorsNote": null,
+        "priorUserMessages": [
+          "We passed the lantern shed on the way in."
+        ],
+        "userMessage": "Keep going."
+      },
+      "expect": [
+        "lantern 条目不激活"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "wi-scan-depth-deep",
+      "description": "world_info_depth=6：更早的消息进入扫描缓冲",
+      "inputs": {
+        "card": "quill",
+        "preset": "baseline",
+        "worldbooks": [
+          "positions"
+        ],
+        "characterBook": null,
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "quill-basic",
+        "persona": "wren",
+        "settings": {
+          "world_info_depth": 6
+        },
+        "authorsNote": null,
+        "priorUserMessages": [
+          "We passed the lantern shed on the way in."
+        ],
+        "userMessage": "Keep going."
+      },
+      "expect": [
+        "lantern 条目激活"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "wi-entry-scan-depth",
+      "description": "条目级 scanDepth 覆盖全局",
+      "inputs": {
+        "card": "quill",
+        "preset": "baseline",
+        "worldbooks": [
+          "logic"
+        ],
+        "characterBook": null,
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "quill-basic",
+        "persona": "wren",
+        "settings": {
+          "world_info_depth": 6
+        },
+        "authorsNote": null,
+        "priorUserMessages": [
+          "The boardwalk creaks badly."
+        ],
+        "userMessage": "Mind your step."
+      },
+      "expect": [
+        "SCANDEPTH1 条目因条目级 scanDepth=1 不激活"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "wi-min-activations",
+      "description": "world_info_min_activations 逐步加深扫描",
+      "inputs": {
+        "card": "quill",
+        "preset": "baseline",
+        "worldbooks": [
+          "positions"
+        ],
+        "characterBook": null,
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "quill-basic",
+        "persona": "wren",
+        "settings": {
+          "world_info_depth": 1,
+          "world_info_min_activations": 1,
+          "world_info_min_activations_depth_max": 8
+        },
+        "authorsNote": null,
+        "priorUserMessages": [
+          "The lantern shed is locked."
+        ],
+        "userMessage": "Then we wait."
+      },
+      "expect": [
+        "lantern 条目通过 minActivations 加深扫描后激活"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "wi-include-names-on",
+      "description": "world_info_include_names=true：扫描缓冲带「名字: 」前缀",
+      "inputs": {
+        "card": "quill",
+        "preset": "baseline",
+        "worldbooks": [
+          "names"
+        ],
+        "characterBook": null,
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "quill-basic",
+        "persona": "wren",
+        "settings": {
+          "world_info_include_names": true
+        },
+        "authorsNote": null,
+        "priorUserMessages": [],
+        "userMessage": "Nothing in particular."
+      },
+      "expect": [
+        "NAMES-CHAR 与 NAMES-USER 激活"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "wi-include-names-off",
+      "description": "world_info_include_names=false：名字不进扫描缓冲",
+      "inputs": {
+        "card": "quill",
+        "preset": "baseline",
+        "worldbooks": [
+          "names"
+        ],
+        "characterBook": null,
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "quill-basic",
+        "persona": "wren",
+        "settings": {
+          "world_info_include_names": false
+        },
+        "authorsNote": null,
+        "priorUserMessages": [],
+        "userMessage": "Nothing in particular."
+      },
+      "expect": [
+        "NAMES-CHAR 与 NAMES-USER 不激活"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "wi-group-prioritize",
+      "description": "组内 groupOverride（prioritize）胜出",
+      "inputs": {
+        "card": "quill",
+        "preset": "baseline",
+        "worldbooks": [
+          "groups"
+        ],
+        "characterBook": null,
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "quill-basic",
+        "persona": "wren",
+        "settings": {},
+        "authorsNote": null,
+        "priorUserMessages": [],
+        "userMessage": "We stopped at the tollgate."
+      },
+      "expect": [
+        "GROUP/PRIORITIZE 胜出条目出现，落选条目不出现"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "wi-group-scoring",
+      "description": "useGroupScoring：命中键更多者胜出",
+      "inputs": {
+        "card": "quill",
+        "preset": "baseline",
+        "worldbooks": [
+          "groups"
+        ],
+        "characterBook": null,
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "quill-basic",
+        "persona": "wren",
+        "settings": {
+          "world_info_use_group_scoring": true
+        },
+        "authorsNote": null,
+        "priorUserMessages": [],
+        "userMessage": "The millstone, the granary, and the chaff."
+      },
+      "expect": [
+        "GROUP/SCORING 胜出条目出现"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "wi-group-single-member",
+      "description": "单成员组恒定胜出（避开随机）",
+      "inputs": {
+        "card": "quill",
+        "preset": "baseline",
+        "worldbooks": [
+          "groups"
+        ],
+        "characterBook": null,
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "quill-basic",
+        "persona": "wren",
+        "settings": {},
+        "authorsNote": null,
+        "priorUserMessages": [],
+        "userMessage": "The weathervane never moves."
+      },
+      "expect": [
+        "GROUP/SOLO 出现"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "wi-recursion-two-levels",
+      "description": "递归两层：L1 → L2 → L3",
+      "inputs": {
+        "card": "quill",
+        "preset": "baseline",
+        "worldbooks": [
+          "recursion"
+        ],
+        "characterBook": null,
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "quill-basic",
+        "persona": "wren",
+        "settings": {
+          "world_info_recursive": true
+        },
+        "authorsNote": null,
+        "priorUserMessages": [],
+        "userMessage": "I found driftglass on the beach."
+      },
+      "expect": [
+        "REC-L1 / REC-L2 / REC-L3 全部出现"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "wi-recursion-max-steps-one",
+      "description": "world_info_max_recursion_steps=1 限制递归轮数",
+      "inputs": {
+        "card": "quill",
+        "preset": "baseline",
+        "worldbooks": [
+          "recursion"
+        ],
+        "characterBook": null,
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "quill-basic",
+        "persona": "wren",
+        "settings": {
+          "world_info_recursive": true,
+          "world_info_max_recursion_steps": 1
+        },
+        "authorsNote": null,
+        "priorUserMessages": [],
+        "userMessage": "I found driftglass on the beach."
+      },
+      "expect": [
+        "REC-L3 不出现"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "wi-recursion-off",
+      "description": "world_info_recursive=false 时不递归",
+      "inputs": {
+        "card": "quill",
+        "preset": "baseline",
+        "worldbooks": [
+          "recursion"
+        ],
+        "characterBook": null,
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "quill-basic",
+        "persona": "wren",
+        "settings": {
+          "world_info_recursive": false
+        },
+        "authorsNote": null,
+        "priorUserMessages": [],
+        "userMessage": "I found driftglass on the beach."
+      },
+      "expect": [
+        "只有 REC-L1"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "wi-prevent-recursion",
+      "description": "preventRecursion：条目内容不进递归缓冲",
+      "inputs": {
+        "card": "quill",
+        "preset": "baseline",
+        "worldbooks": [
+          "recursion"
+        ],
+        "characterBook": null,
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "quill-basic",
+        "persona": "wren",
+        "settings": {
+          "world_info_recursive": true
+        },
+        "authorsNote": null,
+        "priorUserMessages": [],
+        "userMessage": "Follow the kelpline north."
+      },
+      "expect": [
+        "REC-PREVENT 出现，REC-PREVENT-TARGET 不出现"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "wi-exclude-recursion",
+      "description": "excludeRecursion：条目不被递归激活",
+      "inputs": {
+        "card": "quill",
+        "preset": "baseline",
+        "worldbooks": [
+          "recursion"
+        ],
+        "characterBook": null,
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "quill-basic",
+        "persona": "wren",
+        "settings": {
+          "world_info_recursive": true
+        },
+        "authorsNote": null,
+        "priorUserMessages": [],
+        "userMessage": "Cross the mudflat at low tide."
+      },
+      "expect": [
+        "REC-EXCL 出现，REC-EXCL-TARGET 不出现"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "wi-delay-until-recursion",
+      "description": "delayUntilRecursion：只在递归层激活",
+      "inputs": {
+        "card": "quill",
+        "preset": "baseline",
+        "worldbooks": [
+          "recursion"
+        ],
+        "characterBook": null,
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "quill-basic",
+        "persona": "wren",
+        "settings": {
+          "world_info_recursive": true
+        },
+        "authorsNote": null,
+        "priorUserMessages": [],
+        "userMessage": "Ask the lockkeeper about it."
+      },
+      "expect": [
+        "REC-DELAY-SOURCE 与 REC-DELAY-UNTIL 都出现"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "wi-delay-until-recursion-direct",
+      "description": "delayUntilRecursion：直接命中不激活",
+      "inputs": {
+        "card": "quill",
+        "preset": "baseline",
+        "worldbooks": [
+          "recursion"
+        ],
+        "characterBook": null,
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "quill-basic",
+        "persona": "wren",
+        "settings": {
+          "world_info_recursive": true
+        },
+        "authorsNote": null,
+        "priorUserMessages": [],
+        "userMessage": "Open the tidegate."
+      },
+      "expect": [
+        "REC-DELAY-UNTIL 不出现"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "wi-budget-overflow",
+      "description": "预算溢出：只放得下前几条，ignoreBudget 例外",
+      "inputs": {
+        "card": "quill",
+        "preset": "baseline",
+        "worldbooks": [
+          "budget"
+        ],
+        "characterBook": null,
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "quill-basic",
+        "persona": "wren",
+        "settings": {
+          "world_info_budget": 1,
+          "world_info_overflow_alert": true
+        },
+        "authorsNote": null,
+        "priorUserMessages": [],
+        "userMessage": "Read me the quarryreport."
+      },
+      "expect": [
+        "BUDGET-IGNORE 必然出现",
+        "靠后的长条目被预算截断"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "wi-budget-cap",
+      "description": "world_info_budget_cap 绝对上限",
+      "inputs": {
+        "card": "quill",
+        "preset": "baseline",
+        "worldbooks": [
+          "budget"
+        ],
+        "characterBook": null,
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "quill-basic",
+        "persona": "wren",
+        "settings": {
+          "world_info_budget": 50,
+          "world_info_budget_cap": 80
+        },
+        "authorsNote": null,
+        "priorUserMessages": [],
+        "userMessage": "Read me the quarryreport."
+      },
+      "expect": [
+        "预算上限以 budget_cap 为准"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "wi-cjk-whole-words",
+      "description": "CJK 整词匹配与子串匹配",
+      "inputs": {
+        "card": "kanata",
+        "preset": "baseline",
+        "worldbooks": [
+          "cjk"
+        ],
+        "characterBook": null,
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "kanata-cjk",
+        "persona": "xiaohe",
+        "settings": {},
+        "authorsNote": null,
+        "priorUserMessages": [],
+        "userMessage": "灯笼底下有一壶茶，漕运的船刚过。"
+      },
+      "expect": [
+        "CJK-WHOLE / CJK-ONE / CJK-SUB 全部激活"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "wi-cjk-english-whole-word-miss",
+      "description": "英文整词匹配：复数形式不命中",
+      "inputs": {
+        "card": "kanata",
+        "preset": "baseline",
+        "worldbooks": [
+          "cjk"
+        ],
+        "characterBook": null,
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "kanata-cjk",
+        "persona": "xiaohe",
+        "settings": {},
+        "authorsNote": null,
+        "priorUserMessages": [],
+        "userMessage": "Nightjars called all night."
+      },
+      "expect": [
+        "EN-WHOLE 不激活"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "wi-timed-sticky",
+      "description": "sticky：上一轮触发后本轮无关键词仍保持",
+      "inputs": {
+        "card": "quill",
+        "preset": "baseline",
+        "worldbooks": [
+          "timed"
+        ],
+        "characterBook": null,
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "quill-basic",
+        "persona": "wren",
+        "settings": {},
+        "authorsNote": null,
+        "priorUserMessages": [
+          "Light the signalfire."
+        ],
+        "userMessage": "And now?"
+      },
+      "expect": [
+        "STICKY 条目仍然出现"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "wi-timed-cooldown",
+      "description": "cooldown：触发后短期内再命中被拒",
+      "inputs": {
+        "card": "quill",
+        "preset": "baseline",
+        "worldbooks": [
+          "timed"
+        ],
+        "characterBook": null,
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "quill-basic",
+        "persona": "wren",
+        "settings": {},
+        "authorsNote": null,
+        "priorUserMessages": [
+          "Ring the ferrybell."
+        ],
+        "userMessage": "Ring the ferrybell again."
+      },
+      "expect": [
+        "COOLDOWN 条目本轮不出现"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "wi-timed-delay-met",
+      "description": "delay：消息数达到阈值后才激活",
+      "inputs": {
+        "card": "quill",
+        "preset": "baseline",
+        "worldbooks": [
+          "timed"
+        ],
+        "characterBook": null,
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "quill-long",
+        "persona": "wren",
+        "settings": {},
+        "authorsNote": null,
+        "priorUserMessages": [],
+        "userMessage": "Call the nightwatch."
+      },
+      "expect": [
+        "DELAY 条目出现"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "wi-timed-delay-blocked",
+      "description": "delay：消息数不足时不激活",
+      "inputs": {
+        "card": "quill",
+        "preset": "baseline",
+        "worldbooks": [
+          "timed"
+        ],
+        "characterBook": null,
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "quill-basic",
+        "persona": "wren",
+        "settings": {},
+        "authorsNote": null,
+        "priorUserMessages": [],
+        "userMessage": "Call the nightwatch."
+      },
+      "expect": [
+        "DELAY 条目不出现"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "wi-char-and-chat-books",
+      "description": "角色书（卡绑定）+ 聊天书 + 全局书三种作用域同时生效",
+      "inputs": {
+        "card": "lin-yueyao",
+        "preset": "baseline",
+        "worldbooks": [
+          "constant"
+        ],
+        "characterBook": "yueyao-inn",
+        "chatLorebook": "chat-notes",
+        "globalRegex": [],
+        "chat": "yueyao-basic",
+        "persona": "wren",
+        "settings": {},
+        "authorsNote": null,
+        "priorUserMessages": [],
+        "userMessage": "外面的雨停了吗？账本呢？"
+      },
+      "expect": [
+        "角色书的 constant 与触发条目、聊天书 constant、全局书 constant 都出现"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "an-in-prompt",
+      "description": "作者注释 position 0（IN_PROMPT）",
+      "inputs": {
+        "card": "quill",
+        "preset": "baseline",
+        "worldbooks": [],
+        "characterBook": null,
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "quill-basic",
+        "persona": "wren",
+        "settings": {},
+        "authorsNote": {
+          "text": "[作者注释 · Author's note：保持场景在夜里，不要跳时间。]",
+          "position": 0,
+          "depth": 4,
+          "role": 0,
+          "interval": 1
+        },
+        "priorUserMessages": [],
+        "userMessage": "What now?"
+      },
+      "expect": [
+        "作者注释作为 system 段出现在 system 槽内"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "an-in-chat-depth",
+      "description": "作者注释 position 1（IN_CHAT）depth 2 role user",
+      "inputs": {
+        "card": "quill",
+        "preset": "baseline",
+        "worldbooks": [],
+        "characterBook": null,
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "quill-long",
+        "persona": "wren",
+        "settings": {},
+        "authorsNote": {
+          "text": "[作者注释 · Author's note：保持场景在夜里，不要跳时间。]",
+          "position": 1,
+          "depth": 2,
+          "role": 1,
+          "interval": 1
+        },
+        "priorUserMessages": [],
+        "userMessage": "What now?"
+      },
+      "expect": [
+        "作者注释以 user 角色注入到倒数第 2 条之前"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "an-before-prompt",
+      "description": "作者注释 position 2（BEFORE_PROMPT）",
+      "inputs": {
+        "card": "quill",
+        "preset": "baseline",
+        "worldbooks": [],
+        "characterBook": null,
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "quill-basic",
+        "persona": "wren",
+        "settings": {},
+        "authorsNote": {
+          "text": "[作者注释 · Author's note：保持场景在夜里，不要跳时间。]",
+          "position": 2,
+          "depth": 4,
+          "role": 0,
+          "interval": 1
+        },
+        "priorUserMessages": [],
+        "userMessage": "What now?"
+      },
+      "expect": [
+        "作者注释出现在 system 槽最前"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "an-interval-two",
+      "description": "作者注释 interval=2：按消息数决定是否插入",
+      "inputs": {
+        "card": "quill",
+        "preset": "baseline",
+        "worldbooks": [],
+        "characterBook": null,
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "quill-long",
+        "persona": "wren",
+        "settings": {},
+        "authorsNote": {
+          "text": "[作者注释 · Author's note：保持场景在夜里，不要跳时间。]",
+          "position": 1,
+          "depth": 1,
+          "role": 0,
+          "interval": 2
+        },
+        "priorUserMessages": [],
+        "userMessage": "What now?"
+      },
+      "expect": [
+        "按 ST 的 interval 判定结果决定是否出现"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "an-with-wi-slots",
+      "description": "WI position 2 / 3 与作者注释合并为一段",
+      "inputs": {
+        "card": "quill",
+        "preset": "baseline",
+        "worldbooks": [
+          "positions"
+        ],
+        "characterBook": null,
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "quill-basic",
+        "persona": "wren",
+        "settings": {},
+        "authorsNote": {
+          "text": "[作者注释 · Author's note：保持场景在夜里，不要跳时间。]",
+          "position": 1,
+          "depth": 2,
+          "role": 0,
+          "interval": 1
+        },
+        "priorUserMessages": [],
+        "userMessage": "Mind the curfew and the gatehouse."
+      },
+      "expect": [
+        "curfew 在作者注释之前，gatehouse 在作者注释之后，同属一段"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "char-depth-prompt",
+      "description": "卡 extensions.depth_prompt 的深度注入",
+      "inputs": {
+        "card": "lin-yueyao",
+        "preset": "baseline",
+        "worldbooks": [],
+        "characterBook": "yueyao-inn",
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "yueyao-long",
+        "persona": "wren",
+        "settings": {},
+        "authorsNote": null,
+        "priorUserMessages": [],
+        "userMessage": "你在擦什么？"
+      },
+      "expect": [
+        "深度 2 的 system 段来自卡的 depth_prompt"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "macro-card-fields",
+      "description": "宏：char/user/description/personality/scenario/persona/mesExamples/model/charVersion",
+      "inputs": {
+        "card": "lin-yueyao",
+        "preset": "macro-probe",
+        "worldbooks": [],
+        "characterBook": "yueyao-inn",
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "yueyao-basic",
+        "persona": "wren",
+        "settings": {},
+        "authorsNote": null,
+        "priorUserMessages": [],
+        "userMessage": "继续。"
+      },
+      "expect": [
+        "各宏被替换为卡与 persona 的实际文本",
+        "未知宏 {{nosuchmacro}} 原样保留"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "macro-lastmessage",
+      "description": "宏：lastUserMessage / lastCharMessage / trim",
+      "inputs": {
+        "card": "quill",
+        "preset": "macro-probe",
+        "worldbooks": [],
+        "characterBook": null,
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "quill-long",
+        "persona": "wren",
+        "settings": {},
+        "authorsNote": null,
+        "priorUserMessages": [],
+        "userMessage": "Continue."
+      },
+      "expect": [
+        "lastUserMessage 与 lastCharMessage 取自历史"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "history-hidden-and-system",
+      "description": "历史含 system 消息与隐藏消息（is_system=true）",
+      "inputs": {
+        "card": "quill",
+        "preset": "baseline",
+        "worldbooks": [],
+        "characterBook": null,
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "quill-hidden",
+        "persona": "wren",
+        "settings": {},
+        "authorsNote": null,
+        "priorUserMessages": [],
+        "userMessage": "And the north face?"
+      },
+      "expect": [
+        "隐藏消息不进入提示词"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "history-long",
+      "description": "八条历史的完整线性化",
+      "inputs": {
+        "card": "quill",
+        "preset": "baseline",
+        "worldbooks": [],
+        "characterBook": null,
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "quill-long",
+        "persona": "wren",
+        "settings": {},
+        "authorsNote": null,
+        "priorUserMessages": [],
+        "userMessage": "Lead on."
+      },
+      "expect": [
+        "历史顺序与 jsonl 一致"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "regex-user-input",
+      "description": "正则 placement=1（用户输入）+ 捕获组 + trimStrings",
+      "inputs": {
+        "card": "quill",
+        "preset": "baseline",
+        "worldbooks": [],
+        "characterBook": null,
+        "chatLorebook": null,
+        "globalRegex": [
+          "user-input"
+        ],
+        "chat": "quill-long",
+        "persona": "wren",
+        "settings": {},
+        "authorsNote": null,
+        "priorUserMessages": [],
+        "userMessage": "The ferry owes a debt of 30 coppers."
+      },
+      "expect": [
+        "ferry 被替换；debt of 30 coppers → [DEBT:30]"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "regex-ai-output",
+      "description": "正则 placement=2（AI 输出）",
+      "inputs": {
+        "card": "lin-yueyao",
+        "preset": "baseline",
+        "worldbooks": [],
+        "characterBook": "yueyao-inn",
+        "chatLorebook": null,
+        "globalRegex": [
+          "ai-output"
+        ],
+        "chat": "yueyao-basic",
+        "persona": "wren",
+        "settings": {},
+        "authorsNote": null,
+        "priorUserMessages": [],
+        "userMessage": "继续。"
+      },
+      "expect": [
+        "历史里 AI 消息的 *动作* 变成 [动作]"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "regex-depth-bounds",
+      "description": "正则 minDepth / maxDepth",
+      "inputs": {
+        "card": "quill",
+        "preset": "baseline",
+        "worldbooks": [],
+        "characterBook": null,
+        "chatLorebook": null,
+        "globalRegex": [
+          "depth-bounds"
+        ],
+        "chat": "quill-long",
+        "persona": "wren",
+        "settings": {},
+        "authorsNote": null,
+        "priorUserMessages": [],
+        "userMessage": "The harbour lamp is out."
+      },
+      "expect": [
+        "harbour 只在最近两条被替换；lamp 只在较早消息被替换"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "regex-world-info",
+      "description": "正则 placement=5（世界书内容）",
+      "inputs": {
+        "card": "quill",
+        "preset": "baseline",
+        "worldbooks": [
+          "positions"
+        ],
+        "characterBook": null,
+        "chatLorebook": null,
+        "globalRegex": [
+          "world-info"
+        ],
+        "chat": "quill-basic",
+        "persona": "wren",
+        "settings": {},
+        "authorsNote": null,
+        "priorUserMessages": [],
+        "userMessage": "Bring the ledger to the lantern."
+      },
+      "expect": [
+        "世界书内容被加上 (WI) 前缀，Marrow 被替换为马柔镇"
+      ],
+      "recorded": true
+    },
+    {
+      "id": "regex-character-scoped",
+      "description": "角色域正则脚本（卡 extensions.regex_scripts）",
+      "inputs": {
+        "card": "lin-yueyao",
+        "preset": "baseline",
+        "worldbooks": [],
+        "characterBook": "yueyao-inn",
+        "chatLorebook": null,
+        "globalRegex": [],
+        "chat": "yueyao-basic",
+        "persona": "wren",
+        "settings": {},
+        "authorsNote": null,
+        "priorUserMessages": [],
+        "userMessage": "掌柜，(OOC: 简短点) 那笔账呢？"
+      },
+      "expect": [
+        "掌柜 → 月谣掌柜；(OOC: …) 被删除"
+      ],
+      "recorded": true
+    }
+  ]
+}

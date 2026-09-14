@@ -1,0 +1,78 @@
+{
+  "id": "preset-empty-and-disabled",
+  "description": "空 main + 被 prompt_order 关闭的段 + send_if_empty",
+  "stVersion": "1.18.0",
+  "capturedAt": "2026-09-14T02:10:39.351Z",
+  "inputs": {
+    "card": "quill",
+    "preset": "empty-and-disabled",
+    "worldbooks": [],
+    "characterBook": null,
+    "chatLorebook": null,
+    "globalRegex": [],
+    "chat": "quill-basic",
+    "persona": "wren",
+    "settings": {},
+    "authorsNote": null,
+    "priorUserMessages": [],
+    "userMessage": "Show me the coastline."
+  },
+  "expect": [
+    "空内容的 main 不产生消息",
+    "nsfw 与 charPersonality 被关闭，不出现"
+  ],
+  "request": {
+    "messages": [
+      {
+        "role": "system",
+        "content": "Wren keeps a ledger of every debt owed to her, and none of the ones she owes."
+      },
+      {
+        "role": "system",
+        "content": "Quill is a travelling mapmaker with ink-stained fingers and no fixed address."
+      },
+      {
+        "role": "system",
+        "content": "A rainy evening in the harbour town of Marrow."
+      },
+      {
+        "role": "system",
+        "content": "[Example Chat]"
+      },
+      {
+        "role": "system",
+        "content": "Where are we?",
+        "name": "example_user"
+      },
+      {
+        "role": "system",
+        "content": "\"Nowhere yet. Give me an hour and a dry table.\"",
+        "name": "example_assistant"
+      },
+      {
+        "role": "system",
+        "content": "[Start a new Chat]"
+      },
+      {
+        "role": "assistant",
+        "content": "*Quill looks up from a half-drawn coastline.* \"You are late.\""
+      },
+      {
+        "role": "user",
+        "content": "The ferry sank. Again."
+      },
+      {
+        "role": "user",
+        "content": "Show me the coastline."
+      }
+    ],
+    "model": "newtavern-golden-mock",
+    "temperature": 0.8,
+    "max_tokens": 400,
+    "stream": false,
+    "presence_penalty": 0.2,
+    "frequency_penalty": 0.1,
+    "top_p": 0.95
+  },
+  "notes": []
+}

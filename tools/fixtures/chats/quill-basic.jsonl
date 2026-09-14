@@ -1,0 +1,3 @@
+{"user_name":"Wren","character_name":"Quill","create_date":"2026-01-01@00h00m00s","chat_metadata":{}}
+{"name":"Quill","is_user":false,"is_system":false,"send_date":"2026-01-01@00h01m00s","mes":"*Quill looks up from a half-drawn coastline.* \"You are late.\"","extra":{}}
+{"name":"Wren","is_user":true,"is_system":false,"send_date":"2026-01-01@00h02m00s","mes":"The ferry sank. Again.","extra":{}}

@@ -1,0 +1,91 @@
+{
+  "id": "wi-selective-not-any",
+  "description": "selectiveLogic 2 NOT_ANY",
+  "stVersion": "1.18.0",
+  "capturedAt": "2026-09-14T02:11:51.890Z",
+  "inputs": {
+    "card": "quill",
+    "preset": "baseline",
+    "worldbooks": [
+      "logic"
+    ],
+    "characterBook": null,
+    "chatLorebook": null,
+    "globalRegex": [],
+    "chat": "quill-basic",
+    "persona": "wren",
+    "settings": {},
+    "authorsNote": null,
+    "priorUserMessages": [],
+    "userMessage": "The cistern is empty tonight."
+  },
+  "expect": [
+    "NOT_ANY 条目激活（两个副键都不出现）"
+  ],
+  "request": {
+    "messages": [
+      {
+        "role": "system",
+        "content": "Write Quill's next reply in a fictional chat between Quill and Wren. Keep it grounded and concrete."
+      },
+      {
+        "role": "system",
+        "content": "NOT_ANY · 蓄水池是空的。The cistern is dry."
+      },
+      {
+        "role": "system",
+        "content": "Wren keeps a ledger of every debt owed to her, and none of the ones she owes."
+      },
+      {
+        "role": "system",
+        "content": "Quill is a travelling mapmaker with ink-stained fingers and no fixed address."
+      },
+      {
+        "role": "system",
+        "content": "Curious, dry-humoured, stubborn about scale bars."
+      },
+      {
+        "role": "system",
+        "content": "A rainy evening in the harbour town of Marrow."
+      },
+      {
+        "role": "system",
+        "content": "[Example Chat]"
+      },
+      {
+        "role": "system",
+        "content": "Where are we?",
+        "name": "example_user"
+      },
+      {
+        "role": "system",
+        "content": "\"Nowhere yet. Give me an hour and a dry table.\"",
+        "name": "example_assistant"
+      },
+      {
+        "role": "system",
+        "content": "[Start a new Chat]"
+      },
+      {
+        "role": "assistant",
+        "content": "*Quill looks up from a half-drawn coastline.* \"You are late.\""
+      },
+      {
+        "role": "user",
+        "content": "The ferry sank. Again."
+      },
+      {
+        "role": "user",
+        "content": "The cistern is empty tonight."
+      }
+    ],
+    "model": "newtavern-golden-mock",
+    "temperature": 0.8,
+    "max_tokens": 400,
+    "stream": false,
+    "presence_penalty": 0.2,
+    "frequency_penalty": 0.1,
+    "top_p": 0.95
+  },
+  "notes": []
+}

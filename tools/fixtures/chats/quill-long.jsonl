@@ -1,0 +1,9 @@
+{"user_name":"Wren","character_name":"Quill","create_date":"2026-01-01@00h00m00s","chat_metadata":{}}
+{"name":"Quill","is_user":false,"is_system":false,"send_date":"2026-01-01@00h01m00s","mes":"*Quill looks up from a half-drawn coastline.* \"You are late.\"","extra":{}}
+{"name":"Wren","is_user":true,"is_system":false,"send_date":"2026-01-01@00h02m00s","mes":"The ferry sank. Again.","extra":{}}
+{"name":"Quill","is_user":false,"is_system":false,"send_date":"2026-01-01@00h03m00s","mes":"\"Then we walk. The lamp oil is in the second crate.\"","extra":{}}
+{"name":"Wren","is_user":true,"is_system":false,"send_date":"2026-01-01@00h04m00s","mes":"The harbour is closed until dawn.","extra":{}}
+{"name":"Quill","is_user":false,"is_system":false,"send_date":"2026-01-01@00h05m00s","mes":"\"Closed gates are a suggestion. Bring the oar.\"","extra":{}}
+{"name":"Wren","is_user":true,"is_system":false,"send_date":"2026-01-01@00h06m00s","mes":"What about the debt of 30 coppers?","extra":{}}
+{"name":"Quill","is_user":false,"is_system":false,"send_date":"2026-01-01@00h07m00s","mes":"\"That is tomorrow's problem. Hold the lamp higher.\"","extra":{}}
+{"name":"Wren","is_user":true,"is_system":false,"send_date":"2026-01-01@00h08m00s","mes":"Fine. Lead the way.","extra":{}}

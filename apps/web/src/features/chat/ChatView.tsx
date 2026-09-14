@@ -1,4 +1,4 @@
-import { PanelRightClose, PanelRightOpen, Menu } from 'lucide-react';
+import { Menu, PanelRightClose, PanelRightOpen, SearchCode } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { Composer } from './Composer';
@@ -17,10 +17,19 @@ export interface ChatViewProps {
   onOpenList: () => void;
   /** 会话面板开关（窄屏开抽屉，宽屏折叠右栏） */
   onTogglePanel: () => void;
+  /** 打开右栏的检查器页签 */
+  onOpenInspector: () => void;
   panelOpen: boolean;
 }
 
-export function ChatView({ chat, path, onOpenList, onTogglePanel, panelOpen }: ChatViewProps) {
+export function ChatView({
+  chat,
+  path,
+  onOpenList,
+  onTogglePanel,
+  onOpenInspector,
+  panelOpen,
+}: ChatViewProps) {
   const { t } = useTranslation();
   const patchChat = usePatchChat();
   const generation = useGeneration(chat.id);
@@ -47,6 +56,9 @@ export function ChatView({ chat, path, onOpenList, onTogglePanel, panelOpen }: C
           <div className="truncate text-sm font-semibold">{title}</div>
         </div>
         <ModelBadge chat={chat} />
+        <IconButton label={t('inspector.title')} onClick={onOpenInspector}>
+          <SearchCode aria-hidden />
+        </IconButton>
         <IconButton label={t('chat.panel.title')} onClick={onTogglePanel}>
           {panelOpen ? <PanelRightClose aria-hidden /> : <PanelRightOpen aria-hidden />}
         </IconButton>

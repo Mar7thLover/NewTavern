@@ -1,0 +1,10 @@
+{
+  "extends": "@newtavern/config/tsconfig/node.json",
+  "compilerOptions": {
+    // record/*.mjs 是纯 JS 工具脚本（不参与类型检查），但把它纳入 include 可以让
+    // `tsc --noEmit` 在 src/ 还没有任何测试文件时也不报 TS18003。
+    "allowJs": true,
+    "checkJs": false
+  },
+  "include": ["src", "record"]
+}

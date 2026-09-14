@@ -496,6 +496,84 @@ tools/fixtures/
 - [AS→SB] `assemblePrompt` 返回类型改为 `AssembleResult`，SB 同步改 `routes/chats.ts`；M2 的 `apps/server/src/services/assemble.ts` 是唯一切换点。
 - [WI/RX→AS] 引擎导出名以本文 §1–2 为准；若实现时增删字段，先改本文再改代码。
 - [FX→AS] 用例 inputs 的 settings 键名用 ST 原名（`world_info_depth` 等），AS 在黄金测试里映射到 `WISettings`。
+
+### 修正：§8 fixture 与录制工具（FX，2026-09-14）
+
+实现时对 §8.1 / §8.2 做了以下收敛，格式以本节为准（细节见 `tools/fixtures/README.md`）：
+
+1. **目录**：在 §8.1 基础上增加 `tools/fixtures/regex/*.json`（合成 ST 正则脚本数组，录制时写进
+   `extension_settings.regex`）——§8.1 的覆盖矩阵要求正则用例，但目录列表漏了它。
+   世界书 fixture 多一个顶层 `name` 字段，等于写入 ST 时的世界名与文件名（ST 的 `worlds/<name>.json`
+   本身不含名字，名字就是文件名）。
+2. **`cases.json` 是对象不是数组**：`{ stVersion, license, cases: CaseSpec[] }`。
+3. **`CaseSpec.inputs` 的字段**（全部必填，录制工具会补默认值）：
+   ```ts
+   interface CaseInputs {
+     card: string; // cards/<id>.json
+     preset: string; // presets/<id>.json
+     worldbooks: string[]; // 全局作用域（settings.world_info.globalSelect）
+     characterBook: string | null; // 角色作用域（卡 extensions.world 绑定）
+     chatLorebook: string | null; // 聊天作用域（chat_metadata.world_info）
+     globalRegex: string[]; // regex/<id>.json → extension_settings.regex
+     chat: string; // chats/<id>.jsonl
+     persona: string; // personas/<id>.json
+     settings: Record<string, unknown>; // ST 原键名，覆盖在 ST 默认值之上
+     authorsNote: {
+       text: string;
+       position: 0 | 1 | 2;
+       depth: number;
+       role: 0 | 1 | 2;
+       interval: number;
+     } | null;
+     priorUserMessages: string[]; // 被录制的那一轮之前先发的用户消息（推进 sticky/cooldown 时间态）
+     userMessage: string;
+   }
+   ```
+   `CaseSpec` 另有 `expect: string[]`（人读预期）、`recorded: boolean`、`notRecordedReason?: string`
+   （后两个由 `record.mjs` 回写）。AS 的黄金测试只遍历 `recorded === true` 的用例。
+4. **时间态用例不预置 `chat_metadata.timedWorldInfo`**：ST 的时间态条目带内部 `hash`，手写会被丢弃；
+   改用 `priorUserMessages` 让 ST 自己推进 sticky/cooldown，快照取最后一次请求。
+5. **`inputs.settings` 支持的 ST 键**：`world_info_depth` `world_info_budget` `world_info_budget_cap`
+   `world_info_recursive` `world_info_max_recursion_steps` `world_info_case_sensitive`
+   `world_info_match_whole_words` `world_info_include_names` `world_info_use_group_scoring`
+   `world_info_min_activations` `world_info_min_activations_depth_max` `world_info_overflow_alert`
+   `world_info_character_strategy`。未列出的取 ST 默认值（见 `tools/fixtures/README.md`）。
+
+### 备忘：ST 1.18 实测行为（FX → AS，2026-09-14）
+
+由快照观察到、组装流水线需要对齐的点：
+
+- **system 槽顺序**（默认 prompt_order）：`main` → `worldInfoBefore` 段 → `personaDescription` →
+  `charDescription` → `charPersonality` → `scenario` → `nsfw` → `worldInfoAfter` 段 → 示例块 →
+  `[Start a new Chat]` → 历史 → `jailbreak`。
+- **`[Start a new Chat]`（`new_chat_prompt`）在示例块之后、第一条历史消息之前**，是一条独立的
+  `role:'system'` 消息。
+- **示例对话**：每个 `<START>` 块前插一条 `new_example_chat_prompt`（`[Example Chat]`），
+  块内消息是 `role:'system'` + `name:'example_user'` / `name:'example_assistant'`，
+  `content` 里**不含**「名字: 」前缀。
+- **WI 合并**：同一 position 的多条条目拼成**一条** system 消息，条目之间用 `\n` 连接，
+  整体再套 `wi_format`（默认 `{0}`）。
+- **WI 排序与预算的方向相反**：预算按 `order` **降序**取（`order` 大的先占预算，快照
+  `wi-budget-overflow` 里 order 30/40 的条目留下、10/20 的被截断），而最终文本里同一 position 的
+  条目是**升序**排列（`wi-order-sorting`：order 20 在 order 300 之前）；`order` 相同时按 `uid`
+  升序进预算、降序进文本（`wi-cjk-whole-words`：uid 2 → 1 → 0）。等价于「按 order 降序排完
+  再逐条 `unshift`」。
+- **`world_info_max_recursion_steps = 1` 等于不递归**：初始扫描本身算一步，快照
+  `wi-recursion-max-steps-one` 与 `wi-recursion-off` 的 WI 段完全一致（只有 L1）。
+- **position 5/6（示例对话前后）的条目内容会走 `parseMesExamples`**：必须写成
+  `{{user}}: …` / `{{char}}: …` 的对话格式，否则只会多出一个空的 `[Example Chat]` 标记。
+  每个 WI 示例块都自带一条 `new_example_chat_prompt`。
+- **聊天记录里 `name` 不是用户名、且非 `is_user` 的消息（例如 `name: 'System'`）会以
+  `role:'assistant'` 进入请求**（快照 `history-hidden-and-system`）；`is_system: true` 的消息被剔除。
+- **深度 0 的注入落在最后一条用户消息之后**（快照 `preset-depth-injection` 末条）。
+- **作者注释落点**：`position:1`（IN_CHAT）时按 `depth` 从**尾部**数（depth 1 = 插在最后一条消息之前），
+  角色取 `note_role`；WI 的 position 2/3 与它拼进同一段。
+- **角色卡覆盖**：卡的 `system_prompt` 覆盖预设 `main`、`post_history_instructions` 覆盖 `jailbreak`，
+  预设 prompt 上的 `forbid_overrides: true` 会阻止覆盖。
+- **深度注入排序**：同一 `injection_depth` 内按 `injection_order` 升序。
+- **正则**：提示词侧脚本对**历史消息和本轮用户输入都生效**（按 placement 1/2 分用户/AI）。
+- **角色域正则脚本**（卡 `extensions.regex_scripts`）需要 `extension_settings.character_allowed_regex`
+  里包含该卡的 avatar 文件名，否则不生效。
 - [SA→SB] `services/generation-context.ts` 是 generate / inspect 共用的前置解析，签名：
   `resolveGenerationContext(db, providers, { chatId, parentId?, connectionId?, model?, layoutMode? }) → Promise<GenerationContext>`，
   `GenerationContext = { chat, overrides, nodes, parentId, connectionId, model, resolved, layoutMode }`；
@@ -551,3 +629,128 @@ tools/fixtures/
 - RX-9 ST 正则脚本合并顺序为 全局 → 预设 → 角色；M3 无预设级正则。
 
 **导出（主会话）**：`packages/core/src/index.ts` 已导出 `worldinfo/engine`、`worldinfo/types`、`regex/engine`、`variables/transaction`；`prompt/ir.ts` 的精简版激活类型改名为 `WIActivationSummary`。
+
+### 待协调（2026-09-14，WEB 实现后）
+
+- [WEB→SB] **WI 默认值不一致**：`apps/server/src/services/wi-settings.ts` 的 `DEFAULT_WI_UI_SETTINGS`
+  仍是契约旧值（`recursive: true`、`includeNames: false`），而 §9 WI-10 已按 ST 1.18 更正为
+  `recursive: false`、`includeNames: true`。前端 `DEFAULT_WORLD_INFO_SETTINGS` 按 **WI-10** 展示，
+  因此在用户从未写过 `worldInfo.settings` 时，前端表单显示的值与服务端实际使用的默认值不同
+  （用户在设置页动过任何一项后会 PUT 全量对象，之后一致）。SB 接入时请把服务端默认值改成 WI-10 的值。
+- [WEB→SB] **`POST /api/inspect/compare` 尚未挂载**：`apps/server/src/app.ts` 里没有 `/inspect` 路由，
+  该 URL 目前落到全局 404。前端「ST 比对」面板把 404 显示为「服务端还没有实现比对端点」，
+  SB 按 §6 实现后无需改前端；响应形状按 §6（`{ same, firstDiffIndex, ours, theirs, hints }`）。
+- [WEB→SB] **inspect 的 `no_connection` 是常见入口态**：会话没有 `overrides.connectionId/model`
+  且设置 KV `generation.default` 未设置时，`GET /api/chats/:id/inspect` 返回 400 `{error:'no_connection'}`。
+  前端据此显示「先添加一个连接」的引导（不当作错误），SB 接入后请保留这个分支。
+- [WEB→SB] 前端按 §6 写的 inspect 类型在 `apps/web/src/features/inspector/types.ts`：
+  `strictIr` / `diff` 可为 `null`（只有 cache-aware 才需要），`layout.breakpoints[].estTokens`
+  用于断点分隔线上的「~N tok」，`layout.moves[].from/to` 只用到 `anchor.depth`；
+  `wi.rejected[].reason` 按 `WIRejectReason` 的字符串渲染（未知值原样显示）。
+  `LayoutReport` 还没从 `@newtavern/core` 导出，前端先本地声明，AS 导出后再换。
+
+### 修正（2026-09-14，AS 组装 v2 + 布局对照 ST 1.18）
+
+以下条目以 **ST 1.18 实际行为为准**，实现已按此落地，契约的对应描述作废。
+
+**组装（§4）**
+
+- AS-1 **示例对话要拆成独立消息**。ST `setOpenAIMessageExamples` → `parseExampleIntoIndividual`：
+  每个 `<START>` 块按 `用户名:` / `角色名:` 行切成多条消息，`role` 恒为 `system`，
+  `name` 为 `example_user` / `example_assistant`（首行 `{Example Dialogue:}` 丢弃，
+  每条内容去掉第一处 `名字:` 后 trim）。M2 §2.5 把它列为「留给 M3」的偏差，现已纠正。
+  段 id：`preset:newExampleChat`(`#n`) + 每条 `character:mes_example`(`#n`)。
+- AS-2 **`names_behavior` 决定历史消息的 name**。ST `setOpenAIMessages`：
+  `NONE(-1)` / `DEFAULT(0)`（单人聊天）都不写 name、不加前缀；`CONTENT(2)` 把 `名字: ` 写进正文；
+  `COMPLETION(1)` 才写 `name` 字段。M2 的「有 `node.name` 就写 name」是错的。
+  预设键为 `names_behavior`，缺省 0。
+- AS-3 **作者注释是相对 `main` 插入的，不是 system 槽首尾**。ST
+  `getPromptPosition`：`BEFORE_PROMPT(2)` → `'start'`、`IN_PROMPT(0)` → `'end'`、`IN_CHAT(1)` → 不相对插入；
+  `injectToMain` 把它 unshift / push 进 **`main` 这条消息自己的集合**，所以它紧贴 `main` 之前 / 之后。
+  §4.1-6 的「放在 system 槽最前 / 最后」作废。没有 `main` 时 ST 直接丢弃（实现记一条 warning）。
+- AS-4 **`interval` 数的是用户消息条数，不是全部消息**。ST `setFloatingPrompt`：
+  `n = chat.filter(m => m.is_user).length`；`interval === 1` 时强制 `n = 1`；
+  `n <= 0 || interval <= 0` → 整个作者注释停用（此时 WI 的 ANTop/ANBottom 桶也一起丢弃）；
+  否则 `till = n >= interval ? n % interval : interval - n`，`till === 0` 才插入。
+  §4.1-6 的 `messageCount % interval === 0` 作废。
+- AS-5 **同 `(depth, order, role)` 的注入合并成一条消息**。ST `populationInjectionPrompts`
+  先把预设绝对注入按 `\n` 连接，再在 `order === 100` 这一组后面接
+  `getExtensionPrompt(IN_CHAT, depth, '\n', role)`，两段再 `\n` 连接。
+  扩展注入自身按 **extension key 的字典序** 合并：
+  `2_floating_prompt`（作者注释）< `DEPTH_PROMPT`（角色深度提示）< `PERSONA_DESCRIPTION` < `customDepthWI_<d>_<r>`。
+  最终时序仍是 `order 升序 → role（assistant, user, system）`（ST 按 order 降序 + `[system,user,assistant]`
+  组装后整体 reverse）。M2 §2.5-3 的「保留 IR 粒度、每条一段」偏差在 v2 纠正。
+  合并段的 id 取第一个来源（作者注释 → `authors_note`，角色深度提示 → `injection:char_depth_prompt`，
+  WI → `worldinfo:depth:<depth>:<role>`，预设 → `injection:<identifier>`）。
+- AS-6 **`system_prompt:true` 的自定义 prompt 被丢弃**（M2 §2.5-9 的已知偏差已纠正）。
+  ST `populateChatCompletion` 只显式加入 `main / nsfw / jailbreak / enhanceDefinitions / bias` +
+  标记 prompt + `system_prompt === false` 的 prompt；其余静默丢弃。v2 照此丢弃并在
+  `meta.warnings` 记一条。注意判定是 `=== false`，`system_prompt` 缺省（undefined）也会被丢。
+- AS-7 **WI 预算不是 `openai_max_context × %`**。ST `checkWorldInfo`：
+  `budget = Math.round(world_info_budget * maxContext / 100) || 1`，其中
+  `maxContext = getMaxContextTokens() - getMaxResponseTokens()`，chat completion 下即
+  `openai_max_context - openai_max_tokens`；是 `Math.round` 而非 `floor`。
+  §8.1 / §3.3 的换算公式据此更正（`tools/golden/src/map.ts` 的 `wiBudgetTokens` 是权威实现，SB 请复用）。
+- AS-8 **`irToChatMessages` 目前无法用于 ST 逐字节比对**。ST 从不合并相邻同角色消息，
+  而 `packages/providers/src/messages.ts` 默认 `mergeSameRole: true`，且**丢掉 `Segment.name`**。
+  黄金测试改为 `irToChatMessages(ir, { mergeSameRole: false })` + 自行回填 `name`。
+  `[AS→P]`：建议 `irToChatMessages` 增 `nameStrategy: 'field' | 'prefix' | 'none'`，
+  带 `name` 的段不与其它段合并，并把 `name` 带到 `ChatMessage`；`openaiChatAdapter.buildRequest`
+  在 strict 布局下应当不合并（或由 `ir.meta.layoutMode` 决定），否则服务端发出的请求与 ST 不一致。
+- AS-9 **`{{mesExamples}}` 是切块后 join 的结果**。ST `getCharacterCardFields` →
+  `parseMesExamples(card.mes_example).join('')`，每块形如 `<START>\n{trim 后的块}\n`（不含 WI 示例条目）。
+  直接用卡原文会少一个尾换行。
+- AS-10 **EM（position 5/6）条目的最终顺序**。ST 在单个 `EMEntries`（order 升序）上依次
+  `unshift`（before）/ `push`（after），所以**前置**示例块的最终顺序是 order **降序**、
+  后置是 order 升序。实现按此对 `buckets.emBefore` 取反序。
+  每个 WI 示例条目的内容会再走一遍 `parseMesExamples`，因此可以自带多个 `<START>` 块。
+- AS-11 **`worldInfoBefore/After` 的包裹**。ST `formatWorldInfo`：`wi_format`（默认 `{0}`）
+  只在 `trim()` 非空时套用；桶内多条先 `join('\n')` 再套格式，整体是**一条** system 消息。
+- AS-12 **AN 与 ANTop/ANBottom 的拼接**。ST world-info.js：
+  `` `${ANTop.join('\n')}\n${AN}\n${ANBottom.join('\n')}`.replace(/(^\n)|(\n$)/g, '') ``
+  （只去掉首尾各一个换行，所以三段都为空时会留下空串，AN 为空而桶非空时仍产生段）。
+- AS-13 **卡内嵌 `character_book` 在 ST 运行时不参与激活**。`getCharacterLore` 只读
+  `data.extensions.world`（再加 `world_info.charLore` 的 extraBooks）。角色书 / 聊天书 / 全局书
+  同名时按 全局 > 聊天 > persona 的优先级去重（`getCharacterLore` / `getChatLore` 里的 skip 分支）。
+- AS-14 **历史里 `is_system` 的消息被整条剔除**（ST `coreChat = chat.filter(x => !x.is_system)`），
+  并且非 user 的消息一律是 `assistant`（只有 `extra.type === NARRATOR` 才变 system）。
+  `AssembleHistoryNode.isHidden` 对应 `is_system`。
+- AS-15 **WI 扫描缓冲用的历史文本在 ST 里没做宏替换**（只有 `chat[0].mes` 例外）；
+  本实现按 §4.1 的阶段顺序先宏再扫描。fixture 里没有把宏写进聊天消息，两者没有可观测差异，
+  但这是一条有意的偏离，记在此处。
+- AS-16 `AssembleInputV2` 的必填字段只有 `lorebooks / wiSettings / variables / messageCount /
+  providerCaps / rng`（其余 v2 字段可选并有默认值）；`layoutPolicy` 收窄为 `Partial<LayoutPolicy>`。
+  `assemblePrompt` 返回 `AssembleResult`；`AssembleResult.layout` 是本次采用的布局报告，
+  `strictIr` 只在 `layoutMode === 'cache-aware'` 时给出。
+
+**布局（§5）**
+
+- AS-17 `LayoutReport` 增字段 `newFrozenVolatile: Record<string, string>`：
+  `volatileHandling: 'freeze'` 且冻结表里还没有该段时，把本轮文本记在这里，供服务端并入
+  `chat.metadata.frozenVolatile`（§5 只说了「记录到 report」，这里定名）。
+- AS-18 `LayoutProviderCaps` 是 `providerCaps` 的类型名（与 §4 的内联结构一致），
+  `LayoutContext = { providerCaps, policy, countTokens }`，`resolveLayoutPolicy(partial)`
+  提供默认值 `{ tailWindow: 4, volatileHandling: 'warn', wiCarrierRole: 'system' }`。
+- AS-19 strict 的第二个断点定义为「**第一条深度注入之前**的最后一条历史段」；
+  没有深度注入时退化为倒数第二条历史段（M2 §2.1-10 的写法），都要求至少 2 条历史段。
+  `caching: 'none'` → 无断点；`'prefix-auto'` → report 里仍给 static 末尾断点与
+  `estimatedCacheablePrefixTokens`，但 `cachePlan.breakpoints` 为空。
+- AS-20 cache-aware 合并出来的 WI 承载段 id 固定为 `layout:wiCarrier`，
+  `origin = { kind: 'worldinfo', ref: 'cache-aware-carrier' }`，`anchor = { slot:'history', depth:k, order:0 }`；
+  `systemInMessages === false` 时强制 `role:'user'` 并包裹 `[World Info]\n`。
+  `diffLayouts` 里它属于 `moved`（strict 侧不存在），被它取代的原段也记在 `moved`。
+- AS-21 `packages/core/src/index.ts` 追加 `export * from './prompt/layout/index.js'`，
+  所以 `LayoutReport / LayoutPolicy / LayoutMove / LayoutBreakpoint / LayoutProviderCaps /
+  diffLayouts / layoutStrict / layoutCacheAware / resolveLayoutPolicy` 都可从
+  `@newtavern/core` 导入（WEB 可以删掉本地声明）。
+
+**待协调**
+
+- [AS→SB] `apps/server` 因签名变更报错的**唯一**两处（其余文件均已通过 typecheck）：
+  `src/routes/chats.ts:591`（`assemblePrompt(buildAssembleInput(...))` 需要补 v2 必填字段）与
+  `src/routes/chats.ts:623`（`assemblePrompt` 现在返回 `AssembleResult`，取 `.ir` 给 `buildRequest`）。
+  `src/services/assemble.ts` 只是再导出，建议同时补上 `AssembleInputV2 / AssembleResult` 的再导出。
+- [AS→SB] WI 预算换算请改用 `tools/golden/src/map.ts` 的 `wiBudgetTokens(percent, maxContext, maxResponse)`
+  与 `ST_WI_DEFAULTS`（`world_info_recursive` 默认 **true**、`world_info_match_whole_words` 默认 **true**、
+  `world_info_include_names` 默认 **true**，与 WI-10 一致）。
+- [AS→FX] 62 个录制用例在 strict 模式下全部逐条 deep-equal 通过，无 `knownDeviations`。

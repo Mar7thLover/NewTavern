@@ -1,0 +1,116 @@
+{
+  "id": "wi-position-example-wrap",
+  "description": "WI position 5 / 6：包裹示例对话",
+  "stVersion": "1.18.0",
+  "capturedAt": "2026-09-14T02:18:13.427Z",
+  "inputs": {
+    "card": "quill",
+    "preset": "baseline",
+    "worldbooks": [
+      "positions"
+    ],
+    "characterBook": null,
+    "chatLorebook": null,
+    "globalRegex": [],
+    "chat": "quill-basic",
+    "persona": "wren",
+    "settings": {},
+    "authorsNote": null,
+    "priorUserMessages": [],
+    "userMessage": "Stack the saltcask beside the tarrope."
+  },
+  "expect": [
+    "saltcask 在示例块之前",
+    "tarrope 在示例块之后"
+  ],
+  "request": {
+    "messages": [
+      {
+        "role": "system",
+        "content": "Write Quill's next reply in a fictional chat between Quill and Wren. Keep it grounded and concrete."
+      },
+      {
+        "role": "system",
+        "content": "Wren keeps a ledger of every debt owed to her, and none of the ones she owes."
+      },
+      {
+        "role": "system",
+        "content": "Quill is a travelling mapmaker with ink-stained fingers and no fixed address."
+      },
+      {
+        "role": "system",
+        "content": "Curious, dry-humoured, stubborn about scale bars."
+      },
+      {
+        "role": "system",
+        "content": "A rainy evening in the harbour town of Marrow."
+      },
+      {
+        "role": "system",
+        "content": "[Example Chat]"
+      },
+      {
+        "role": "system",
+        "content": "盐桶堆到哪里？",
+        "name": "example_user"
+      },
+      {
+        "role": "system",
+        "content": "POS5 · 「堆到肩高。」Shoulder-high, no higher.",
+        "name": "example_assistant"
+      },
+      {
+        "role": "system",
+        "content": "[Example Chat]"
+      },
+      {
+        "role": "system",
+        "content": "Where are we?",
+        "name": "example_user"
+      },
+      {
+        "role": "system",
+        "content": "\"Nowhere yet. Give me an hour and a dry table.\"",
+        "name": "example_assistant"
+      },
+      {
+        "role": "system",
+        "content": "[Example Chat]"
+      },
+      {
+        "role": "system",
+        "content": "缆绳是什么味道？",
+        "name": "example_user"
+      },
+      {
+        "role": "system",
+        "content": "POS6 · 「松木。」Pine, mostly tar.",
+        "name": "example_assistant"
+      },
+      {
+        "role": "system",
+        "content": "[Start a new Chat]"
+      },
+      {
+        "role": "assistant",
+        "content": "*Quill looks up from a half-drawn coastline.* \"You are late.\""
+      },
+      {
+        "role": "user",
+        "content": "The ferry sank. Again."
+      },
+      {
+        "role": "user",
+        "content": "Stack the saltcask beside the tarrope."
+      }
+    ],
+    "model": "newtavern-golden-mock",
+    "temperature": 0.8,
+    "max_tokens": 400,
+    "stream": false,
+    "presence_penalty": 0.2,
+    "frequency_penalty": 0.1,
+    "top_p": 0.95
+  },
+  "notes": []
+}

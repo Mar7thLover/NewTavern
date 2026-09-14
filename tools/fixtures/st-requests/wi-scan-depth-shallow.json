@@ -1,0 +1,99 @@
+{
+  "id": "wi-scan-depth-shallow",
+  "description": "world_info_depth=2：更早的消息不进扫描缓冲",
+  "stVersion": "1.18.0",
+  "capturedAt": "2026-09-14T02:18:28.224Z",
+  "inputs": {
+    "card": "quill",
+    "preset": "baseline",
+    "worldbooks": [
+      "positions"
+    ],
+    "characterBook": null,
+    "chatLorebook": null,
+    "globalRegex": [],
+    "chat": "quill-basic",
+    "persona": "wren",
+    "settings": {
+      "world_info_depth": 2
+    },
+    "authorsNote": null,
+    "priorUserMessages": [
+      "We passed the lantern shed on the way in."
+    ],
+    "userMessage": "Keep going."
+  },
+  "expect": [
+    "lantern 条目不激活"
+  ],
+  "request": {
+    "messages": [
+      {
+        "role": "system",
+        "content": "Write Quill's next reply in a fictional chat between Quill and Wren. Keep it grounded and concrete."
+      },
+      {
+        "role": "system",
+        "content": "Wren keeps a ledger of every debt owed to her, and none of the ones she owes."
+      },
+      {
+        "role": "system",
+        "content": "Quill is a travelling mapmaker with ink-stained fingers and no fixed address."
+      },
+      {
+        "role": "system",
+        "content": "Curious, dry-humoured, stubborn about scale bars."
+      },
+      {
+        "role": "system",
+        "content": "A rainy evening in the harbour town of Marrow."
+      },
+      {
+        "role": "system",
+        "content": "[Example Chat]"
+      },
+      {
+        "role": "system",
+        "content": "Where are we?",
+        "name": "example_user"
+      },
+      {
+        "role": "system",
+        "content": "\"Nowhere yet. Give me an hour and a dry table.\"",
+        "name": "example_assistant"
+      },
+      {
+        "role": "system",
+        "content": "[Start a new Chat]"
+      },
+      {
+        "role": "assistant",
+        "content": "*Quill looks up from a half-drawn coastline.* \"You are late.\""
+      },
+      {
+        "role": "user",
+        "content": "The ferry sank. Again."
+      },
+      {
+        "role": "user",
+        "content": "We passed the lantern shed on the way in."
+      },
+      {
+        "role": "assistant",
+        "content": "记录完成。Recorded."
+      },
+      {
+        "role": "user",
+        "content": "Keep going."
+      }
+    ],
+    "model": "newtavern-golden-mock",
+    "temperature": 0.8,
+    "max_tokens": 400,
+    "stream": false,
+    "presence_penalty": 0.2,
+    "frequency_penalty": 0.1,
+    "top_p": 0.95
+  },
+  "notes": []
+}

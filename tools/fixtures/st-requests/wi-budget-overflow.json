@@ -1,0 +1,95 @@
+{
+  "id": "wi-budget-overflow",
+  "description": "预算溢出：只放得下前几条，ignoreBudget 例外",
+  "stVersion": "1.18.0",
+  "capturedAt": "2026-09-14T02:14:19.498Z",
+  "inputs": {
+    "card": "quill",
+    "preset": "baseline",
+    "worldbooks": [
+      "budget"
+    ],
+    "characterBook": null,
+    "chatLorebook": null,
+    "globalRegex": [],
+    "chat": "quill-basic",
+    "persona": "wren",
+    "settings": {
+      "world_info_budget": 1,
+      "world_info_overflow_alert": true
+    },
+    "authorsNote": null,
+    "priorUserMessages": [],
+    "userMessage": "Read me the quarryreport."
+  },
+  "expect": [
+    "BUDGET-IGNORE 必然出现",
+    "靠后的长条目被预算截断"
+  ],
+  "request": {
+    "messages": [
+      {
+        "role": "system",
+        "content": "Write Quill's next reply in a fictional chat between Quill and Wren. Keep it grounded and concrete."
+      },
+      {
+        "role": "system",
+        "content": "BUDGET-C · 采石场月报：南坡出料四百二十车，北坡因渗水停工六日；石匠三人告假，学徒两人转去修堤。Quarry monthly report: four hundred and twenty carts from the south face, six days lost to seepage on the north face, three masons on leave, two apprentices reassigned to the levee. 运料的骡队改走旧道，桥板需要在春汛前更换，账上还差一笔石灰的钱。The mule teams now take the old road, the bridge planks must be replaced before the spring flood, and the lime is still unpaid for. 附记：雨季里所有露天堆料都要盖席，否则边角会碎成粉末。Note: cover every open stockpile during the rains or the edges crumble to powder.\nBUDGET-IGNORE · 这条无视预算，必须出现。This entry ignores the budget."
+      },
+      {
+        "role": "system",
+        "content": "Wren keeps a ledger of every debt owed to her, and none of the ones she owes."
+      },
+      {
+        "role": "system",
+        "content": "Quill is a travelling mapmaker with ink-stained fingers and no fixed address."
+      },
+      {
+        "role": "system",
+        "content": "Curious, dry-humoured, stubborn about scale bars."
+      },
+      {
+        "role": "system",
+        "content": "A rainy evening in the harbour town of Marrow."
+      },
+      {
+        "role": "system",
+        "content": "[Example Chat]"
+      },
+      {
+        "role": "system",
+        "content": "Where are we?",
+        "name": "example_user"
+      },
+      {
+        "role": "system",
+        "content": "\"Nowhere yet. Give me an hour and a dry table.\"",
+        "name": "example_assistant"
+      },
+      {
+        "role": "system",
+        "content": "[Start a new Chat]"
+      },
+      {
+        "role": "assistant",
+        "content": "*Quill looks up from a half-drawn coastline.* \"You are late.\""
+      },
+      {
+        "role": "user",
+        "content": "The ferry sank. Again."
+      },
+      {
+        "role": "user",
+        "content": "Read me the quarryreport."
+      }
+    ],
+    "model": "newtavern-golden-mock",
+    "temperature": 0.8,
+    "max_tokens": 400,
+    "stream": false,
+    "presence_penalty": 0.2,
+    "frequency_penalty": 0.1,
+    "top_p": 0.95
+  },
+  "notes": []
+}

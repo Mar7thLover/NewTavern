@@ -3,6 +3,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 
+import {
+  AuthorsNoteSection,
+  ChatLorebooksSection,
+  ChatSystemPromptSection,
+} from './SessionSettings';
 import { formatTokens, isUsageEmpty, renderMacros, sumUsage, totalInput } from './shared';
 import { Badge } from '../../components/ui/badge';
 import { FieldLabel, Input, Select } from '../../components/ui/field';
@@ -163,6 +168,13 @@ export function SessionPanel({ chat, path }: SessionPanelProps) {
           </Select>
         </div>
       </section>
+
+      {/* 作者注释 / 聊天世界书 / 全局系统提示词覆盖（M3 契约 §7.2） */}
+      <div className="space-y-2">
+        <AuthorsNoteSection chat={chat} />
+        <ChatLorebooksSection chat={chat} />
+        <ChatSystemPromptSection chat={chat} />
+      </div>
 
       {/* 布局模式 */}
       <section>

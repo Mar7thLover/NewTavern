@@ -1,0 +1,6 @@
+{"user_name":"Wren","character_name":"Quill","create_date":"2026-01-01@00h00m00s","chat_metadata":{}}
+{"name":"System","is_user":false,"is_system":false,"send_date":"2026-01-01@00h01m00s","mes":"[系统旁白：本段是 system 消息。This line is a system message.]","extra":{}}
+{"name":"Quill","is_user":false,"is_system":false,"send_date":"2026-01-01@00h02m00s","mes":"*Quill looks up.* \"You are late.\"","extra":{}}
+{"name":"Wren","is_user":true,"is_system":true,"send_date":"2026-01-01@00h03m00s","mes":"[这条被隐藏了，不应进入提示词。This user line is hidden.]","extra":{}}
+{"name":"Quill","is_user":false,"is_system":false,"send_date":"2026-01-01@00h04m00s","mes":"\"The tide chart is wrong again.\"","extra":{}}
+{"name":"Wren","is_user":true,"is_system":false,"send_date":"2026-01-01@00h05m00s","mes":"Show me the north face.","extra":{}}

@@ -38,16 +38,32 @@
     "loadFailed": "Failed to load: {{message}}",
     "importing": "Importing…",
     "importingProgress": "Importing {{current}}/{{total}}…",
-    "importFailed": "Some files could not be imported"
+    "importFailed": "Some files could not be imported",
+    "copy": "Copy",
+    "copied": "Copied",
+    "expand": "Expand",
+    "collapse": "Collapse",
+    "reset": "Reset to defaults",
+    "refresh": "Refresh",
+    "unsaved": "Unsaved",
+    "enabled": "Enabled",
+    "none": "None"
   },
   "settings": {
+    "title": "Settings",
     "general": "General",
     "appearance": "Appearance",
     "theme": "Theme",
     "themeLight": "Light",
     "themeDark": "Dark",
     "themeSystem": "System",
-    "languageDescription": "Language of the UI and built-in prompts."
+    "languageDescription": "Language of the UI and built-in prompts.",
+    "sections": {
+      "general": "General",
+      "worldInfo": "World info",
+      "globalSystemPrompt": "Global system prompt",
+      "regex": "Regex scripts"
+    }
   },
   "library": {
     "characters": {
@@ -282,6 +298,238 @@
     "noKeys": "No key configured",
     "deleteTitle": "Delete connection?",
     "deleteMessage": "“{{name}}” and its stored keys will be permanently deleted. This cannot be undone."
+  },
+  "authorsNote": {
+    "title": "Author's note",
+    "hint": "A steering note that travels with the conversation.",
+    "text": "Text",
+    "textPlaceholder": "e.g. Keep the third-person narration, slow the pacing down.",
+    "position": "Position",
+    "positions": {
+      "inChat": "In chat (at depth)",
+      "afterMain": "After main prompt",
+      "beforeMain": "Before main prompt"
+    },
+    "depth": "Depth",
+    "depthHint": "0 = right after the newest message.",
+    "role": "Role",
+    "roles": {
+      "system": "System",
+      "user": "User",
+      "assistant": "Assistant"
+    },
+    "interval": "Interval",
+    "intervalHint": "Insert every N messages; 1 = every turn.",
+    "clear": "Clear author's note",
+    "empty": "Not set"
+  },
+  "worldInfo": {
+    "title": "World info",
+    "globalBooks": "Global lorebooks",
+    "globalBooksHint": "Global books apply to every chat; a character's own book is added automatically.",
+    "chatBooks": "Chat lorebooks",
+    "chatBooksHint": "Only applies to the current chat.",
+    "noBooks": "No lorebooks yet — import one in the library first.",
+    "selected": "{{total}} selected",
+    "selectNone": "None selected",
+    "settings": "Scanning and budget",
+    "settingsHint": "Defaults match SillyTavern 1.18.",
+    "fields": {
+      "scanDepth": "Scan depth",
+      "scanDepthHint": "How many recent messages are scanned for keys.",
+      "budgetPercent": "Budget (%)",
+      "budgetPercentHint": "Share of the context world info may take.",
+      "budgetCap": "Budget cap (tokens)",
+      "budgetCapHint": "0 = no extra cap.",
+      "recursive": "Recursive scanning",
+      "recursiveHint": "Activated entries are scanned again for more keys.",
+      "caseSensitive": "Case sensitive",
+      "matchWholeWords": "Match whole words",
+      "useGroupScoring": "Score groups by key hits",
+      "maxRecursionSteps": "Max recursion steps",
+      "maxRecursionStepsHint": "0 = unlimited.",
+      "minActivations": "Min activations",
+      "minActivationsHint": "0 = off; keeps scanning back until reached.",
+      "minActivationsDepthMax": "Min activations depth cap",
+      "minActivationsDepthMaxHint": "0 = no limit on how far back it looks.",
+      "includeNames": "Include speaker names when scanning"
+    }
+  },
+  "globalSystemPrompt": {
+    "title": "Global system prompt",
+    "hint": "Injects an extra system message around the main prompt, for every chat.",
+    "enabled": "Enabled",
+    "text": "Content",
+    "textPlaceholder": "e.g. Always narrate in English.",
+    "position": "Position",
+    "positions": {
+      "before_main": "Before main prompt",
+      "after_main": "After main prompt"
+    },
+    "override": "Override for this chat",
+    "overrideHint": "When off, the value from Settings is used.",
+    "globalState": "Global: {{state}}",
+    "stateOn": "enabled",
+    "stateOff": "disabled"
+  },
+  "regex": {
+    "title": "Regex scripts",
+    "hint": "Find-and-replace over user input, AI output and world info. Display-only scripts never touch stored messages.",
+    "import": "Import ST regex",
+    "count": "{{total}} in total",
+    "emptyTitle": "No regex scripts yet",
+    "emptyHint": "Import SillyTavern regex script JSON (a single script or an array).",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "toggle": "Enable / disable",
+    "find": "Find",
+    "replace": "Replace with",
+    "trimStrings": "Trim",
+    "depthRange": "Depth {{min}} – {{max}}",
+    "runOnEdit": "Run on edit",
+    "noPlacement": "No placement",
+    "deleteTitle": "Delete regex script?",
+    "deleteMessage": "“{{name}}” will be deleted permanently.",
+    "placements": {
+      "1": "User input",
+      "2": "AI output",
+      "3": "Slash command",
+      "5": "World info",
+      "6": "Reasoning"
+    },
+    "directions": {
+      "both": "Both",
+      "display": "Display only",
+      "prompt": "Prompt only"
+    },
+    "scopes": {
+      "global": "Global",
+      "character": "Character"
+    }
+  },
+  "inspector": {
+    "title": "Prompt inspector",
+    "tab": "Inspector",
+    "sessionTab": "Session",
+    "todoTitle": "The inspector is not wired to the assembly pipeline yet",
+    "todoHint": "The inspect endpoint still returns placeholder data; below is the context it resolved.",
+    "generatingHint": "Paused while generating.",
+    "noData": "Nothing to show.",
+    "refresh": "Reload",
+    "tokenEstimate": "Estimated tokens",
+    "cacheablePrefix": "Cacheable prefix",
+    "lastCacheRead": "Last cache read",
+    "lastCacheWrite": "Last cache write",
+    "warnings": "Assembly warnings",
+    "tabs": {
+      "segments": "Segments",
+      "worldInfo": "World info",
+      "request": "Raw request",
+      "compare": "ST diff"
+    },
+    "view": {
+      "current": "Current layout",
+      "strict": "Strict reference"
+    },
+    "segments": {
+      "count": "{{total}} segments",
+      "empty": "No segments.",
+      "tokens": "~{{total}} tok",
+      "depth": "Depth {{depth}}",
+      "system": "System slot"
+    },
+    "origins": {
+      "preset": "Preset",
+      "character": "Character",
+      "persona": "Persona",
+      "worldinfo": "World info",
+      "authors_note": "Author's note",
+      "history": "History",
+      "injection": "Injection",
+      "user_input": "User input",
+      "variables": "Variables",
+      "global_system": "Global system"
+    },
+    "stability": {
+      "static": "Static",
+      "session": "Session",
+      "turn": "Turn",
+      "history": "History"
+    },
+    "flags": {
+      "volatile": "Volatile macros",
+      "locked": "Locked"
+    },
+    "breakpoint": "Cache breakpoint · {{layer}} · ~{{tokens}} tok",
+    "belowMin": "Below the minimum cacheable length",
+    "layers": {
+      "static": "static",
+      "session": "session",
+      "history": "history",
+      "tools": "tools"
+    },
+    "moves": {
+      "moved": "Moved ← original position",
+      "clamped": "Depth {{from}} → {{to}}",
+      "frozen": "Volatile content frozen",
+      "jump": "Jump to original"
+    },
+    "diff": {
+      "title": "Difference from strict",
+      "moved": "{{total}} moved",
+      "clamped": "{{total}} clamped",
+      "unchanged": "{{total}} unchanged",
+      "none": "Identical to the strict layout."
+    },
+    "wi": {
+      "activated": "Activated entries",
+      "rejected": "Rejected entries",
+      "none": "No entries activated.",
+      "noneRejected": "No entries rejected.",
+      "keys": "Matched keys",
+      "budget": "Budget used ~{{used}} tok",
+      "overflowed": "Budget overflowed",
+      "untitled": "(untitled)",
+      "reasons": {
+        "constant": "Constant",
+        "key": "Key match",
+        "sticky": "Sticky",
+        "recursion": "Recursion",
+        "minActivations": "Min activations"
+      },
+      "rejects": {
+        "disabled": "Disabled",
+        "trigger": "Trigger mismatch",
+        "character-filter": "Character filter",
+        "delay": "Delayed",
+        "cooldown": "Cooling down",
+        "delay-until-recursion": "Waiting for recursion",
+        "exclude-recursion": "Excluded from recursion",
+        "dont-activate": "Decorator blocked",
+        "probability": "Probability roll failed",
+        "budget": "Over budget",
+        "group-lost": "Lost group draw",
+        "empty-content": "Empty content"
+      }
+    },
+    "request": {
+      "empty": "No request data.",
+      "copy": "Copy JSON"
+    },
+    "compare": {
+      "title": "Compare with an ST request",
+      "hint": "Paste the request body SillyTavern actually sent; messages are compared one by one.",
+      "placeholder": "{ \"messages\": [ … ] }",
+      "run": "Compare",
+      "invalidJson": "Not valid JSON.",
+      "same": "Both sides are identical.",
+      "diffAt": "First difference at message {{index}}",
+      "ours": "Local strict",
+      "theirs": "SillyTavern",
+      "missing": "(missing)",
+      "hints": "Hints",
+      "unavailable": "The server has not implemented POST /api/inspect/compare yet."
+    }
   },
   "errors": {
     "no_connection": "No usable connection",

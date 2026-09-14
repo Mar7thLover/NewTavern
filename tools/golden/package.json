@@ -1,0 +1,19 @@
+{
+  "name": "@newtavern/golden",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "record": "node record/record.mjs",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@newtavern/compat": "workspace:*",
+    "@newtavern/config": "workspace:*",
+    "@newtavern/core": "workspace:*",
+    "@newtavern/providers": "workspace:*",
+    "typescript": "~5.9.3",
+    "vitest": "^3.2.4"
+  }
+}

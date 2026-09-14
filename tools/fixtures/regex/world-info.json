@@ -1,0 +1,36 @@
+[
+  {
+    "id": "fx-wi-brackets",
+    "scriptName": "世界书：给内容加标记",
+    "findRegex": "/^/",
+    "replaceString": "(WI) ",
+    "trimStrings": [],
+    "placement": [
+      5
+    ],
+    "disabled": false,
+    "markdownOnly": false,
+    "promptOnly": true,
+    "runOnEdit": false,
+    "substituteRegex": 0,
+    "minDepth": null,
+    "maxDepth": null
+  },
+  {
+    "id": "fx-wi-marrow",
+    "scriptName": "世界书：Marrow → 马柔镇",
+    "findRegex": "/Marrow/g",
+    "replaceString": "马柔镇",
+    "trimStrings": [],
+    "placement": [
+      5
+    ],
+    "disabled": false,
+    "markdownOnly": false,
+    "promptOnly": true,
+    "runOnEdit": false,
+    "substituteRegex": 0,
+    "minDepth": null,
+    "maxDepth": null
+  }
+]

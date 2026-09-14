@@ -1,0 +1,97 @@
+{
+  "id": "an-with-wi-slots",
+  "description": "WI position 2 / 3 与作者注释合并为一段",
+  "stVersion": "1.18.0",
+  "capturedAt": "2026-09-14T02:18:51.807Z",
+  "inputs": {
+    "card": "quill",
+    "preset": "baseline",
+    "worldbooks": [
+      "positions"
+    ],
+    "characterBook": null,
+    "chatLorebook": null,
+    "globalRegex": [],
+    "chat": "quill-basic",
+    "persona": "wren",
+    "settings": {},
+    "authorsNote": {
+      "text": "[作者注释 · Author's note：保持场景在夜里，不要跳时间。]",
+      "position": 1,
+      "depth": 2,
+      "role": 0,
+      "interval": 1
+    },
+    "priorUserMessages": [],
+    "userMessage": "Mind the curfew and the gatehouse."
+  },
+  "expect": [
+    "curfew 在作者注释之前，gatehouse 在作者注释之后，同属一段"
+  ],
+  "request": {
+    "messages": [
+      {
+        "role": "system",
+        "content": "Write Quill's next reply in a fictional chat between Quill and Wren. Keep it grounded and concrete."
+      },
+      {
+        "role": "system",
+        "content": "Wren keeps a ledger of every debt owed to her, and none of the ones she owes."
+      },
+      {
+        "role": "system",
+        "content": "Quill is a travelling mapmaker with ink-stained fingers and no fixed address."
+      },
+      {
+        "role": "system",
+        "content": "Curious, dry-humoured, stubborn about scale bars."
+      },
+      {
+        "role": "system",
+        "content": "A rainy evening in the harbour town of Marrow."
+      },
+      {
+        "role": "system",
+        "content": "[Example Chat]"
+      },
+      {
+        "role": "system",
+        "content": "Where are we?",
+        "name": "example_user"
+      },
+      {
+        "role": "system",
+        "content": "\"Nowhere yet. Give me an hour and a dry table.\"",
+        "name": "example_assistant"
+      },
+      {
+        "role": "system",
+        "content": "[Start a new Chat]"
+      },
+      {
+        "role": "assistant",
+        "content": "*Quill looks up from a half-drawn coastline.* \"You are late.\""
+      },
+      {
+        "role": "system",
+        "content": "POS2 · 宵禁的钟在第十一个时辰。Curfew bells ring at the eleventh hour.\n[作者注释 · Author's note：保持场景在夜里，不要跳时间。]\nPOS3 · 门房总留一盏灯。The gatehouse keeps one lamp burning."
+      },
+      {
+        "role": "user",
+        "content": "The ferry sank. Again."
+      },
+      {
+        "role": "user",
+        "content": "Mind the curfew and the gatehouse."
+      }
+    ],
+    "model": "newtavern-golden-mock",
+    "temperature": 0.8,
+    "max_tokens": 400,
+    "stream": false,
+    "presence_penalty": 0.2,
+    "frequency_penalty": 0.1,
+    "top_p": 0.95
+  },
+  "notes": []
+}

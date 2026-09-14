@@ -1,0 +1,119 @@
+{
+  "id": "an-in-chat-depth",
+  "description": "作者注释 position 1（IN_CHAT）depth 2 role user",
+  "stVersion": "1.18.0",
+  "capturedAt": "2026-09-14T02:15:26.044Z",
+  "inputs": {
+    "card": "quill",
+    "preset": "baseline",
+    "worldbooks": [],
+    "characterBook": null,
+    "chatLorebook": null,
+    "globalRegex": [],
+    "chat": "quill-long",
+    "persona": "wren",
+    "settings": {},
+    "authorsNote": {
+      "text": "[作者注释 · Author's note：保持场景在夜里，不要跳时间。]",
+      "position": 1,
+      "depth": 2,
+      "role": 1,
+      "interval": 1
+    },
+    "priorUserMessages": [],
+    "userMessage": "What now?"
+  },
+  "expect": [
+    "作者注释以 user 角色注入到倒数第 2 条之前"
+  ],
+  "request": {
+    "messages": [
+      {
+        "role": "system",
+        "content": "Write Quill's next reply in a fictional chat between Quill and Wren. Keep it grounded and concrete."
+      },
+      {
+        "role": "system",
+        "content": "Wren keeps a ledger of every debt owed to her, and none of the ones she owes."
+      },
+      {
+        "role": "system",
+        "content": "Quill is a travelling mapmaker with ink-stained fingers and no fixed address."
+      },
+      {
+        "role": "system",
+        "content": "Curious, dry-humoured, stubborn about scale bars."
+      },
+      {
+        "role": "system",
+        "content": "A rainy evening in the harbour town of Marrow."
+      },
+      {
+        "role": "system",
+        "content": "[Example Chat]"
+      },
+      {
+        "role": "system",
+        "content": "Where are we?",
+        "name": "example_user"
+      },
+      {
+        "role": "system",
+        "content": "\"Nowhere yet. Give me an hour and a dry table.\"",
+        "name": "example_assistant"
+      },
+      {
+        "role": "system",
+        "content": "[Start a new Chat]"
+      },
+      {
+        "role": "assistant",
+        "content": "*Quill looks up from a half-drawn coastline.* \"You are late.\""
+      },
+      {
+        "role": "user",
+        "content": "The ferry sank. Again."
+      },
+      {
+        "role": "assistant",
+        "content": "\"Then we walk. The lamp oil is in the second crate.\""
+      },
+      {
+        "role": "user",
+        "content": "The harbour is closed until dawn."
+      },
+      {
+        "role": "assistant",
+        "content": "\"Closed gates are a suggestion. Bring the oar.\""
+      },
+      {
+        "role": "user",
+        "content": "What about the debt of 30 coppers?"
+      },
+      {
+        "role": "assistant",
+        "content": "\"That is tomorrow's problem. Hold the lamp higher.\""
+      },
+      {
+        "role": "user",
+        "content": "[作者注释 · Author's note：保持场景在夜里，不要跳时间。]"
+      },
+      {
+        "role": "user",
+        "content": "Fine. Lead the way."
+      },
+      {
+        "role": "user",
+        "content": "What now?"
+      }
+    ],
+    "model": "newtavern-golden-mock",
+    "temperature": 0.8,
+    "max_tokens": 400,
+    "stream": false,
+    "presence_penalty": 0.2,
+    "frequency_penalty": 0.1,
+    "top_p": 0.95
+  },
+  "notes": []
+}

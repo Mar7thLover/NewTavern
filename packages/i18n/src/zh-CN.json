@@ -38,16 +38,32 @@
     "loadFailed": "加载失败：{{message}}",
     "importing": "导入中…",
     "importingProgress": "导入中 {{current}}/{{total}}…",
-    "importFailed": "部分文件导入失败"
+    "importFailed": "部分文件导入失败",
+    "copy": "复制",
+    "copied": "已复制",
+    "expand": "展开",
+    "collapse": "收起",
+    "reset": "恢复默认",
+    "refresh": "刷新",
+    "unsaved": "未保存",
+    "enabled": "已启用",
+    "none": "无"
   },
   "settings": {
+    "title": "设置",
     "general": "通用",
     "appearance": "外观",
     "theme": "主题",
     "themeLight": "浅色",
     "themeDark": "深色",
     "themeSystem": "跟随系统",
-    "languageDescription": "界面语言与内置提示词语言。"
+    "languageDescription": "界面语言与内置提示词语言。",
+    "sections": {
+      "general": "通用",
+      "worldInfo": "世界书",
+      "globalSystemPrompt": "全局系统提示词",
+      "regex": "正则脚本"
+    }
   },
   "library": {
     "characters": {
@@ -282,6 +298,238 @@
     "noKeys": "未配置 Key",
     "deleteTitle": "删除连接？",
     "deleteMessage": "将永久删除「{{name}}」及其保存的 Key，此操作无法撤销。"
+  },
+  "authorsNote": {
+    "title": "作者注释",
+    "hint": "一段跟着对话走的作者提示，用来把控风格与走向。",
+    "text": "文本",
+    "textPlaceholder": "例如：保持第三人称叙述，节奏放慢。",
+    "position": "位置",
+    "positions": {
+      "inChat": "对话中（按深度）",
+      "afterMain": "主提示之后",
+      "beforeMain": "主提示之前"
+    },
+    "depth": "深度",
+    "depthHint": "0 = 插在最新一条消息之后。",
+    "role": "角色",
+    "roles": {
+      "system": "系统",
+      "user": "用户",
+      "assistant": "助手"
+    },
+    "interval": "间隔",
+    "intervalHint": "每 N 条消息插入一次，1 = 每次。",
+    "clear": "清除作者注释",
+    "empty": "未设置"
+  },
+  "worldInfo": {
+    "title": "世界书",
+    "globalBooks": "全局世界书",
+    "globalBooksHint": "全局书对所有对话生效，角色卡自带的书会自动附加。",
+    "chatBooks": "对话世界书",
+    "chatBooksHint": "只对当前对话生效。",
+    "noBooks": "还没有世界书，先到世界书库导入。",
+    "selected": "已选 {{total}} 本",
+    "selectNone": "未选择",
+    "settings": "扫描与预算",
+    "settingsHint": "默认值与 SillyTavern 1.18 一致。",
+    "fields": {
+      "scanDepth": "扫描深度",
+      "scanDepthHint": "向前扫描多少条消息来匹配关键词。",
+      "budgetPercent": "预算占比（%）",
+      "budgetPercentHint": "世界书内容最多占上下文的比例。",
+      "budgetCap": "预算上限（token）",
+      "budgetCapHint": "0 = 不额外限制。",
+      "recursive": "递归扫描",
+      "recursiveHint": "已激活条目的内容继续参与匹配。",
+      "caseSensitive": "区分大小写",
+      "matchWholeWords": "全词匹配",
+      "useGroupScoring": "分组按命中数评分",
+      "maxRecursionSteps": "最大递归层数",
+      "maxRecursionStepsHint": "0 = 不限制。",
+      "minActivations": "最少激活条数",
+      "minActivationsHint": "0 = 关闭；未达数量时继续向前扫描。",
+      "minActivationsDepthMax": "最少激活的扫描上限",
+      "minActivationsDepthMaxHint": "0 = 不限制回溯深度。",
+      "includeNames": "扫描时包含发言者名"
+    }
+  },
+  "globalSystemPrompt": {
+    "title": "全局系统提示词",
+    "hint": "在主提示词前后再注入一段系统提示，对所有对话生效。",
+    "enabled": "启用",
+    "text": "内容",
+    "textPlaceholder": "例如：始终使用简体中文叙述。",
+    "position": "位置",
+    "positions": {
+      "before_main": "主提示之前",
+      "after_main": "主提示之后"
+    },
+    "override": "按会话覆盖",
+    "overrideHint": "关闭时沿用设置页的全局配置。",
+    "globalState": "全局：{{state}}",
+    "stateOn": "已启用",
+    "stateOff": "未启用"
+  },
+  "regex": {
+    "title": "正则脚本",
+    "hint": "对用户输入、AI 输出、世界书内容做查找替换；仅显示的脚本不会改动存档。",
+    "import": "导入 ST 正则",
+    "count": "共 {{total}} 条",
+    "emptyTitle": "还没有正则脚本",
+    "emptyHint": "导入 SillyTavern 的正则脚本 JSON（单条或数组均可）。",
+    "moveUp": "上移",
+    "moveDown": "下移",
+    "toggle": "启用 / 停用",
+    "find": "查找",
+    "replace": "替换为",
+    "trimStrings": "裁剪",
+    "depthRange": "深度 {{min}} – {{max}}",
+    "runOnEdit": "编辑时运行",
+    "noPlacement": "未设置位置",
+    "deleteTitle": "删除正则脚本？",
+    "deleteMessage": "将永久删除「{{name}}」，此操作无法撤销。",
+    "placements": {
+      "1": "用户输入",
+      "2": "AI 输出",
+      "3": "斜杠命令",
+      "5": "世界书",
+      "6": "推理"
+    },
+    "directions": {
+      "both": "双向",
+      "display": "仅显示",
+      "prompt": "仅提示词"
+    },
+    "scopes": {
+      "global": "全局",
+      "character": "角色卡"
+    }
+  },
+  "inspector": {
+    "title": "提示词检查器",
+    "tab": "检查器",
+    "sessionTab": "会话",
+    "todoTitle": "检查器尚未接入组装流水线",
+    "todoHint": "服务端 inspect 端点目前只返回占位数据，下面是它解析到的上下文。",
+    "generatingHint": "生成中，暂停刷新。",
+    "noData": "没有可展示的数据。",
+    "refresh": "重新取数",
+    "tokenEstimate": "估算 token",
+    "cacheablePrefix": "预计可缓存前缀",
+    "lastCacheRead": "上轮缓存读取",
+    "lastCacheWrite": "上轮缓存写入",
+    "warnings": "组装告警",
+    "tabs": {
+      "segments": "段",
+      "worldInfo": "世界书",
+      "request": "原始请求",
+      "compare": "ST 比对"
+    },
+    "view": {
+      "current": "当前布局",
+      "strict": "strict 参照"
+    },
+    "segments": {
+      "count": "{{total}} 段",
+      "empty": "没有段。",
+      "tokens": "~{{total}} tok",
+      "depth": "深度 {{depth}}",
+      "system": "系统槽"
+    },
+    "origins": {
+      "preset": "预设",
+      "character": "角色",
+      "persona": "用户档案",
+      "worldinfo": "世界书",
+      "authors_note": "作者注释",
+      "history": "历史",
+      "injection": "注入",
+      "user_input": "用户输入",
+      "variables": "变量",
+      "global_system": "全局系统"
+    },
+    "stability": {
+      "static": "静态",
+      "session": "会话",
+      "turn": "本轮",
+      "history": "历史"
+    },
+    "flags": {
+      "volatile": "含易变宏",
+      "locked": "保真锁定"
+    },
+    "breakpoint": "缓存断点 · {{layer}} · ~{{tokens}} tok",
+    "belowMin": "低于最小缓存长度",
+    "layers": {
+      "static": "static",
+      "session": "session",
+      "history": "history",
+      "tools": "tools"
+    },
+    "moves": {
+      "moved": "已移动 ← 原位置",
+      "clamped": "深度 {{from}} → {{to}}",
+      "frozen": "已冻结易变内容",
+      "jump": "跳到原位"
+    },
+    "diff": {
+      "title": "与 strict 的差异",
+      "moved": "移动 {{total}}",
+      "clamped": "夹紧 {{total}}",
+      "unchanged": "未变 {{total}}",
+      "none": "与 strict 布局一致。"
+    },
+    "wi": {
+      "activated": "激活条目",
+      "rejected": "被拒条目",
+      "none": "没有激活的条目。",
+      "noneRejected": "没有被拒的条目。",
+      "keys": "触发键",
+      "budget": "预算用量 ~{{used}} tok",
+      "overflowed": "预算已溢出",
+      "untitled": "（无标题）",
+      "reasons": {
+        "constant": "常驻",
+        "key": "关键词命中",
+        "sticky": "粘滞",
+        "recursion": "递归命中",
+        "minActivations": "最少激活补足"
+      },
+      "rejects": {
+        "disabled": "已禁用",
+        "trigger": "触发方式不匹配",
+        "character-filter": "角色过滤",
+        "delay": "延迟未到",
+        "cooldown": "冷却中",
+        "delay-until-recursion": "等待递归层",
+        "exclude-recursion": "排除递归",
+        "dont-activate": "装饰器禁止激活",
+        "probability": "概率未命中",
+        "budget": "超出预算",
+        "group-lost": "分组落选",
+        "empty-content": "内容为空"
+      }
+    },
+    "request": {
+      "empty": "没有请求数据。",
+      "copy": "复制 JSON"
+    },
+    "compare": {
+      "title": "与 ST 请求比对",
+      "hint": "粘贴 SillyTavern 实际发出的请求体 JSON，逐条比对 messages。",
+      "placeholder": "{ \"messages\": [ … ] }",
+      "run": "开始比对",
+      "invalidJson": "不是合法的 JSON。",
+      "same": "两侧完全一致。",
+      "diffAt": "第 {{index}} 条消息开始不同",
+      "ours": "本地 strict",
+      "theirs": "SillyTavern",
+      "missing": "（缺少这一条）",
+      "hints": "提示",
+      "unavailable": "服务端还没有实现比对端点（POST /api/inspect/compare）。"
+    }
   },
   "errors": {
     "no_connection": "没有可用的连接",

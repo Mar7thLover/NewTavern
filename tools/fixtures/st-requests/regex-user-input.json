@@ -1,0 +1,111 @@
+{
+  "id": "regex-user-input",
+  "description": "正则 placement=1（用户输入）+ 捕获组 + trimStrings",
+  "stVersion": "1.18.0",
+  "capturedAt": "2026-09-14T02:16:25.054Z",
+  "inputs": {
+    "card": "quill",
+    "preset": "baseline",
+    "worldbooks": [],
+    "characterBook": null,
+    "chatLorebook": null,
+    "globalRegex": [
+      "user-input"
+    ],
+    "chat": "quill-long",
+    "persona": "wren",
+    "settings": {},
+    "authorsNote": null,
+    "priorUserMessages": [],
+    "userMessage": "The ferry owes a debt of 30 coppers."
+  },
+  "expect": [
+    "ferry 被替换；debt of 30 coppers → [DEBT:30]"
+  ],
+  "request": {
+    "messages": [
+      {
+        "role": "system",
+        "content": "Write Quill's next reply in a fictional chat between Quill and Wren. Keep it grounded and concrete."
+      },
+      {
+        "role": "system",
+        "content": "Wren keeps a ledger of every debt owed to her, and none of the ones she owes."
+      },
+      {
+        "role": "system",
+        "content": "Quill is a travelling mapmaker with ink-stained fingers and no fixed address."
+      },
+      {
+        "role": "system",
+        "content": "Curious, dry-humoured, stubborn about scale bars."
+      },
+      {
+        "role": "system",
+        "content": "A rainy evening in the harbour town of Marrow."
+      },
+      {
+        "role": "system",
+        "content": "[Example Chat]"
+      },
+      {
+        "role": "system",
+        "content": "Where are we?",
+        "name": "example_user"
+      },
+      {
+        "role": "system",
+        "content": "\"Nowhere yet. Give me an hour and a dry table.\"",
+        "name": "example_assistant"
+      },
+      {
+        "role": "system",
+        "content": "[Start a new Chat]"
+      },
+      {
+        "role": "assistant",
+        "content": "*Quill looks up from a half-drawn coastline.* \"You are late.\""
+      },
+      {
+        "role": "user",
+        "content": "The 渡船(ferry) sank. Again."
+      },
+      {
+        "role": "assistant",
+        "content": "\"Then we walk. The lamp oil is in the second crate.\""
+      },
+      {
+        "role": "user",
+        "content": "The harbour is closed until dawn."
+      },
+      {
+        "role": "assistant",
+        "content": "\"Closed gates are a suggestion. Bring the oar.\""
+      },
+      {
+        "role": "user",
+        "content": "What about the [DEBT:30]?"
+      },
+      {
+        "role": "assistant",
+        "content": "\"That is tomorrow's problem. Hold the lamp higher.\""
+      },
+      {
+        "role": "user",
+        "content": "Fine. Lead the way."
+      },
+      {
+        "role": "user",
+        "content": "The 渡船(ferry) owes a [DEBT:30]."
+      }
+    ],
+    "model": "newtavern-golden-mock",
+    "temperature": 0.8,
+    "max_tokens": 400,
+    "stream": false,
+    "presence_penalty": 0.2,
+    "frequency_penalty": 0.1,
+    "top_p": 0.95
+  },
+  "notes": []
+}

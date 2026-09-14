@@ -1,12 +1,13 @@
 import { motion } from 'framer-motion';
 import { Check, Copy, Pencil, Trash2 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Markdown } from './Markdown';
 import { ReasoningBlock } from './ReasoningBlock';
 import { SwipeBar } from './SwipeBar';
 import { formatClock, siblingInfo } from './shared';
+import type { DisplayRegexFn } from './useDisplayRegex';
 import type { StreamBuffer } from '../../app/store/chat';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Button } from '../../components/ui/button';
@@ -28,6 +29,10 @@ export interface MessageItemProps {
   busy: boolean;
   /** 本条正在流式输出时的缓冲 */
   stream: StreamBuffer | undefined;
+  /** 距 head 的距离（0 = 最新），显示侧正则的 min/maxDepth 用 */
+  depth: number;
+  /** 显示侧正则；编辑框与复制仍用原文 */
+  applyDisplayRegex: DisplayRegexFn;
   onSwitchSibling: (siblingId: string) => void;
   onRegenerate: (node: MessageNode) => void;
 }
@@ -40,6 +45,8 @@ export function MessageItem({
   avatarAssetId,
   busy,
   stream,
+  depth,
+  applyDisplayRegex,
   onSwitchSibling,
   onRegenerate,
 }: MessageItemProps) {
@@ -58,6 +65,11 @@ export function MessageItem({
   const text = streaming ? stream.text : nodeText(node);
   const reasoning = streaming ? stream.reasoning : (node.reasoning?.text ?? '');
   const { siblings, index, branched } = siblingInfo(nodes, node);
+  // 渲染用文本：套显示侧正则。流式过程中每帧都要算，用 useMemo 挡一下。
+  const displayText = useMemo(
+    () => applyDisplayRegex(text, node.role, depth),
+    [applyDisplayRegex, text, node.role, depth],
+  );
 
   useEffect(() => {
     if (!copied) return;
@@ -150,7 +162,7 @@ export function MessageItem({
                 )}
               </p>
             ) : (
-              <Markdown streaming={streaming}>{text === '' ? ' ' : text}</Markdown>
+              <Markdown streaming={streaming}>{displayText === '' ? ' ' : displayText}</Markdown>
             )}
           </div>
         </div>

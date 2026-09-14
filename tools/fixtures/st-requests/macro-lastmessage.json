@@ -1,0 +1,113 @@
+{
+  "id": "macro-lastmessage",
+  "description": "宏：lastUserMessage / lastCharMessage / trim",
+  "stVersion": "1.18.0",
+  "capturedAt": "2026-09-14T02:16:05.965Z",
+  "inputs": {
+    "card": "quill",
+    "preset": "macro-probe",
+    "worldbooks": [],
+    "characterBook": null,
+    "chatLorebook": null,
+    "globalRegex": [],
+    "chat": "quill-long",
+    "persona": "wren",
+    "settings": {},
+    "authorsNote": null,
+    "priorUserMessages": [],
+    "userMessage": "Continue."
+  },
+  "expect": [
+    "lastUserMessage 与 lastCharMessage 取自历史"
+  ],
+  "request": {
+    "messages": [
+      {
+        "role": "system",
+        "content": "char=Quill user=Wren model=newtavern-golden-mock version=1.0\ndescription>>Quill is a travelling mapmaker with ink-stained fingers and no fixed address.<<\npersonality>>Curious, dry-humoured, stubborn about scale bars.<<\nscenario>>A rainy evening in the harbour town of Marrow.<<\npersona>>Wren keeps a ledger of every debt owed to her, and none of the ones she owes.<<"
+      },
+      {
+        "role": "system",
+        "content": "Wren keeps a ledger of every debt owed to her, and none of the ones she owes."
+      },
+      {
+        "role": "system",
+        "content": "Quill is a travelling mapmaker with ink-stained fingers and no fixed address."
+      },
+      {
+        "role": "system",
+        "content": "Curious, dry-humoured, stubborn about scale bars."
+      },
+      {
+        "role": "system",
+        "content": "A rainy evening in the harbour town of Marrow."
+      },
+      {
+        "role": "system",
+        "content": "examples>><START>\nWren: Where are we?\nQuill: \"Nowhere yet. Give me an hour and a dry table.\"\n<<\nlastUser>>Continue.<<\nlastChar>>\"That is tomorrow's problem. Hold the lamp higher.\"<<\ntrim-test>>   tail<<\nunknown>>{{nosuchmacro}}<<"
+      },
+      {
+        "role": "system",
+        "content": "[Example Chat]"
+      },
+      {
+        "role": "system",
+        "content": "Where are we?",
+        "name": "example_user"
+      },
+      {
+        "role": "system",
+        "content": "\"Nowhere yet. Give me an hour and a dry table.\"",
+        "name": "example_assistant"
+      },
+      {
+        "role": "system",
+        "content": "[Start a new Chat]"
+      },
+      {
+        "role": "assistant",
+        "content": "*Quill looks up from a half-drawn coastline.* \"You are late.\""
+      },
+      {
+        "role": "user",
+        "content": "The ferry sank. Again."
+      },
+      {
+        "role": "assistant",
+        "content": "\"Then we walk. The lamp oil is in the second crate.\""
+      },
+      {
+        "role": "user",
+        "content": "The harbour is closed until dawn."
+      },
+      {
+        "role": "assistant",
+        "content": "\"Closed gates are a suggestion. Bring the oar.\""
+      },
+      {
+        "role": "user",
+        "content": "What about the debt of 30 coppers?"
+      },
+      {
+        "role": "assistant",
+        "content": "\"That is tomorrow's problem. Hold the lamp higher.\""
+      },
+      {
+        "role": "user",
+        "content": "Fine. Lead the way."
+      },
+      {
+        "role": "user",
+        "content": "Continue."
+      }
+    ],
+    "model": "newtavern-golden-mock",
+    "temperature": 0.8,
+    "max_tokens": 400,
+    "stream": false,
+    "presence_penalty": 0.2,
+    "frequency_penalty": 0.1,
+    "top_p": 0.95
+  },
+  "notes": []
+}

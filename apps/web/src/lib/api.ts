@@ -1,4 +1,4 @@
-import type { Part } from '@newtavern/core';
+import type { Part, RegexScript } from '@newtavern/core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 /* ------------------------------------------------------------------ */
@@ -289,6 +289,8 @@ export interface ChatOverrides {
   sampling?: Record<string, unknown>;
   thinking?: { effort?: string; budgetTokens?: number };
   layoutMode?: LayoutMode;
+  /** 全局系统提示词的按会话覆盖（M3 契约 §3.4），`null` = 不覆盖 */
+  globalSystemPrompt?: GlobalSystemPromptOverride | null;
 }
 
 export type LayoutMode = 'strict' | 'cache-aware';
@@ -324,6 +326,8 @@ export interface ChatSummary {
   createdAt: string;
   updatedAt: string;
   character?: { id: string; name: string; avatarAssetId: string | null } | null;
+  /** 绑定到该会话的世界书（插入顺序，M3 契约 §3.3） */
+  lorebookIds: string[];
   messageCount: number;
   lastMessageAt: string | null;
   /** head 节点文本前 120 字 */
@@ -348,6 +352,8 @@ export interface PatchChatInput {
   presetId?: string | null;
   headNodeId?: string;
   overrides?: ChatOverrides;
+  /** 浅合并；值为 `null` 的键会被删除（契约 §9 [SA→SB]） */
+  metadata?: Record<string, unknown> | null;
 }
 
 export interface PostMessageInput {
@@ -389,6 +395,108 @@ export function nodeText(node: Pick<MessageNode, 'parts'>): string {
 }
 
 /* ------------------------------------------------------------------ */
+/* M3：作者注释 / 全局系统提示词 / 世界书设置 / 正则脚本（契约 §3）      */
+/* ------------------------------------------------------------------ */
+
+/** 0 IN_PROMPT（主提示之后）、1 IN_CHAT（对话中按深度）、2 BEFORE_PROMPT（主提示之前） */
+export type AuthorsNotePosition = 0 | 1 | 2;
+/** 0 system、1 user、2 assistant */
+export type InjectionRole = 0 | 1 | 2;
+
+export interface AuthorsNote {
+  text: string;
+  position: AuthorsNotePosition;
+  depth: number;
+  role: InjectionRole;
+  /** 每 N 条消息插一次，1 = 每次 */
+  interval: number;
+}
+
+/** ST 默认值（契约 §3.4 修正） */
+export const DEFAULT_AUTHORS_NOTE: AuthorsNote = {
+  text: '',
+  position: 1,
+  depth: 4,
+  role: 0,
+  interval: 1,
+};
+
+/** 从 `chat.metadata.authorsNote` 读出作者注释；脏数据当作没有 */
+export function readAuthorsNote(chat: Pick<ChatSummary, 'metadata'>): AuthorsNote | null {
+  const raw = chat.metadata?.['authorsNote'];
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null;
+  const value = raw as Record<string, unknown>;
+  if (typeof value.text !== 'string') return null;
+  const tri = (input: unknown, fallback: 0 | 1 | 2): 0 | 1 | 2 =>
+    input === 0 || input === 1 || input === 2 ? input : fallback;
+  const num = (input: unknown, fallback: number): number =>
+    typeof input === 'number' && Number.isFinite(input) ? input : fallback;
+  return {
+    text: value.text,
+    position: tri(value.position, DEFAULT_AUTHORS_NOTE.position),
+    depth: num(value.depth, DEFAULT_AUTHORS_NOTE.depth),
+    role: tri(value.role, DEFAULT_AUTHORS_NOTE.role),
+    interval: num(value.interval, DEFAULT_AUTHORS_NOTE.interval),
+  };
+}
+
+export type GlobalSystemPromptPosition = 'before_main' | 'after_main';
+
+export interface GlobalSystemPrompt {
+  enabled: boolean;
+  text: string;
+  position: GlobalSystemPromptPosition;
+}
+
+/** 会话覆盖：逐字段覆盖设置 KV 的值 */
+export type GlobalSystemPromptOverride = Partial<GlobalSystemPrompt>;
+
+export const DEFAULT_GLOBAL_SYSTEM_PROMPT: GlobalSystemPrompt = {
+  enabled: false,
+  text: '',
+  position: 'before_main',
+};
+
+/** 设置 KV `worldInfo.settings` 的 UI 形态（预算为百分比） */
+export interface WorldInfoSettings {
+  scanDepth: number;
+  budgetPercent: number;
+  budgetCap: number;
+  recursive: boolean;
+  caseSensitive: boolean;
+  matchWholeWords: boolean;
+  useGroupScoring: boolean;
+  maxRecursionSteps: number;
+  minActivations: number;
+  minActivationsDepthMax: number;
+  includeNames: boolean;
+}
+
+/**
+ * ST 1.18 的实际默认值（契约 §9 修正 WI-10：`recursive=false`、`includeNames=true`）。
+ * 服务端 `services/wi-settings.ts` 的旧默认值与此不同，见契约 §9 [WEB→SB]。
+ */
+export const DEFAULT_WORLD_INFO_SETTINGS: WorldInfoSettings = {
+  scanDepth: 2,
+  budgetPercent: 25,
+  budgetCap: 0,
+  recursive: false,
+  caseSensitive: false,
+  matchWholeWords: false,
+  useGroupScoring: false,
+  maxRecursionSteps: 0,
+  minActivations: 0,
+  minActivationsDepthMax: 0,
+  includeNames: true,
+};
+
+/** 正则脚本对外形状与 `@newtavern/core` 的引擎入参一致，直接复用引擎类型 */
+export type { RegexScript };
+
+/** 新建 / 更新正则脚本时可写的字段 */
+export type RegexScriptInput = Partial<Omit<RegexScript, 'id' | 'scope'>>;
+
+/* ------------------------------------------------------------------ */
 /* Query keys 与 URL                                                    */
 /* ------------------------------------------------------------------ */
 
@@ -408,12 +516,19 @@ export const queryKeys = {
   connectionModels: (id: string) => ['connections', id, 'models'] as const,
   generationDefault: ['settings', 'generation.default'] as const,
   catalogModels: ['models', 'catalog'] as const,
+  setting: (key: string) => ['settings', key] as const,
+  regexScripts: ['regex'] as const,
+  characterRegex: (id: string) => ['characters', id, 'regex'] as const,
+  /** 检查器：head / 布局模式 / 连接模型任一变化都要重新取数 */
+  chatInspect: (id: string, params: Record<string, string | null>) =>
+    ['chats', id, 'inspect', params] as const,
 };
 
 export const apiUrls = {
   importCharacter: '/api/import/character',
   importPreset: '/api/import/preset',
   importLorebook: '/api/import/lorebook',
+  importRegex: '/api/import/regex',
   exportCharacter: (id: string, format: CharacterExportFormat) =>
     `/api/characters/${encodeURIComponent(id)}/export?format=${format}`,
   exportPreset: (id: string) => `/api/presets/${encodeURIComponent(id)}/export`,
@@ -776,6 +891,173 @@ export function useDeleteNode() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.chat(chatId) });
       return queryClient.invalidateQueries({ queryKey: queryKeys.chats, exact: true });
     },
+  });
+}
+
+/** 全量替换会话绑定的世界书（契约 §3.3，返回完整 ChatDetail） */
+export function useSetChatLorebooks() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ chatId, bookIds }: { chatId: string; bookIds: string[] }) =>
+      mutate<ChatDetail>(`/api/chats/${enc(chatId)}/lorebooks`, 'PUT', { bookIds }),
+    onSuccess: (data) => {
+      queryClient.setQueryData<ChatDetail>(queryKeys.chat(data.id), (previous) => ({
+        ...data,
+        nodes: data.nodes ?? previous?.nodes ?? [],
+      }));
+      return queryClient.invalidateQueries({ queryKey: queryKeys.chats, exact: true });
+    },
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/* 设置 KV hooks                                                        */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 通用设置项：响应信封是 `{ key, value }`，未设置过时 GET 返回 404（视为「用默认值」）。
+ * `normalize` 负责把任意脏数据归一化成前端类型。
+ */
+export function useSetting<T>(key: string, normalize: (value: unknown) => T) {
+  return useQuery({
+    queryKey: queryKeys.setting(key),
+    queryFn: async () => {
+      try {
+        const row = await fetchJson<{ key: string; value: unknown }>(`/api/settings/${enc(key)}`);
+        return normalize(row.value);
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 404) return normalize(undefined);
+        throw error;
+      }
+    },
+  });
+}
+
+export function useSetSetting<T>(key: string, normalize: (value: unknown) => T) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (value: T) => {
+      const row = await mutate<{ key: string; value: unknown }>(
+        `/api/settings/${enc(key)}`,
+        'PUT',
+        value,
+      );
+      return normalize(row.value);
+    },
+    onSuccess: (data) => queryClient.setQueryData(queryKeys.setting(key), data),
+  });
+}
+
+const asRecord = (value: unknown): Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+
+export function normalizeWorldInfoSettings(value: unknown): WorldInfoSettings {
+  const source = asRecord(value);
+  const result = { ...DEFAULT_WORLD_INFO_SETTINGS };
+  for (const key of Object.keys(DEFAULT_WORLD_INFO_SETTINGS) as (keyof WorldInfoSettings)[]) {
+    const incoming = source[key];
+    const fallback = DEFAULT_WORLD_INFO_SETTINGS[key];
+    if (typeof fallback === 'boolean') {
+      if (typeof incoming === 'boolean') (result[key] as boolean) = incoming;
+    } else if (typeof incoming === 'number' && Number.isFinite(incoming)) {
+      (result[key] as number) = incoming;
+    }
+  }
+  return result;
+}
+
+export function normalizeGlobalSystemPrompt(value: unknown): GlobalSystemPrompt {
+  const source = asRecord(value);
+  return {
+    enabled: typeof source.enabled === 'boolean' ? source.enabled : false,
+    text: typeof source.text === 'string' ? source.text : '',
+    position: source.position === 'after_main' ? 'after_main' : 'before_main',
+  };
+}
+
+function normalizeIdList(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string')
+    : [];
+}
+
+export const SETTING_KEYS = {
+  worldInfoSettings: 'worldInfo.settings',
+  worldInfoGlobalBooks: 'worldInfo.globalBookIds',
+  globalSystemPrompt: 'globalSystemPrompt',
+} as const;
+
+export const useWorldInfoSettings = () =>
+  useSetting(SETTING_KEYS.worldInfoSettings, normalizeWorldInfoSettings);
+export const useSetWorldInfoSettings = () =>
+  useSetSetting(SETTING_KEYS.worldInfoSettings, normalizeWorldInfoSettings);
+
+export const useGlobalBookIds = () =>
+  useSetting(SETTING_KEYS.worldInfoGlobalBooks, normalizeIdList);
+export const useSetGlobalBookIds = () =>
+  useSetSetting(SETTING_KEYS.worldInfoGlobalBooks, normalizeIdList);
+
+export const useGlobalSystemPrompt = () =>
+  useSetting(SETTING_KEYS.globalSystemPrompt, normalizeGlobalSystemPrompt);
+export const useSetGlobalSystemPrompt = () =>
+  useSetSetting(SETTING_KEYS.globalSystemPrompt, normalizeGlobalSystemPrompt);
+
+/* ------------------------------------------------------------------ */
+/* 正则脚本 hooks（契约 §3.2）                                          */
+/* ------------------------------------------------------------------ */
+
+/** 全局正则脚本，按 display_order。显示侧正则每条消息都要用，缓存 5 分钟。 */
+export function useRegexScripts() {
+  return useQuery({
+    queryKey: queryKeys.regexScripts,
+    queryFn: () => fetchJson<RegexScript[]>('/api/regex'),
+    staleTime: 5 * 60_000,
+  });
+}
+
+/** 角色卡内嵌正则（`data.extensions.regex_scripts`，scope='character'） */
+export function useCharacterRegex(characterId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.characterRegex(characterId ?? ''),
+    queryFn: () => fetchJson<RegexScript[]>(`/api/characters/${enc(characterId ?? '')}/regex`),
+    enabled: characterId !== null,
+    staleTime: 5 * 60_000,
+  });
+}
+
+/** 写操作成功后统一刷新脚本列表 */
+function useRegexMutation<TVariables>(mutationFn: (variables: TVariables) => Promise<unknown>) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.regexScripts }),
+  });
+}
+
+export function useCreateRegexScript() {
+  return useRegexMutation((input: RegexScriptInput) =>
+    mutate<RegexScript>('/api/regex', 'POST', input),
+  );
+}
+
+export function useUpdateRegexScript() {
+  return useRegexMutation(({ id, ...patch }: RegexScriptInput & { id: string }) =>
+    mutate<RegexScript>(`/api/regex/${enc(id)}`, 'PUT', patch),
+  );
+}
+
+export function useDeleteRegexScript() {
+  return useRegexMutation((id: string) => mutate(`/api/regex/${enc(id)}`, 'DELETE'));
+}
+
+/** 重排：body `{ ids }` 为新顺序的全部 id，响应是重排后的列表 */
+export function useReorderRegexScripts() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: string[]) => mutate<RegexScript[]>('/api/regex/order', 'PUT', { ids }),
+    onSuccess: (data) => queryClient.setQueryData(queryKeys.regexScripts, data),
   });
 }
 

@@ -1,6 +1,7 @@
 export * from './macros/engine.js';
 export * from './prompt/assemble.js';
 export * from './prompt/ir.js';
+export * from './prompt/layout/index.js';
 export * from './regex/engine.js';
 export * from './tokenizer.js';
 export * from './tree/path.js';

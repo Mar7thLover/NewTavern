@@ -1,0 +1,38 @@
+[
+  {
+    "id": "fx-depth-recent-only",
+    "scriptName": "仅最近两条：harbour → 港口",
+    "findRegex": "/harbour/gi",
+    "replaceString": "港口",
+    "trimStrings": [],
+    "placement": [
+      1,
+      2
+    ],
+    "disabled": false,
+    "markdownOnly": false,
+    "promptOnly": true,
+    "runOnEdit": false,
+    "substituteRegex": 0,
+    "minDepth": 0,
+    "maxDepth": 2
+  },
+  {
+    "id": "fx-depth-old-only",
+    "scriptName": "仅较早消息：lamp → 油灯",
+    "findRegex": "/lamp/gi",
+    "replaceString": "油灯",
+    "trimStrings": [],
+    "placement": [
+      1,
+      2
+    ],
+    "disabled": false,
+    "markdownOnly": false,
+    "promptOnly": true,
+    "runOnEdit": false,
+    "substituteRegex": 0,
+    "minDepth": 3,
+    "maxDepth": null
+  }
+]

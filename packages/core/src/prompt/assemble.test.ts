@@ -1,16 +1,40 @@
 import { describe, expect, it } from 'vitest';
 
 import { estimateTokens } from '../tokenizer.js';
+import { type WISettings } from '../worldinfo/types.js';
 import {
   assemblePrompt,
   DEFAULT_PRESET,
   type AssembleCharacter,
   type AssembleHistoryNode,
-  type AssembleInput,
+  type AssembleInputV2,
   type AssemblePersona,
   type AssemblePreset,
 } from './assemble.js';
 import { type PromptIR, type Segment } from './ir.js';
+import { type LayoutProviderCaps } from './layout/index.js';
+
+/** 组装测试只关心段序，世界书全关 */
+export const EMPTY_WI_SETTINGS: WISettings = {
+  scanDepth: 2,
+  budgetTokens: 0,
+  budgetCap: 0,
+  recursive: false,
+  caseSensitive: false,
+  matchWholeWords: false,
+  useGroupScoring: false,
+  maxRecursionSteps: 0,
+  minActivations: 0,
+  minActivationsDepthMax: 0,
+  includeNames: true,
+};
+
+export const TEST_CAPS: LayoutProviderCaps = {
+  caching: 'breakpoints',
+  maxBreakpoints: 4,
+  systemInMessages: true,
+  prefill: true,
+};
 
 // ───────────── fixture：贴近真实 ST 预设形状 ─────────────
 
@@ -170,7 +194,8 @@ const history: AssembleHistoryNode[] = [
   { id: 'n4', role: 'user', name: 'Ren', parts: [{ type: 'text', text: 'What now, {{char}}?' }] },
 ];
 
-function baseInput(overrides: Partial<AssembleInput> = {}): AssembleInput {
+/** v2 必填字段的中性默认值：世界书为空、无变量、无正则、strict 布局 */
+export function baseInput(overrides: Partial<AssembleInputV2> = {}): AssembleInputV2 {
   return {
     chatId: 'chat-1',
     model: 'claude-opus-5',
@@ -179,8 +204,19 @@ function baseInput(overrides: Partial<AssembleInput> = {}): AssembleInput {
     character,
     persona,
     history,
+    lorebooks: [],
+    wiSettings: EMPTY_WI_SETTINGS,
+    variables: { chat: {}, global: {} },
+    messageCount: history.filter((node) => node.isHidden !== true).length,
+    providerCaps: TEST_CAPS,
+    rng: { seed: 'seed' },
     ...overrides,
   };
+}
+
+/** M2 的断言都针对 `PromptIR`；v2 返回 `AssembleResult`，这里取出 ir */
+function assembleIr(input: AssembleInputV2): PromptIR {
+  return assemblePrompt(input).ir;
 }
 
 function ids(ir: PromptIR): string[] {
@@ -203,7 +239,7 @@ function textOf(segment: Segment): string {
 // ───────────── 段序与基本属性 ─────────────
 
 describe('assemblePrompt 段序', () => {
-  const ir = assemblePrompt(baseInput());
+  const ir = assembleIr(baseInput());
 
   it('按 prompt_order（100001 优先）展开，跳过禁用/缺失/空内容/未实现标记', () => {
     expect(ids(ir)).toEqual([
@@ -214,8 +250,10 @@ describe('assemblePrompt 段序', () => {
       'persona',
       'preset:newExampleChat',
       'character:mes_example',
-      'preset:newExampleChat#1',
       'character:mes_example#1',
+      'preset:newExampleChat#1',
+      'character:mes_example#2',
+      'character:mes_example#3',
       'preset:newMainChat',
       'history:n1',
       'history:n2',
@@ -239,10 +277,16 @@ describe('assemblePrompt 段序', () => {
     expect(textOf(find(ir, 'persona'))).toBe('Ren is a tired detective.');
   });
 
-  it('mes_example 按 <START> 切块，每块前插入 [Example Chat]', () => {
+  // ST setOpenAIMessageExamples → parseExampleIntoIndividual：块内再按发言人拆成独立消息，
+  // role 恒为 system，name 为 example_user / example_assistant（M2 的「整块一段」偏差在 M3 纠正）
+  it('mes_example 按 <START> 切块，块前插 [Example Chat]，块内按发言人拆成独立消息', () => {
     expect(textOf(find(ir, 'preset:newExampleChat'))).toBe('[Example Chat]');
-    expect(textOf(find(ir, 'character:mes_example'))).toBe('Ren: Hi\nSeraphine: ...');
-    expect(textOf(find(ir, 'character:mes_example#1'))).toBe('Ren: Again?\nSeraphine: Mm.');
+    expect(textOf(find(ir, 'character:mes_example'))).toBe('Hi');
+    expect(find(ir, 'character:mes_example').name).toBe('example_user');
+    expect(textOf(find(ir, 'character:mes_example#1'))).toBe('...');
+    expect(find(ir, 'character:mes_example#1').name).toBe('example_assistant');
+    expect(textOf(find(ir, 'character:mes_example#2'))).toBe('Again?');
+    expect(textOf(find(ir, 'character:mes_example#3'))).toBe('Mm.');
   });
 
   it('role / origin / anchor / stability 正确', () => {
@@ -257,9 +301,10 @@ describe('assemblePrompt 段序', () => {
       ref: 'description',
     });
     expect(find(ir, 'persona').origin).toEqual({ kind: 'persona' });
+    // names_behavior 缺省 DEFAULT(0)：ST 单人聊天里既不写 name 字段也不给正文加前缀
+    expect(find(ir, 'history:n1').name).toBeUndefined();
     expect(find(ir, 'history:n1')).toMatchObject({
       role: 'assistant',
-      name: 'Seraphine',
       origin: { kind: 'history', ref: 'n1' },
       anchor: { slot: 'history', order: 0 },
       stability: 'history',
@@ -270,7 +315,7 @@ describe('assemblePrompt 段序', () => {
       origin: { kind: 'user_input', ref: 'n4' },
       stability: 'turn',
     });
-    expect(find(ir, 'preset:jailbreak').anchor).toEqual({ slot: 'system', order: 10 });
+    expect(find(ir, 'preset:jailbreak').anchor).toEqual({ slot: 'system', order: 12 });
   });
 
   it('隐藏节点被剔除；历史文本也做宏替换；非文本 part 原样保留', () => {
@@ -306,9 +351,9 @@ describe('assemblePrompt 段序', () => {
   });
 
   it('cachePlan 断点 = 最后一个 static 段 + 倒数第二条历史段', () => {
-    expect(ir.cachePlan).toEqual({ breakpoints: [12, 16] });
-    expect(ir.segments[12]?.id).toBe('history:n3');
-    expect(ir.segments[16]?.id).toBe('preset:jailbreak');
+    expect(ir.cachePlan).toEqual({ breakpoints: [14, 18] });
+    expect(ir.segments[14]?.id).toBe('history:n3');
+    expect(ir.segments[18]?.id).toBe('preset:jailbreak');
   });
 
   it('meta 与 tokenEstimate', () => {
@@ -335,7 +380,7 @@ describe('assemblePrompt 深度注入落点', () => {
       if (prompt.identifier === 'a1b2-note') prompt.injection_depth = depth;
       if (prompt.identifier === 'c3d4-style') prompt.content = '';
     }
-    return ids(assemblePrompt(baseInput({ preset }))).filter(
+    return ids(assembleIr(baseInput({ preset }))).filter(
       (id) => id.startsWith('history:') || id.startsWith('injection:'),
     );
   }
@@ -384,9 +429,7 @@ describe('assemblePrompt 深度注入落点', () => {
         prompt.role = 'system';
       }
     }
-    const tail = ids(assemblePrompt(baseInput({ preset }))).filter((id) =>
-      id.startsWith('injection:'),
-    );
+    const tail = ids(assembleIr(baseInput({ preset }))).filter((id) => id.startsWith('injection:'));
     expect(tail).toEqual(['injection:c3d4-style', 'injection:a1b2-note']);
   });
 });
@@ -404,13 +447,13 @@ describe('assemblePrompt 角色卡覆盖', () => {
   };
 
   it('默认用卡的 system_prompt / post_history_instructions，并支持 {{original}}', () => {
-    const ir = assemblePrompt(baseInput({ character: card }));
+    const ir = assembleIr(baseInput({ character: card }));
     expect(textOf(find(ir, 'preset:main'))).toBe("Card main. Write Seraphine's next reply.");
     expect(textOf(find(ir, 'preset:jailbreak'))).toBe('Card PHI.');
   });
 
   it('preferCharacterPrompt=false 时不覆盖', () => {
-    const ir = assemblePrompt(
+    const ir = assembleIr(
       baseInput({ character: card, options: { preferCharacterPrompt: false } }),
     );
     expect(textOf(find(ir, 'preset:main'))).toBe("Write Seraphine's next reply.");
@@ -423,7 +466,7 @@ describe('assemblePrompt 角色卡覆盖', () => {
     for (const prompt of prompts) {
       if (prompt.identifier === 'main') prompt.forbid_overrides = true;
     }
-    const ir = assemblePrompt(baseInput({ preset, character: card }));
+    const ir = assembleIr(baseInput({ preset, character: card }));
     expect(textOf(find(ir, 'preset:main'))).toBe("Write Seraphine's next reply.");
     expect(textOf(find(ir, 'preset:jailbreak'))).toBe('Card PHI.');
   });
@@ -435,7 +478,7 @@ describe('assemblePrompt 角色卡覆盖', () => {
       identifier: 'nsfw',
       enabled: true,
     };
-    const ir = assemblePrompt(baseInput({ preset, character: card }));
+    const ir = assembleIr(baseInput({ preset, character: card }));
     expect(textOf(find(ir, 'preset:nsfw'))).toBe('Anything goes.');
   });
 });
@@ -444,18 +487,20 @@ describe('assemblePrompt 角色卡覆盖', () => {
 
 describe('assemblePrompt squash_system_messages', () => {
   it('false 时不合并', () => {
-    const ir = assemblePrompt(baseInput({ preset: stPreset({ squash_system_messages: false }) }));
-    expect(ir.segments).toHaveLength(17);
+    const ir = assembleIr(baseInput({ preset: stPreset({ squash_system_messages: false }) }));
+    expect(ir.segments).toHaveLength(19);
   });
 
   it('true 时合并相邻 system 段（\\n 连接，id 取首段），分隔段与带 name 的段不参与', () => {
-    const ir = assemblePrompt(baseInput({ preset: stPreset({ squash_system_messages: true }) }));
+    const ir = assembleIr(baseInput({ preset: stPreset({ squash_system_messages: true }) }));
     expect(ids(ir)).toEqual([
       'preset:main',
       'preset:newExampleChat',
       'character:mes_example',
-      'preset:newExampleChat#1',
       'character:mes_example#1',
+      'preset:newExampleChat#1',
+      'character:mes_example#2',
+      'character:mes_example#3',
       'preset:newMainChat',
       'history:n1',
       'history:n2',
@@ -481,9 +526,9 @@ describe('assemblePrompt squash_system_messages', () => {
 
 describe('assemblePrompt 历史裁剪', () => {
   it('超预算时从最早的历史段开始丢，并记 warning', () => {
-    const full = assemblePrompt(baseInput());
+    const full = assembleIr(baseInput());
     const n1Tokens = estimateTokens(textOf(find(full, 'history:n1')));
-    const ir = assemblePrompt(
+    const ir = assembleIr(
       baseInput({ options: { maxContextTokens: 500 + full.meta.tokenEstimate - n1Tokens } }),
     );
     expect(ids(ir)).not.toContain('history:n1');
@@ -492,7 +537,7 @@ describe('assemblePrompt 历史裁剪', () => {
   });
 
   it('极端预算下保留全部非历史段与最后一条 user', () => {
-    const ir = assemblePrompt(baseInput({ options: { maxContextTokens: 501 } }));
+    const ir = assembleIr(baseInput({ options: { maxContextTokens: 501 } }));
     expect(ids(ir)).toEqual([
       'preset:main',
       'character:description',
@@ -501,8 +546,10 @@ describe('assemblePrompt 历史裁剪', () => {
       'persona',
       'preset:newExampleChat',
       'character:mes_example',
-      'preset:newExampleChat#1',
       'character:mes_example#1',
+      'preset:newExampleChat#1',
+      'character:mes_example#2',
+      'character:mes_example#3',
       'preset:newMainChat',
       'injection:a1b2-note',
       'history:n4',
@@ -517,7 +564,7 @@ describe('assemblePrompt 历史裁剪', () => {
 
 describe('assemblePrompt 推理块', () => {
   it('provider+model 匹配时放回 parts 开头', () => {
-    const ir = assemblePrompt(baseInput());
+    const ir = assembleIr(baseInput());
     expect(find(ir, 'history:n3').parts[0]).toEqual({
       type: 'reasoning_opaque',
       provider: 'anthropic',
@@ -528,7 +575,7 @@ describe('assemblePrompt 推理块', () => {
   });
 
   it('模型切换时丢弃并记一条 warning', () => {
-    const ir = assemblePrompt(baseInput({ model: 'claude-sonnet-5' }));
+    const ir = assembleIr(baseInput({ model: 'claude-sonnet-5' }));
     expect(find(ir, 'history:n3').parts.some((part) => part.type === 'reasoning_opaque')).toBe(
       false,
     );
@@ -540,7 +587,7 @@ describe('assemblePrompt 推理块', () => {
 
 describe('assemblePrompt 默认预设', () => {
   it('preset=null 时启用 DEFAULT_PRESET', () => {
-    const ir = assemblePrompt(baseInput({ preset: null }));
+    const ir = assembleIr(baseInput({ preset: null }));
     expect(ir.meta.presetId).toBe('builtin:default');
     expect(DEFAULT_PRESET.id).toBe('builtin:default');
     expect(ids(ir)).toEqual([
@@ -551,8 +598,10 @@ describe('assemblePrompt 默认预设', () => {
       'persona',
       'preset:newExampleChat',
       'character:mes_example',
-      'preset:newExampleChat#1',
       'character:mes_example#1',
+      'preset:newExampleChat#1',
+      'character:mes_example#2',
+      'character:mes_example#3',
       'history:n1',
       'history:n2',
       'history:n3',
@@ -567,7 +616,7 @@ describe('assemblePrompt 默认预设', () => {
   });
 
   it('无角色卡与 Persona 时只剩预设与历史段', () => {
-    const ir = assemblePrompt(baseInput({ preset: null, character: null, persona: null }));
+    const ir = assembleIr(baseInput({ preset: null, character: null, persona: null }));
     expect(ids(ir)).toEqual([
       'preset:main',
       'history:n1',
@@ -578,14 +627,14 @@ describe('assemblePrompt 默认预设', () => {
   });
 
   it('layoutMode 原样写入 meta', () => {
-    expect(assemblePrompt(baseInput({ layoutMode: 'cache-aware' })).meta.layoutMode).toBe(
+    expect(assembleIr(baseInput({ layoutMode: 'cache-aware' })).meta.layoutMode).toBe(
       'cache-aware',
     );
-    expect(assemblePrompt(baseInput({ layoutMode: 'strict' })).meta.layoutMode).toBe('strict');
+    expect(assembleIr(baseInput({ layoutMode: 'strict' })).meta.layoutMode).toBe('strict');
   });
 
   it('空历史时不产生历史段，cachePlan 只有 static 断点', () => {
-    const ir = assemblePrompt(baseInput({ preset: null, history: [] }));
+    const ir = assembleIr(baseInput({ preset: null, history: [] }));
     expect(ids(ir).filter((id) => id.startsWith('history:'))).toEqual([]);
     expect(ir.cachePlan.breakpoints).toEqual([ir.segments.length - 1]);
   });
@@ -600,9 +649,7 @@ describe('assemblePrompt volatile', () => {
     for (const prompt of prompts) {
       if (prompt.identifier === 'main') prompt.content = '现在是 {{time}}。';
     }
-    const ir = assemblePrompt(
-      baseInput({ preset, options: { now: new Date(2026, 8, 13, 20, 5) } }),
-    );
+    const ir = assembleIr(baseInput({ preset, options: { now: new Date(2026, 8, 13, 20, 5) } }));
     expect(find(ir, 'preset:main')).toMatchObject({ volatile: true });
     expect(textOf(find(ir, 'preset:main'))).toBe('现在是 8:05 PM。');
     expect(find(ir, 'character:description').volatile).toBeUndefined();

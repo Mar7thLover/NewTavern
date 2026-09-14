@@ -1,0 +1,130 @@
+{
+  "id": "preset-depth-injection",
+  "description": "预设自定义 prompt 的 injection_position=1 深度注入（depth 0/2/4、三种 role、同深度不同 order）",
+  "stVersion": "1.18.0",
+  "capturedAt": "2026-09-14T02:10:10.600Z",
+  "inputs": {
+    "card": "quill",
+    "preset": "depth-inject",
+    "worldbooks": [],
+    "characterBook": null,
+    "chatLorebook": null,
+    "globalRegex": [],
+    "chat": "quill-long",
+    "persona": "wren",
+    "settings": {},
+    "authorsNote": null,
+    "priorUserMessages": [],
+    "userMessage": "Where do we cross?"
+  },
+  "expect": [
+    "depth 0 的 system 段在最后一条消息之后",
+    "同为 depth 2 的两段按 injection_order 50 → 150 排列"
+  ],
+  "request": {
+    "messages": [
+      {
+        "role": "system",
+        "content": "Write Quill's next reply in a fictional chat between Quill and Wren. Keep it grounded and concrete."
+      },
+      {
+        "role": "system",
+        "content": "[相对位置段：紧跟 main 之后的自定义 prompt。]"
+      },
+      {
+        "role": "system",
+        "content": "Wren keeps a ledger of every debt owed to her, and none of the ones she owes."
+      },
+      {
+        "role": "system",
+        "content": "Quill is a travelling mapmaker with ink-stained fingers and no fixed address."
+      },
+      {
+        "role": "system",
+        "content": "Curious, dry-humoured, stubborn about scale bars."
+      },
+      {
+        "role": "system",
+        "content": "A rainy evening in the harbour town of Marrow."
+      },
+      {
+        "role": "system",
+        "content": "[Example Chat]"
+      },
+      {
+        "role": "system",
+        "content": "Where are we?",
+        "name": "example_user"
+      },
+      {
+        "role": "system",
+        "content": "\"Nowhere yet. Give me an hour and a dry table.\"",
+        "name": "example_assistant"
+      },
+      {
+        "role": "system",
+        "content": "[Start a new Chat]"
+      },
+      {
+        "role": "assistant",
+        "content": "*Quill looks up from a half-drawn coastline.* \"You are late.\""
+      },
+      {
+        "role": "user",
+        "content": "The ferry sank. Again."
+      },
+      {
+        "role": "assistant",
+        "content": "\"Then we walk. The lamp oil is in the second crate.\""
+      },
+      {
+        "role": "user",
+        "content": "The harbour is closed until dawn."
+      },
+      {
+        "role": "assistant",
+        "content": "\"Closed gates are a suggestion. Bring the oar.\""
+      },
+      {
+        "role": "assistant",
+        "content": "[深度 4 · assistant：我记得那笔账。]"
+      },
+      {
+        "role": "user",
+        "content": "What about the debt of 30 coppers?"
+      },
+      {
+        "role": "assistant",
+        "content": "\"That is tomorrow's problem. Hold the lamp higher.\""
+      },
+      {
+        "role": "user",
+        "content": "[深度 2 · user：提醒 Quill 还欠一句解释。]"
+      },
+      {
+        "role": "system",
+        "content": "[深度 2 · system · order 150：同深度不同 order 的第二段。]"
+      },
+      {
+        "role": "user",
+        "content": "Fine. Lead the way."
+      },
+      {
+        "role": "user",
+        "content": "Where do we cross?"
+      },
+      {
+        "role": "system",
+        "content": "[深度 0 · system：保持当前场景的湿冷感。Keep the scene cold and wet.]"
+      }
+    ],
+    "model": "newtavern-golden-mock",
+    "temperature": 0.8,
+    "max_tokens": 400,
+    "stream": false,
+    "presence_penalty": 0.2,
+    "frequency_penalty": 0.1,
+    "top_p": 0.95
+  },
+  "notes": []
+}

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { useTranslation } from 'react-i18next';
 
 import { MessageItem } from './MessageItem';
+import { useDisplayRegex } from './useDisplayRegex';
 import type { GenerationController } from './useGeneration';
 import { useChatStore } from '../../app/store/chat';
 import { Button } from '../../components/ui/button';
@@ -37,6 +38,12 @@ export function MessageList({
   const [following, setFollowing] = useState(true);
 
   const persona = personas.data?.find((item) => item.id === chat.personaId) ?? null;
+  // 显示侧正则：宏里的 {{char}} / {{user}} 与消息头显示的名字保持一致
+  const applyDisplayRegex = useDisplayRegex({
+    characterId: chat.character?.id ?? null,
+    charName: chat.character?.name ?? t('chat.assistant'),
+    userName: persona?.name ?? t('chat.you'),
+  });
   const streamingNodeId = generation.streamingNodeId;
   const buffer = streamingNodeId ? streaming[streamingNodeId] : undefined;
   const streamLength = buffer ? buffer.text.length + buffer.reasoning.length : 0;
@@ -80,7 +87,7 @@ export function MessageList({
           {path.length === 0 ? (
             <EmptyChatGuide hasCharacter={Boolean(chat.character)} />
           ) : (
-            path.map((node) => {
+            path.map((node, index) => {
               const isUser = node.role === 'user';
               const displayName = isUser
                 ? (node.name ?? persona?.name ?? t('chat.you'))
@@ -101,6 +108,9 @@ export function MessageList({
                   }
                   busy={generation.isGenerating}
                   stream={streaming[node.id]}
+                  // 0 = head，向上递增
+                  depth={path.length - 1 - index}
+                  applyDisplayRegex={applyDisplayRegex}
                   onSwitchSibling={onSwitchSibling}
                   onRegenerate={onRegenerate}
                 />

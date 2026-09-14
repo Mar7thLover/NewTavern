@@ -1,0 +1,105 @@
+{
+  "id": "wi-min-activations",
+  "description": "world_info_min_activations 逐步加深扫描",
+  "stVersion": "1.18.0",
+  "capturedAt": "2026-09-14T02:18:44.801Z",
+  "inputs": {
+    "card": "quill",
+    "preset": "baseline",
+    "worldbooks": [
+      "positions"
+    ],
+    "characterBook": null,
+    "chatLorebook": null,
+    "globalRegex": [],
+    "chat": "quill-basic",
+    "persona": "wren",
+    "settings": {
+      "world_info_depth": 1,
+      "world_info_min_activations": 1,
+      "world_info_min_activations_depth_max": 8
+    },
+    "authorsNote": null,
+    "priorUserMessages": [
+      "The lantern shed is locked."
+    ],
+    "userMessage": "Then we wait."
+  },
+  "expect": [
+    "lantern 条目通过 minActivations 加深扫描后激活"
+  ],
+  "request": {
+    "messages": [
+      {
+        "role": "system",
+        "content": "Write Quill's next reply in a fictional chat between Quill and Wren. Keep it grounded and concrete."
+      },
+      {
+        "role": "system",
+        "content": "POS0 · 码头的灯笼在黄昏点亮。Lanterns along the pier are lit at dusk."
+      },
+      {
+        "role": "system",
+        "content": "Wren keeps a ledger of every debt owed to her, and none of the ones she owes."
+      },
+      {
+        "role": "system",
+        "content": "Quill is a travelling mapmaker with ink-stained fingers and no fixed address."
+      },
+      {
+        "role": "system",
+        "content": "Curious, dry-humoured, stubborn about scale bars."
+      },
+      {
+        "role": "system",
+        "content": "A rainy evening in the harbour town of Marrow."
+      },
+      {
+        "role": "system",
+        "content": "[Example Chat]"
+      },
+      {
+        "role": "system",
+        "content": "Where are we?",
+        "name": "example_user"
+      },
+      {
+        "role": "system",
+        "content": "\"Nowhere yet. Give me an hour and a dry table.\"",
+        "name": "example_assistant"
+      },
+      {
+        "role": "system",
+        "content": "[Start a new Chat]"
+      },
+      {
+        "role": "assistant",
+        "content": "*Quill looks up from a half-drawn coastline.* \"You are late.\""
+      },
+      {
+        "role": "user",
+        "content": "The ferry sank. Again."
+      },
+      {
+        "role": "user",
+        "content": "The lantern shed is locked."
+      },
+      {
+        "role": "assistant",
+        "content": "记录完成。Recorded."
+      },
+      {
+        "role": "user",
+        "content": "Then we wait."
+      }
+    ],
+    "model": "newtavern-golden-mock",
+    "temperature": 0.8,
+    "max_tokens": 400,
+    "stream": false,
+    "presence_penalty": 0.2,
+    "frequency_penalty": 0.1,
+    "top_p": 0.95
+  },
+  "notes": []
+}

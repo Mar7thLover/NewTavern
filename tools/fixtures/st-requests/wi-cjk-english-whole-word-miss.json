@@ -1,0 +1,91 @@
+{
+  "id": "wi-cjk-english-whole-word-miss",
+  "description": "英文整词匹配：复数形式不命中",
+  "stVersion": "1.18.0",
+  "capturedAt": "2026-09-14T02:14:38.674Z",
+  "inputs": {
+    "card": "kanata",
+    "preset": "baseline",
+    "worldbooks": [
+      "cjk"
+    ],
+    "characterBook": null,
+    "chatLorebook": null,
+    "globalRegex": [],
+    "chat": "kanata-cjk",
+    "persona": "xiaohe",
+    "settings": {},
+    "authorsNote": null,
+    "priorUserMessages": [],
+    "userMessage": "Nightjars called all night."
+  },
+  "expect": [
+    "EN-WHOLE 不激活"
+  ],
+  "request": {
+    "messages": [
+      {
+        "role": "system",
+        "content": "Write 奏太's next reply in a fictional chat between 奏太 and 小禾. Keep it grounded and concrete."
+      },
+      {
+        "role": "system",
+        "content": "小禾是替人跑腿的信客，记性好，脚程快。Xiaohe runs errands and letters; good memory, fast feet."
+      },
+      {
+        "role": "system",
+        "content": "奏太是漕运码头的记账少年，写字比说话快。Kanata keeps tallies at the canal wharf; he writes faster than he speaks."
+      },
+      {
+        "role": "system",
+        "content": "寡言、好奇、怕雷。Quiet, curious, afraid of thunder."
+      },
+      {
+        "role": "system",
+        "content": "漕运开闸的第一天，码头挤满了人。"
+      },
+      {
+        "role": "system",
+        "content": "[Example Chat]"
+      },
+      {
+        "role": "system",
+        "content": "今天几船？",
+        "name": "example_user"
+      },
+      {
+        "role": "system",
+        "content": "「七船。有一船没报关。」",
+        "name": "example_assistant"
+      },
+      {
+        "role": "system",
+        "content": "[Start a new Chat]"
+      },
+      {
+        "role": "assistant",
+        "content": "*他把算盘抱在胸前。*「你、你要记账吗？」"
+      },
+      {
+        "role": "user",
+        "content": "今天几船？"
+      },
+      {
+        "role": "assistant",
+        "content": "「七船。有一船没报关。」"
+      },
+      {
+        "role": "user",
+        "content": "Nightjars called all night."
+      }
+    ],
+    "model": "newtavern-golden-mock",
+    "temperature": 0.8,
+    "max_tokens": 400,
+    "stream": false,
+    "presence_penalty": 0.2,
+    "frequency_penalty": 0.1,
+    "top_p": 0.95
+  },
+  "notes": []
+}

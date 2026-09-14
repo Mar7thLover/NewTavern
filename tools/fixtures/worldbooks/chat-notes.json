@@ -1,0 +1,40 @@
+{
+  "name": "FX Chat Notes",
+  "entries": {
+    "0": {
+      "uid": 0,
+      "key": [],
+      "keysecondary": [],
+      "comment": "本次目标",
+      "content": "随行笔记：今夜要找到那位船工。Field note: find the boatman tonight.",
+      "constant": true,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 30,
+      "position": 1,
+      "disable": false,
+      "displayIndex": 0,
+      "addMemo": true,
+      "group": "",
+      "groupOverride": false,
+      "groupWeight": 100,
+      "sticky": 0,
+      "cooldown": 0,
+      "delay": 0,
+      "probability": 100,
+      "depth": 4,
+      "useProbability": true,
+      "role": null,
+      "vectorized": false,
+      "excludeRecursion": false,
+      "preventRecursion": false,
+      "delayUntilRecursion": false,
+      "scanDepth": null,
+      "caseSensitive": null,
+      "matchWholeWords": null,
+      "useGroupScoring": null,
+      "automationId": "",
+      "ignoreBudget": false
+    }
+  }
+}

@@ -1,0 +1,19 @@
+[
+  {
+    "id": "fx-ai-star-strip",
+    "scriptName": "AI 输出：动作星号换成方括号",
+    "findRegex": "/\\*([^*]+)\\*/g",
+    "replaceString": "[$1]",
+    "trimStrings": [],
+    "placement": [
+      2
+    ],
+    "disabled": false,
+    "markdownOnly": false,
+    "promptOnly": true,
+    "runOnEdit": false,
+    "substituteRegex": 0,
+    "minDepth": null,
+    "maxDepth": null
+  }
+]

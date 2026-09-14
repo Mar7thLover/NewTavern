@@ -1,19 +1,59 @@
 /**
- * 最小组装流水线（M2）：ST Chat Completion 预设 + 角色卡 + Persona + 历史 → PromptIR。
+ * 组装流水线 v2（M3）：预设 + 角色卡 + Persona + 世界书 + 作者注释 + 正则 + 变量 + 历史 → `PromptIR`。
  *
- * 行为参照 SillyTavern 1.18 `public/scripts/openai.js`
- * （`preparePromptsForChatCompletion` / `populateChatCompletion` / `populateChatHistory` /
- * `populateDialogueExamples` / `populationInjectionPrompts` / `ChatCompletion.squashSystemMessages`）
- * 与 `public/scripts/PromptManager.js`。世界书、作者注释、正则、变量留到 M3。
+ * 阶段与顺序见 `docs/M3-CONTRACT.md` §4.1：
+ * Collect → Normalize → History → Macros → World Info → Regex → Placement → Layout → IR。
  *
- * 契约见 docs/M2-CONTRACT.md §2；与 ST 的已知偏差记在该文件 §5。
+ * 行为参照 SillyTavern 1.18：
+ * - `public/scripts/openai.js`：`prepareOpenAIMessages` / `preparePromptsForChatCompletion` /
+ *   `populateChatCompletion` / `populateChatHistory` / `populateDialogueExamples` /
+ *   `populationInjectionPrompts` / `setOpenAIMessageExamples` / `parseExampleIntoIndividual` /
+ *   `formatWorldInfo` / `ChatCompletion.squashSystemMessages`
+ * - `public/script.js`：`getExtensionPrompt`（注入按 key 字典序合并）、`parseMesExamples`、
+ *   `setExtensionPrompt` 的各个 key（`2_floating_prompt` / `DEPTH_PROMPT` / `customDepthWI_*`）
+ * - `public/scripts/authors-note.js`：`setFloatingPrompt`（interval 判定）
+ * - `public/scripts/world-info.js`：`getWorldInfoPrompt` 的分桶与 AN 拼接
+ *
+ * 与 ST 的已知偏差集中记在 `docs/M3-CONTRACT.md` §9。
  */
 
-import { substituteMacrosDetailed, type MacroContext } from '../macros/engine.js';
+import {
+  substituteMacros,
+  substituteMacrosDetailed,
+  type MacroContext,
+  type MacroHistoryMessage,
+} from '../macros/engine.js';
+import { applyRegexScripts, REGEX_PLACEMENT, type RegexScript } from '../regex/engine.js';
 import { estimateTokens } from '../tokenizer.js';
-import { type Part, type PromptIR, type Role, type SamplingParams, type Segment } from './ir.js';
+import { VariableTransaction, type VariableEvent } from '../variables/transaction.js';
+import { scanWorldInfo } from '../worldinfo/engine.js';
+import {
+  type WIActivation,
+  type WIBook,
+  type WIRole,
+  type WIScanMessage,
+  type WIScanResult,
+  type WISettings,
+  type WITimedState,
+} from '../worldinfo/types.js';
+import {
+  type Part,
+  type PromptIR,
+  type Role,
+  type SamplingParams,
+  type Segment,
+  type WIActivationSummary,
+} from './ir.js';
+import {
+  layoutCacheAware,
+  layoutStrict,
+  resolveLayoutPolicy,
+  type LayoutPolicy,
+  type LayoutProviderCaps,
+  type LayoutReport,
+} from './layout/index.js';
 
-// ───────────────────────── 输入类型（契约 §2） ─────────────────────────
+// ───────────────────────── 输入类型（M2 契约 §2 + M3 契约 §4） ─────────────────────────
 
 export interface AssembleCharacter {
   id: string;
@@ -53,6 +93,7 @@ export interface AssembleHistoryNode {
   isHidden?: boolean;
 }
 
+/** M2 的输入形状；v2 在其上增字段 */
 export interface AssembleInput {
   chatId: string;
   model: string;
@@ -63,7 +104,6 @@ export interface AssembleInput {
   persona: AssemblePersona | null;
   /** root→head 线性化后的历史（不含正在生成的节点） */
   history: AssembleHistoryNode[];
-  /** M2 两者输出相同段序；仅 cachePlan 不同 */
   layoutMode?: 'strict' | 'cache-aware';
   options?: {
     /** 默认 true：卡 system_prompt / post_history_instructions 覆盖 main / jailbreak */
@@ -75,9 +115,70 @@ export interface AssembleInput {
   };
 }
 
-// ───────────────────────── 内置默认预设（契约 §2.3） ─────────────────────────
+/** 作者注释（ST `chat_metadata` 的 note_* 系列） */
+export interface AssembleAuthorsNote {
+  text: string;
+  /** 0 IN_PROMPT、1 IN_CHAT、2 BEFORE_PROMPT（ST `extension_prompt_types`） */
+  position: 0 | 1 | 2;
+  depth: number;
+  role: WIRole;
+  /** 每 N 条用户消息插一次；1 = 每次 */
+  interval: number;
+}
 
-/** 通用角色扮演系统提示词：中英双语各一段，尽量短，避免与用户预设打架 */
+/** 角色卡 `extensions.depth_prompt` */
+export interface AssembleDepthPrompt {
+  text: string;
+  depth: number;
+  role: WIRole;
+}
+
+export interface AssembleGlobalSystemPrompt {
+  text: string;
+  position: 'before_main' | 'after_main';
+}
+
+export interface AssembleInputV2 extends AssembleInput {
+  /** 已合并：全局 + 角色（char）+ 聊天（chat）+ persona */
+  lorebooks: WIBook[];
+  wiSettings: WISettings;
+  /** 父节点快照；null / 缺省 = 全新 */
+  wiState?: WITimedState | null;
+  authorsNote?: AssembleAuthorsNote | null;
+  characterDepthPrompt?: AssembleDepthPrompt | null;
+  /** 已按 enabled 过滤 */
+  globalSystemPrompt?: AssembleGlobalSystemPrompt | null;
+  /** 全局（按 display_order）+ 角色（按数组序），已过滤 disabled */
+  regexScripts?: RegexScript[];
+  variables: { chat: Record<string, unknown>; global: Record<string, unknown> };
+  /** 可见历史条数（WI delay 用） */
+  messageCount: number;
+  providerCaps: LayoutProviderCaps;
+  layoutPolicy?: Partial<LayoutPolicy>;
+  /** 派生确定性随机（mulberry32）；`pickSeed = seed` */
+  rng: { seed: string };
+  now?: Date;
+  idleDurationMs?: number;
+  /** 检查器：不推进 WI 时间态、不返回变量副作用 */
+  dryRun?: boolean;
+}
+
+export interface AssembleResult {
+  ir: PromptIR;
+  wiState: WITimedState;
+  variables: {
+    chat: Record<string, unknown>;
+    globalChanges: Record<string, unknown>;
+    events: VariableEvent[];
+  };
+  wi: WIScanResult;
+  layout: LayoutReport;
+  /** strict 参照（`layoutMode==='cache-aware'` 时才有，供 diff） */
+  strictIr?: PromptIR;
+}
+
+// ───────────────────────── 内置默认预设（M2 契约 §2.3） ─────────────────────────
+
 const DEFAULT_MAIN_PROMPT = [
   "You are {{char}} in a collaborative fiction with {{user}}. Stay in character and write only {{char}}'s speech, actions and inner life — never speak, act or decide for {{user}}.",
   'Follow the character sheet, scenario and example dialogue above; keep their tone, advance the scene with concrete sensory detail, and end on an opening for {{user}} to respond.',
@@ -87,25 +188,28 @@ const DEFAULT_MAIN_PROMPT = [
 
 const DEFAULT_PRESET_IDENTIFIERS = [
   'main',
+  'worldInfoBefore',
   'charDescription',
   'charPersonality',
   'scenario',
   'personaDescription',
+  'worldInfoAfter',
   'dialogueExamples',
   'chatHistory',
 ];
 
-/** 未导入任何 ST 预设时使用；native 只是 st-openai 的子集，走同一套展开逻辑 */
 export const DEFAULT_PRESET: AssemblePreset = {
   id: 'builtin:default',
   format: 'native',
   data: {
     prompts: [
       { identifier: 'main', name: 'Main Prompt', role: 'system', content: DEFAULT_MAIN_PROMPT },
+      { identifier: 'worldInfoBefore', name: 'World Info (before)', marker: true },
       { identifier: 'charDescription', name: 'Char Description', marker: true },
       { identifier: 'charPersonality', name: 'Char Personality', marker: true },
       { identifier: 'scenario', name: 'Scenario', marker: true },
       { identifier: 'personaDescription', name: 'Persona Description', marker: true },
+      { identifier: 'worldInfoAfter', name: 'World Info (after)', marker: true },
       { identifier: 'dialogueExamples', name: 'Chat Examples', marker: true },
       { identifier: 'chatHistory', name: 'Chat History', marker: true },
     ],
@@ -115,11 +219,11 @@ export const DEFAULT_PRESET: AssemblePreset = {
         order: DEFAULT_PRESET_IDENTIFIERS.map((identifier) => ({ identifier, enabled: true })),
       },
     ],
-    // 与 ST 同名的格式串；new_chat_prompt 留空表示不插入「[Start a new Chat]」分隔
     personality_format: '{{personality}}',
     scenario_format: '{{scenario}}',
     new_chat_prompt: '',
     new_example_chat_prompt: '[Example Chat]',
+    wi_format: '{0}',
     squash_system_messages: false,
     temperature: 1,
     openai_max_tokens: 4096,
@@ -127,19 +231,26 @@ export const DEFAULT_PRESET: AssemblePreset = {
   },
 };
 
-// ───────────────────────── 内部工具 ─────────────────────────
+// ───────────────────────── 常量 ─────────────────────────
 
-/** ST PromptManager：injection_position 的取值 */
 const INJECTION_POSITION_ABSOLUTE = 1;
-/** ST PromptManager：DEFAULT_DEPTH / DEFAULT_ORDER */
 const DEFAULT_INJECTION_DEPTH = 4;
 const DEFAULT_INJECTION_ORDER = 100;
-
-/** ST 全局 prompt_order 的 dummy character_id；100001 优先于 100000 */
+/** ST `getExtensionPrompt` 只在 order 恰为 100 的组里追加扩展注入 */
+const EXTENSION_PROMPT_ORDER = 100;
 const PROMPT_ORDER_DUMMY_IDS = ['100001', '100000'];
 
-/** 深度注入在同一 depth 内的角色次序（越靠后越贴近本轮，ST 认为越重要） */
-const INJECTION_ROLE_RANK: Record<Role, number> = { assistant: 0, user: 1, system: 2 };
+/** ST `populationInjectionPrompts`：同 depth 内 roles 的遍历序（反转后即最终时序） */
+const INJECTION_ROLE_ORDER: readonly Role[] = ['system', 'user', 'assistant'];
+
+/** ST `character_names_behavior` */
+const NAMES_BEHAVIOR = { NONE: -1, DEFAULT: 0, COMPLETION: 1, CONTENT: 2 } as const;
+
+/**
+ * ST `populateChatCompletion` 只显式处理这些非标记 prompt；
+ * 其余 `system_prompt !== false` 的条目被静默丢弃（M3 照抄，见 §9 AS-6）。
+ */
+const ALWAYS_INCLUDED_IDENTIFIERS = new Set(['main', 'nsfw', 'jailbreak', 'enhanceDefinitions']);
 
 const STABILITY_RANK: Record<Segment['stability'], number> = {
   static: 0,
@@ -148,10 +259,9 @@ const STABILITY_RANK: Record<Segment['stability'], number> = {
   turn: 3,
 };
 
-/** 参与 squash 时需要跳过的段（对应 ST 的 excludeList：newMainChat / newChat / groupNudge） */
+/** ST `squashSystemMessages` 的 excludeList：newMainChat / newChat / groupNudge */
 const SQUASH_EXCLUDED_REFS = new Set(['new_chat_prompt', 'new_example_chat_prompt']);
 
-/** ST 预设采样键 → SamplingParams 字段（全部为数值） */
 type NumericSamplingKey =
   | 'temperature'
   | 'topP'
@@ -175,6 +285,8 @@ const SAMPLING_MAP: readonly (readonly [NumericSamplingKey, string])[] = [
   ['seed', 'seed'],
 ];
 
+// ───────────────────────── 小工具 ─────────────────────────
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -191,6 +303,11 @@ function readRole(value: unknown): Role {
   return value === 'user' || value === 'assistant' ? value : 'system';
 }
 
+/** ST `extension_prompt_roles` → IR role */
+function promptRole(role: WIRole | undefined | null): Role {
+  return role === 1 ? 'user' : role === 2 ? 'assistant' : 'system';
+}
+
 function findLastIndex<T>(items: readonly T[], predicate: (item: T) => boolean): number {
   for (let i = items.length - 1; i >= 0; i -= 1) {
     const item = items[i];
@@ -199,17 +316,71 @@ function findLastIndex<T>(items: readonly T[], predicate: (item: T) => boolean):
   return -1;
 }
 
-/** 预设里的一条 prompt（从宽松 JSON 收窄） */
+/** FNV-1a 32 位哈希（与宏引擎的 `{{pick}}` 同算法） */
+function fnv1a(input: string): number {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < input.length; i += 1) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return hash >>> 0;
+}
+
+/** mulberry32：由 `rng.seed` 派生的确定性 PRNG（契约 §4） */
+export function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** ST `stringFormat`：`{0}` 占位替换 */
+function stringFormat(format: string, ...args: string[]): string {
+  return format.replace(/{(\d+)}/g, (match, index: string) => args[Number(index)] ?? match);
+}
+
+/** ST `formatWorldInfo`：空值不产生内容；`wi_format` 只含空白时原样返回 */
+function formatWorldInfo(value: string, format: string): string {
+  if (!value) return '';
+  if (format.trim() === '') return value;
+  return stringFormat(format, value);
+}
+
+function segmentTokens(segment: Segment): number {
+  let total = 0;
+  for (const part of segment.parts) {
+    if (part.type === 'text') total += estimateTokens(part.text);
+  }
+  return total;
+}
+
+function textOf(segment: Segment): string | undefined {
+  if (segment.parts.length !== 1) return undefined;
+  const part = segment.parts[0];
+  if (part === undefined || part.type !== 'text') return undefined;
+  return part.text;
+}
+
+// ───────────────────────── 预设读取 ─────────────────────────
+
 interface PresetPrompt {
   identifier: string;
   marker: boolean;
   role: Role;
   content: string;
+  /** ST 只把 `system_prompt === false` 的自定义 prompt 加进消息列表 */
+  systemPrompt: boolean | undefined;
   injectionPosition?: number;
   injectionDepth: number;
   injectionOrder: number;
   forbidOverrides: boolean;
-  /** 被角色卡覆盖时，原预设内容（供 {{original}} 使用） */
+  /** 预设 `extensions.newtavern.locked`：布局器不得移动 */
+  locked: boolean;
+  /** 被角色卡覆盖时，原预设内容（供 `{{original}}` 使用） */
   original?: string;
 }
 
@@ -221,21 +392,25 @@ function readPrompts(data: Record<string, unknown>): PresetPrompt[] {
     if (!isRecord(item)) continue;
     const identifier = readString(item.identifier);
     if (identifier === undefined) continue;
+    const extensions = isRecord(item.extensions) ? item.extensions : undefined;
+    const newtavern =
+      extensions && isRecord(extensions.newtavern) ? extensions.newtavern : undefined;
     prompts.push({
       identifier,
       marker: item.marker === true,
       role: readRole(item.role),
       content: readString(item.content) ?? '',
+      systemPrompt: typeof item.system_prompt === 'boolean' ? item.system_prompt : undefined,
       injectionPosition: readNumber(item.injection_position),
       injectionDepth: readNumber(item.injection_depth) ?? DEFAULT_INJECTION_DEPTH,
       injectionOrder: readNumber(item.injection_order) ?? DEFAULT_INJECTION_ORDER,
       forbidOverrides: item.forbid_overrides === true,
+      locked: newtavern?.locked === true,
     });
   }
   return prompts;
 }
 
-/** 取 prompt_order：100001（ST 全局 dummy）优先，其次 100000，其次首个 */
 function readPromptOrder(data: Record<string, unknown>): string[] | undefined {
   const raw = data.prompt_order;
   if (!Array.isArray(raw)) return undefined;
@@ -257,42 +432,120 @@ function readPromptOrder(data: Record<string, unknown>): string[] | undefined {
   return identifiers;
 }
 
-function segmentTokens(segment: Segment): number {
-  let total = 0;
-  for (const part of segment.parts) {
-    if (part.type === 'text') total += estimateTokens(part.text);
-  }
-  return total;
+// ───────────────────────── 示例对话（ST parseMesExamples / parseExampleIntoIndividual） ─────────────────────────
+
+/** ST `parseMesExamples`（`main_api==='openai'` 分支：blockHeading 固定为 `<START>\n`） */
+export function parseMesExampleBlocks(examples: string): string[] {
+  if (!examples || examples.length === 0 || examples === '<START>') return [];
+  let text = examples;
+  if (!text.startsWith('<START>')) text = `<START>\n${text.trim()}`;
+  return text
+    .split(/<START>/gi)
+    .slice(1)
+    .map((block) => `<START>\n${block.trim()}\n`);
 }
 
-function textOf(segment: Segment): string | undefined {
-  if (segment.parts.length !== 1) return undefined;
-  const part = segment.parts[0];
-  if (part === undefined || part.type !== 'text') return undefined;
-  return part.text;
+export interface ExampleMessage {
+  name: 'example_user' | 'example_assistant';
+  content: string;
+}
+
+/**
+ * ST `parseExampleIntoIndividual`（非群聊分支）：按 `用户名:` / `角色名:` 切成独立消息，
+ * 每条 role 都是 system，`name` 为 `example_user` / `example_assistant`。
+ */
+export function parseExampleIntoIndividual(
+  block: string,
+  userName: string,
+  charName: string,
+): ExampleMessage[] {
+  const replaced = block.replace(/<START>/i, '{Example Dialogue:}').replace(/\r/gm, '');
+  const lines = replaced.split('\n');
+  const result: ExampleMessage[] = [];
+  let currentLines: string[] = [];
+  let inUser = false;
+  let inBot = false;
+
+  const addMessage = (name: string, systemName: ExampleMessage['name']): void => {
+    const content = currentLines.join('\n').replace(`${name}:`, '').trim();
+    result.push({ name: systemName, content });
+    currentLines = [];
+  };
+
+  // 跳过首行（总是 `{Example Dialogue:}`）
+  for (let i = 1; i < lines.length; i += 1) {
+    const line = lines[i] ?? '';
+    if (userName !== '' && line.startsWith(`${userName}:`)) {
+      if (inBot) addMessage(charName, 'example_assistant');
+      inUser = true;
+      inBot = false;
+    } else if (charName !== '' && line.startsWith(`${charName}:`)) {
+      if (inUser) addMessage(userName, 'example_user');
+      inBot = true;
+      inUser = false;
+    }
+    currentLines.push(line);
+  }
+  if (inUser) addMessage(userName, 'example_user');
+  else if (inBot) addMessage(charName, 'example_assistant');
+
+  return result;
 }
 
 // ───────────────────────── 主流程 ─────────────────────────
 
-export function assemblePrompt(input: AssembleInput): PromptIR {
+export function assemblePrompt(input: AssembleInputV2): AssembleResult {
   const preset = input.preset ?? DEFAULT_PRESET;
   const data = preset.data;
   const options = input.options ?? {};
   const preferCharacterPrompt = options.preferCharacterPrompt ?? true;
   const warnings: string[] = [];
+  const now = input.now ?? options.now;
+  const regexScripts = input.regexScripts ?? [];
+  const wiFormat = readString(data.wi_format) ?? '{0}';
+  const namesBehavior = readNumber(data.names_behavior) ?? NAMES_BEHAVIOR.DEFAULT;
 
-  // ── 宏上下文：角色卡字段先各自宏替换一遍（对应 ST 的 baseChatReplace）
-  const seedCtx: MacroContext = {
-    char: input.character?.name ?? '',
-    user: input.persona?.name ?? '',
-    now: options.now,
-  };
+  // ── Collect：随机源与变量事务
+  const random = mulberry32(fnv1a(input.rng.seed));
+  const transaction = new VariableTransaction(input.variables);
+
+  const charName = input.character?.name ?? '';
+  const userName = input.persona?.name ?? '';
   const cardData = input.character?.data ?? {};
+
+  // ── Macros：先用「种子上下文」展开卡字段（对应 ST 的 baseChatReplace）
+  const seedCtx: MacroContext = {
+    char: charName,
+    user: userName,
+    now,
+    model: input.model,
+    variables: transaction,
+    rng: random,
+    pickSeed: input.rng.seed,
+    ...(input.idleDurationMs === undefined ? {} : { idleDurationMs: input.idleDurationMs }),
+  };
+
   const description = substituteMacrosDetailed(readString(cardData.description) ?? '', seedCtx);
   const personality = substituteMacrosDetailed(readString(cardData.personality) ?? '', seedCtx);
   const scenario = substituteMacrosDetailed(readString(cardData.scenario) ?? '', seedCtx);
   const mesExamples = substituteMacrosDetailed(readString(cardData.mes_example) ?? '', seedCtx);
   const personaDescription = substituteMacrosDetailed(input.persona?.description ?? '', seedCtx);
+  const creatorNotes = readString(cardData.creator_notes) ?? '';
+  const charDepthPromptText = input.characterDepthPrompt?.text ?? '';
+
+  const macroHistory: MacroHistoryMessage[] = input.history
+    .filter((node) => node.isHidden !== true)
+    .map((node, index) => ({
+      role: node.role,
+      ...(node.name ? { name: node.name } : {}),
+      text: node.parts
+        .filter((part): part is { type: 'text'; text: string } => part.type === 'text')
+        .map((part) => part.text)
+        .join('\n'),
+      id: index,
+    }));
+
+  const outlets: Record<string, string> = {};
 
   const ctx: MacroContext = {
     ...seedCtx,
@@ -300,8 +553,144 @@ export function assemblePrompt(input: AssembleInput): PromptIR {
     description: description.text,
     personality: personality.text,
     scenario: scenario.text,
-    mesExamples: mesExamples.text,
+    // ST `{{mesExamples}}` = `parseMesExamples(card.mes_example).join('')`（每块带 `<START>\n` 头与尾换行）
+    mesExamples: parseMesExampleBlocks(mesExamples.text).join(''),
+    charVersion: readString(cardData.character_version),
+    charPrompt: readString(cardData.system_prompt),
+    charJailbreak: readString(cardData.post_history_instructions),
+    charDepthPrompt: charDepthPromptText,
+    creatorNotes,
+    history: macroHistory,
+    outlets,
   };
+
+  const substitute = (text: string, postProcess?: (value: string) => string): string =>
+    substituteMacros(text, postProcess ? { ...ctx, postProcess } : ctx);
+
+  // ── History：root→parent 可见历史 → 提示词侧正则 → 宏
+  const visible = input.history.filter((node) => node.isHidden !== true);
+  const lastUserIndex = findLastIndex(visible, (node) => node.role === 'user');
+  const userMessageCount = visible.filter((node) => node.role === 'user').length;
+
+  interface PreparedHistoryNode {
+    node: AssembleHistoryNode;
+    index: number;
+    depth: number;
+    parts: Part[];
+    text: string;
+    volatile: boolean;
+  }
+
+  const prepared: PreparedHistoryNode[] = visible.map((node, index) => {
+    const depth = visible.length - 1 - index;
+    const placement = node.role === 'user' ? REGEX_PLACEMENT.USER_INPUT : REGEX_PLACEMENT.AI_OUTPUT;
+    const parts: Part[] = [];
+    let volatile = false;
+    const texts: string[] = [];
+    for (const part of node.parts) {
+      if (part.type !== 'text') {
+        parts.push(part);
+        continue;
+      }
+      const regexed =
+        node.role === 'system'
+          ? part.text
+          : applyRegexScripts(regexScripts, part.text, {
+              placement,
+              direction: 'prompt',
+              depth,
+              substitute,
+            });
+      const substituted = substituteMacrosDetailed(regexed, ctx);
+      volatile ||= substituted.volatile;
+      parts.push({ type: 'text', text: substituted.text });
+      texts.push(substituted.text);
+    }
+    return { node, index, depth, parts, text: texts.join('\n'), volatile };
+  });
+
+  // ── World Info
+  const scanHistory: WIScanMessage[] = prepared.map((item) => ({
+    role: item.node.role,
+    ...(item.node.name ? { name: item.node.name } : {}),
+    text: item.text,
+  }));
+
+  const wi = scanWorldInfo({
+    books: input.lorebooks,
+    settings: input.wiSettings,
+    history: scanHistory,
+    globalScan: {
+      personaDescription: personaDescription.text,
+      characterDescription: description.text,
+      characterPersonality: personality.text,
+      characterDepthPrompt: charDepthPromptText,
+      scenario: scenario.text,
+      creatorNotes,
+    },
+    state: input.wiState ?? null,
+    messageCount: input.messageCount,
+    substitute: (text: string) => substitute(text),
+    random,
+    countTokens: estimateTokens,
+    ...(input.dryRun === undefined ? {} : { dryRun: input.dryRun }),
+    ...(charName === '' ? {} : { characterName: charName }),
+  });
+  warnings.push(...wi.warnings);
+
+  // ── Regex：WI 内容过 placement 5 的提示词侧正则，空内容剔除（ST 在建提示词时做）
+  const wiContent = (activation: WIActivation): string => {
+    const atDepth = activation.entry.position === 4;
+    return applyRegexScripts(regexScripts, activation.content, {
+      placement: REGEX_PLACEMENT.WORLD_INFO,
+      direction: 'prompt',
+      ...(atDepth ? { depth: activation.entry.depth ?? DEFAULT_INJECTION_DEPTH } : {}),
+      substitute,
+    });
+  };
+  const bucketTexts = (list: readonly WIActivation[]): string[] =>
+    list.map(wiContent).filter((text) => text !== '');
+
+  const wiBeforeTexts = bucketTexts(wi.buckets.before);
+  const wiAfterTexts = bucketTexts(wi.buckets.after);
+  const wiAnTopTexts = bucketTexts(wi.buckets.anTop);
+  const wiAnBottomTexts = bucketTexts(wi.buckets.anBottom);
+
+  for (const [name, list] of Object.entries(wi.buckets.outlets)) {
+    outlets[name] = bucketTexts(list).join('\n');
+  }
+
+  /** WI 段的稳定层：触发式 = turn、聊天书 constant = session、其余 constant = static */
+  const wiStability = (list: readonly WIActivation[]): Segment['stability'] => {
+    let session = false;
+    for (const activation of list) {
+      if (activation.reason !== 'constant' && activation.reason !== 'sticky') return 'turn';
+      if (activation.reason === 'sticky') session = true;
+      if (activation.entry.source?.scope === 'chat') session = true;
+    }
+    return session ? 'session' : 'static';
+  };
+
+  // ── 作者注释（ST setFloatingPrompt 的 interval 判定；计数用**用户消息**条数）
+  const an = input.authorsNote ?? null;
+  const anInterval = an?.interval ?? 1;
+  const anDepth = an?.depth ?? DEFAULT_INJECTION_DEPTH;
+  const anRole = an?.role ?? 0;
+  const anPosition = an?.position ?? 1;
+  const anCount = anInterval === 1 ? 1 : userMessageCount;
+  let anShouldAdd = anCount > 0 && anInterval > 0;
+  if (anShouldAdd) {
+    const till = anCount >= anInterval ? anCount % anInterval : anInterval - anCount;
+    anShouldAdd = till === 0;
+  }
+  const anBaseText = anShouldAdd ? substitute(an?.text ?? '') : '';
+  // ST world-info.js：`${ANTop}\n${AN}\n${ANBottom}` 后去掉首尾各一个换行
+  const anText = anShouldAdd
+    ? `${wiAnTopTexts.join('\n')}\n${anBaseText}\n${wiAnBottomTexts.join('\n')}`.replace(
+        /(^\n)|(\n$)/g,
+        '',
+      )
+    : '';
 
   // ── 预设 prompts 与顺序
   const prompts = readPrompts(data);
@@ -318,7 +707,7 @@ export function assemblePrompt(input: AssembleInput): PromptIR {
     resolved.push(applyCardOverride(prompt, cardData, preferCharacterPrompt));
   }
 
-  // ── 段构造
+  // ── Placement
   const segments: Segment[] = [];
   const idCounts = new Map<string, number>();
   let slotOrder = 0;
@@ -335,91 +724,167 @@ export function assemblePrompt(input: AssembleInput): PromptIR {
     slotOrder += 1;
   };
 
-  /** 一段纯文本的系统槽段；内容（trim 后）为空则不产生段 */
+  interface TextSegmentOptions {
+    role?: Role;
+    name?: string;
+    locked?: boolean;
+  }
+
   const addTextSegment = (
     idBase: string,
-    role: Role,
     value: { text: string; volatile: boolean },
     origin: Segment['origin'],
     stability: Segment['stability'],
+    extra: TextSegmentOptions = {},
   ): void => {
-    if (value.text.trim() === '') return;
+    if (value.text === '') return;
     addSystemSegment({
       id: nextId(idBase),
-      role,
+      role: extra.role ?? 'system',
       parts: [{ type: 'text', text: value.text }],
+      ...(extra.name === undefined ? {} : { name: extra.name }),
       origin,
       stability,
       ...(value.volatile ? { volatile: true } : {}),
+      ...(extra.locked ? { locked: true } : {}),
     });
   };
 
-  // 深度注入先整体收集（ST 在 populateChatHistory 之前算好 absolutePrompts）
+  const plain = (text: string): { text: string; volatile: boolean } => ({ text, volatile: false });
+
+  // 深度注入（ST 在 populateChatHistory 之前算好 absolutePrompts）
   const injections = resolved.filter(
     (prompt) => prompt.injectionPosition === INJECTION_POSITION_ABSOLUTE,
   );
+
+  const globalSystemPrompt = input.globalSystemPrompt ?? null;
+  const gspText = globalSystemPrompt
+    ? substituteMacrosDetailed(globalSystemPrompt.text, ctx)
+    : null;
+  let gspEmitted = false;
+  const hasMain = resolved.some(
+    (prompt) =>
+      prompt.identifier === 'main' &&
+      !prompt.marker &&
+      prompt.injectionPosition !== INJECTION_POSITION_ABSOLUTE,
+  );
+
+  const addGlobalSystemPrompt = (position: 'before_main' | 'after_main'): void => {
+    if (gspText === null || globalSystemPrompt === null) return;
+    if (globalSystemPrompt.position !== position) return;
+    addTextSegment('global_system', gspText, { kind: 'global_system' }, 'static');
+    gspEmitted = true;
+  };
+
+  const addAuthorsNoteRelative = (which: 'start' | 'end'): void => {
+    if (anText === '') return;
+    // ST getPromptPosition：BEFORE_PROMPT(2) → 'start'、IN_PROMPT(0) → 'end'、IN_CHAT(1) → 不相对插入
+    const target = anPosition === 2 ? 'start' : anPosition === 0 ? 'end' : null;
+    if (target !== which) return;
+    addTextSegment('authors_note', plain(anText), { kind: 'authors_note' }, 'session', {
+      role: promptRole(anRole),
+    });
+  };
+
+  if (!hasMain) {
+    // ST：没有 main 时，相对插入的扩展提示词会被丢弃；GSP 是我们自己的概念，放 system 槽最前
+    if (gspText !== null) {
+      addTextSegment('global_system', gspText, { kind: 'global_system' }, 'static');
+      gspEmitted = true;
+    }
+    if (anText !== '' && (anPosition === 0 || anPosition === 2)) {
+      warnings.push('预设里没有 main 提示词，相对定位的作者注释被丢弃（与 ST 一致）');
+    }
+  }
 
   for (const prompt of resolved) {
     if (prompt.injectionPosition === INJECTION_POSITION_ABSOLUTE) continue;
 
     if (prompt.marker) {
       switch (prompt.identifier) {
+        case 'worldInfoBefore':
+          addTextSegment(
+            'worldinfo:before',
+            plain(formatWorldInfo(wiBeforeTexts.join('\n'), wiFormat)),
+            { kind: 'worldinfo', ref: 'before' },
+            wiStability(wi.buckets.before),
+            { locked: prompt.locked },
+          );
+          break;
+        case 'worldInfoAfter':
+          addTextSegment(
+            'worldinfo:after',
+            plain(formatWorldInfo(wiAfterTexts.join('\n'), wiFormat)),
+            { kind: 'worldinfo', ref: 'after' },
+            wiStability(wi.buckets.after),
+            { locked: prompt.locked },
+          );
+          break;
         case 'charDescription':
           addTextSegment(
             'character:description',
-            'system',
             description,
             { kind: 'character', ref: 'description' },
             'static',
+            { locked: prompt.locked },
           );
           break;
         case 'charPersonality':
           addTextSegment(
             'character:personality',
-            'system',
             formatField(personality, readString(data.personality_format) ?? '{{personality}}', ctx),
             { kind: 'character', ref: 'personality' },
             'static',
+            { locked: prompt.locked },
           );
           break;
         case 'scenario':
           addTextSegment(
             'character:scenario',
-            'system',
             formatField(scenario, readString(data.scenario_format) ?? '{{scenario}}', ctx),
             { kind: 'character', ref: 'scenario' },
             'static',
+            { locked: prompt.locked },
           );
           break;
         case 'personaDescription':
-          addTextSegment('persona', 'system', personaDescription, { kind: 'persona' }, 'static');
+          addTextSegment('persona', personaDescription, { kind: 'persona' }, 'static', {
+            locked: prompt.locked,
+          });
           break;
-        case 'dialogueExamples':
-          for (const block of splitDialogueExamples(mesExamples.text)) {
+        case 'dialogueExamples': {
+          const separator = substituteMacrosDetailed(
+            readString(data.new_example_chat_prompt) ?? '[Example Chat]',
+            ctx,
+          );
+          for (const block of buildExampleBlocks(
+            mesExamples.text,
+            wi.buckets.emBefore.map(wiContent).filter((text) => text !== ''),
+            wi.buckets.emAfter.map(wiContent).filter((text) => text !== ''),
+          )) {
+            const messages = parseExampleIntoIndividual(block, userName, charName);
+            if (messages.length === 0) continue;
             addTextSegment(
               'preset:newExampleChat',
-              'system',
-              substituteMacrosDetailed(
-                readString(data.new_example_chat_prompt) ?? '[Example Chat]',
-                ctx,
-              ),
+              separator,
               { kind: 'preset', ref: 'new_example_chat_prompt' },
               'static',
             );
-            addTextSegment(
-              'character:mes_example',
-              'system',
-              { text: block, volatile: mesExamples.volatile },
-              { kind: 'character', ref: 'mes_example' },
-              'static',
-            );
+            for (const message of messages) {
+              addTextSegment(
+                'character:mes_example',
+                plain(message.content),
+                { kind: 'character', ref: 'mes_example' },
+                'static',
+                { name: message.name },
+              );
+            }
           }
           break;
+        }
         case 'chatHistory':
-          // [Start a new Chat]：ST 把它放在历史最前（identifier newMainChat）
           addTextSegment(
             'preset:newMainChat',
-            'system',
             substituteMacrosDetailed(readString(data.new_chat_prompt) ?? '[Start a new Chat]', ctx),
             { kind: 'preset', ref: 'new_chat_prompt' },
             'static',
@@ -428,7 +893,18 @@ export function assemblePrompt(input: AssembleInput): PromptIR {
             ...buildHistory({
               input,
               ctx,
+              prepared,
+              lastUserIndex,
+              namesBehavior,
               injections,
+              substitute,
+              anText,
+              anPosition,
+              anDepth,
+              anRole,
+              characterDepthPrompt: input.characterDepthPrompt ?? null,
+              wiDepth: wi.buckets.depth,
+              wiContent,
               nextId,
               onReasoningDropped: () => {
                 droppedReasoning = true;
@@ -437,23 +913,74 @@ export function assemblePrompt(input: AssembleInput): PromptIR {
           );
           break;
         default:
-          // worldInfoBefore / worldInfoAfter 等：M3 之前不产生段
           break;
       }
       continue;
     }
 
+    // 非标记 prompt：ST 只加入 main / nsfw / jailbreak / enhanceDefinitions 与 system_prompt === false 的条目
+    if (!ALWAYS_INCLUDED_IDENTIFIERS.has(prompt.identifier) && prompt.systemPrompt !== false) {
+      warnings.push(
+        `预设提示词「${prompt.identifier}」带 system_prompt:true 且不在 ST 的白名单里，已按 ST 丢弃`,
+      );
+      continue;
+    }
+
+    if (prompt.identifier === 'main') {
+      addGlobalSystemPrompt('before_main');
+      addAuthorsNoteRelative('start');
+      addTextSegment(
+        'preset:main',
+        substituteMacrosDetailed(prompt.content, promptCtx(ctx, prompt)),
+        { kind: 'preset', ref: 'main' },
+        'static',
+        { role: prompt.role, locked: prompt.locked },
+      );
+      addAuthorsNoteRelative('end');
+      addGlobalSystemPrompt('after_main');
+      continue;
+    }
+
     addTextSegment(
       `preset:${prompt.identifier}`,
-      prompt.role,
       substituteMacrosDetailed(prompt.content, promptCtx(ctx, prompt)),
       { kind: 'preset', ref: prompt.identifier },
       'static',
+      { role: prompt.role, locked: prompt.locked },
     );
+  }
+
+  if (globalSystemPrompt !== null && gspText !== null && gspText.text !== '' && !gspEmitted) {
+    warnings.push('全局系统提示词没有找到 main 段作为锚点，已放在 system 槽最前');
+    segments.unshift({
+      id: 'global_system',
+      role: 'system',
+      parts: [{ type: 'text', text: gspText.text }],
+      origin: { kind: 'global_system' },
+      anchor: { slot: 'system', order: -1 },
+      stability: 'static',
+    });
   }
 
   if (droppedReasoning) {
     warnings.push('部分推理块因 provider/模型切换被丢弃');
+  }
+
+  // ── `{{outlet::name}}` 二次替换（WI 扫描必须先于 outlet 展开）
+  if (Object.keys(outlets).length > 0) {
+    for (let i = 0; i < segments.length; i += 1) {
+      const segment = segments[i];
+      if (segment === undefined) continue;
+      if (!segment.parts.some((part) => part.type === 'text' && part.text.includes('{{outlet'))) {
+        continue;
+      }
+      segments[i] = {
+        ...segment,
+        parts: segment.parts.map((part) =>
+          part.type === 'text' ? { type: 'text', text: substitute(part.text) } : part,
+        ),
+      };
+    }
   }
 
   // ── 采样参数
@@ -466,7 +993,7 @@ export function assemblePrompt(input: AssembleInput): PromptIR {
     if (value !== undefined) sampling[target] = value;
   }
 
-  // ── 历史裁剪（契约 §2.1-8）
+  // ── 历史裁剪
   const maxContextTokens =
     options.maxContextTokens ?? readSampling('openai_max_context') ?? 128_000;
   const budget = Math.max(0, maxContextTokens - (sampling.maxTokens ?? 0));
@@ -485,38 +1012,60 @@ export function assemblePrompt(input: AssembleInput): PromptIR {
   }
 
   // ── squash_system_messages
-  const finalSegments = data.squash_system_messages === true ? squashSystem(segments) : segments;
+  const placed = data.squash_system_messages === true ? squashSystem(segments) : segments;
 
-  // ── cachePlan（契约 §2.1-10）
-  const breakpoints: number[] = [];
-  const lastStatic = findLastIndex(finalSegments, (segment) => segment.stability === 'static');
-  if (lastStatic >= 0) breakpoints.push(lastStatic);
-  const historyIndexes = finalSegments.reduce<number[]>((acc, segment, index) => {
-    if (segment.origin.kind === 'history' || segment.origin.kind === 'user_input') acc.push(index);
-    return acc;
-  }, []);
-  const secondLastHistory = historyIndexes[historyIndexes.length - 2];
-  if (secondLastHistory !== undefined) breakpoints.push(secondLastHistory);
+  // ── Layout
+  const layoutMode = input.layoutMode ?? 'strict';
+  const policy = resolveLayoutPolicy(input.layoutPolicy);
+  const layoutCtx = {
+    providerCaps: input.providerCaps,
+    policy,
+    countTokens: estimateTokens,
+  };
+  const strict = layoutStrict(placed, layoutCtx);
+  const chosen = layoutMode === 'cache-aware' ? layoutCacheAware(placed, layoutCtx) : strict;
 
-  return {
+  const activations: WIActivationSummary[] = wi.activations.map((activation) => ({
+    entryId: activation.entry.id,
+    bookId: activation.entry.bookId,
+    position: activation.entry.position,
+    ...(activation.entry.depth === undefined ? {} : { depth: activation.entry.depth }),
+    role: promptRole(activation.entry.role),
+    order: activation.entry.order,
+  }));
+
+  const makeIr = (result: typeof strict, mode: 'strict' | 'cache-aware'): PromptIR => ({
     model: input.model,
     sampling,
-    segments: finalSegments,
-    cachePlan: { breakpoints: [...new Set(breakpoints)].sort((a, b) => a - b) },
+    segments: result.segments,
+    cachePlan: result.cachePlan,
     meta: {
       chatId: input.chatId,
       presetId: input.preset?.id ?? DEFAULT_PRESET.id,
-      layoutMode: input.layoutMode ?? 'strict',
-      activations: [],
-      warnings,
-      tokenEstimate: finalSegments.reduce((sum, segment) => sum + segmentTokens(segment), 0),
+      layoutMode: mode,
+      activations,
+      warnings: [...warnings, ...result.report.warnings],
+      tokenEstimate: result.segments.reduce((sum, segment) => sum + segmentTokens(segment), 0),
     },
+  });
+
+  const ir = makeIr(chosen, layoutMode);
+  const commit = transaction.commit();
+
+  return {
+    ir,
+    wiState: wi.newState,
+    variables: input.dryRun
+      ? { chat: { ...input.variables.chat }, globalChanges: {}, events: transaction.events }
+      : { chat: commit.chat, globalChanges: commit.globalChanges, events: transaction.events },
+    wi,
+    layout: chosen.report,
+    ...(layoutMode === 'cache-aware' ? { strictIr: makeIr(strict, 'strict') } : {}),
   };
 }
 
 // ───────────────────────── 子过程 ─────────────────────────
 
-/** 角色卡 system_prompt / post_history_instructions 覆盖 main / jailbreak（契约 §2.1-5） */
 function applyCardOverride(
   prompt: PresetPrompt,
   cardData: Record<string, unknown>,
@@ -535,15 +1084,10 @@ function applyCardOverride(
   return { ...prompt, content: override, original: prompt.content };
 }
 
-/** 被覆盖的 prompt 额外提供 {{original}} */
 function promptCtx(ctx: MacroContext, prompt: PresetPrompt): MacroContext {
   return prompt.original === undefined ? ctx : { ...ctx, original: prompt.original };
 }
 
-/**
- * ST：`charPersonality`/`scenario` 走 `personality_format`/`scenario_format`；
- * 字段本身为空则整段为空，格式串为空则退回字段原文。
- */
 function formatField(
   field: { text: string; volatile: boolean },
   format: string | undefined,
@@ -556,91 +1100,244 @@ function formatField(
 }
 
 /**
- * 按 `<START>` 切块（ST `parseExampleIntoIndividual` 的上游切分）。
- * 不含 `<START>` 时整体视为一块；空块丢弃。
+ * 示例块列表：卡的 `mes_example` 切块，再按 ST 的 `EMEntries` 顺序把 WI 示例块插到前后。
+ *
+ * ST 在 `EMEntries`（order 升序）上依次 `unshift` / `push`，因此**前置**块的最终顺序是
+ * order 降序、**后置**块是 order 升序（见 `docs/M3-CONTRACT.md` §9 AS-4）。
  */
-function splitDialogueExamples(mesExamples: string): string[] {
-  let text = mesExamples.trim();
-  if (text === '') return [];
-  if (!/^<START>/i.test(text)) text = `<START>\n${text}`;
-  return text
-    .split(/<START>/gi)
-    .slice(1)
-    .map((block) => block.trim())
-    .filter((block) => block !== '');
+function buildExampleBlocks(
+  mesExamples: string,
+  emBefore: readonly string[],
+  emAfter: readonly string[],
+): string[] {
+  const own = parseMesExampleBlocks(mesExamples);
+  const before = [...emBefore].reverse().flatMap((text) => parseMesExampleBlocks(text));
+  const after = emAfter.flatMap((text) => parseMesExampleBlocks(text));
+  return [...before, ...own, ...after];
+}
+
+interface PreparedNode {
+  node: AssembleHistoryNode;
+  index: number;
+  depth: number;
+  parts: Part[];
+  text: string;
+  volatile: boolean;
 }
 
 interface BuildHistoryArgs {
-  input: AssembleInput;
+  input: AssembleInputV2;
   ctx: MacroContext;
+  prepared: PreparedNode[];
+  lastUserIndex: number;
+  namesBehavior: number;
   injections: PresetPrompt[];
+  substitute: (text: string) => string;
+  anText: string;
+  anPosition: 0 | 1 | 2;
+  anDepth: number;
+  anRole: WIRole;
+  characterDepthPrompt: AssembleDepthPrompt | null;
+  wiDepth: WIScanResult['buckets']['depth'];
+  wiContent: (activation: WIActivation) => string;
   nextId: (base: string) => string;
   onReasoningDropped: () => void;
 }
 
-/** 历史段 + 深度注入（契约 §2.1-3 的 chatHistory 分支） */
-function buildHistory(args: BuildHistoryArgs): Segment[] {
-  const { input, ctx, injections, nextId, onReasoningDropped } = args;
-  const visible = input.history.filter((node) => node.isHidden !== true);
-  const lastUserIndex = findLastIndex(visible, (node) => node.role === 'user');
+/** 一条深度注入的来源（合并同 (depth, order, role) 时用来决定 id / origin / stability） */
+interface InjectionSource {
+  id: string;
+  origin: Segment['origin'];
+  stability: Segment['stability'];
+  text: string;
+  volatile: boolean;
+}
 
-  const historySegments = visible.map((node, index) =>
-    buildHistorySegment(node, index, index === lastUserIndex, input, ctx, onReasoningDropped),
+/** 历史段 + 深度注入（ST `populateChatHistory` + `populationInjectionPrompts`） */
+function buildHistory(args: BuildHistoryArgs): Segment[] {
+  const {
+    input,
+    ctx,
+    prepared,
+    lastUserIndex,
+    namesBehavior,
+    injections,
+    substitute,
+    anText,
+    anPosition,
+    anDepth,
+    anRole,
+    characterDepthPrompt,
+    wiDepth,
+    wiContent,
+    nextId,
+    onReasoningDropped,
+  } = args;
+
+  const historySegments = prepared.map((item) =>
+    buildHistorySegment(
+      item,
+      item.index === lastUserIndex,
+      namesBehavior,
+      input,
+      onReasoningDropped,
+    ),
   );
 
-  // 深度注入：depth 0 = 最后一条之后；depth n = 倒数第 n 条之前；超出历史长度则放最前
-  const slots: Segment[][] = Array.from({ length: visible.length + 1 }, () => []);
-  const ordered = injections
-    .map((prompt, index) => ({ prompt, index }))
-    .filter(({ prompt }) => prompt.content.trim() !== '')
-    .sort(
-      (a, b) =>
-        a.prompt.injectionOrder - b.prompt.injectionOrder ||
-        INJECTION_ROLE_RANK[a.prompt.role] - INJECTION_ROLE_RANK[b.prompt.role] ||
-        a.index - b.index,
-    );
+  /**
+   * ST `getExtensionPrompt(IN_CHAT, depth, '\n', role)`：按 key 字典序合并。
+   * 相关 key 的字典序：`2_floating_prompt` < `DEPTH_PROMPT` < `customDepthWI_*`。
+   */
+  const extensionAt = (depth: number, role: WIRole): InjectionSource[] => {
+    const sources: InjectionSource[] = [];
+    if (anText !== '' && anPosition === 1 && anDepth === depth && anRole === role) {
+      sources.push({
+        id: 'authors_note',
+        origin: { kind: 'authors_note' },
+        stability: 'session',
+        text: anText,
+        volatile: false,
+      });
+    }
+    const charDepth = characterDepthPrompt;
+    if (
+      charDepth &&
+      charDepth.text !== '' &&
+      charDepth.depth === depth &&
+      charDepth.role === role
+    ) {
+      sources.push({
+        id: 'injection:char_depth_prompt',
+        origin: { kind: 'character', ref: 'depth_prompt' },
+        stability: 'static',
+        text: substitute(charDepth.text),
+        volatile: false,
+      });
+    }
+    for (const bucket of wiDepth) {
+      if (bucket.depth !== depth || bucket.role !== role) continue;
+      const text = bucket.entries
+        .map(wiContent)
+        .filter((item) => item !== '')
+        .join('\n');
+      if (text === '') continue;
+      sources.push({
+        id: `worldinfo:depth:${depth}:${role}`,
+        origin: { kind: 'worldinfo', ref: `depth:${depth}` },
+        stability: 'turn',
+        text,
+        volatile: false,
+      });
+    }
+    return sources;
+  };
 
-  for (const { prompt } of ordered) {
-    const substituted = substituteMacrosDetailed(prompt.content, ctx);
-    const text = substituted.text.trim();
-    if (text === '') continue;
+  // 预设的绝对注入：按 depth → order（降序遍历，反转后即升序）→ role 分组
+  const presetByDepth = new Map<number, PresetPrompt[]>();
+  const depths = new Set<number>();
+  for (const prompt of injections) {
     const depth = Math.max(0, prompt.injectionDepth);
-    const position = Math.min(Math.max(visible.length - depth, 0), visible.length);
-    const slot = slots[position];
-    if (slot === undefined) continue;
-    slot.push({
-      id: nextId(`injection:${prompt.identifier}`),
-      role: prompt.role,
-      parts: [{ type: 'text', text }],
-      origin: { kind: 'injection', ref: prompt.identifier },
-      anchor: { slot: 'history', depth, order: prompt.injectionOrder },
-      stability: 'turn',
-      ...(substituted.volatile ? { volatile: true } : {}),
-    });
+    const list = presetByDepth.get(depth) ?? [];
+    list.push(prompt);
+    presetByDepth.set(depth, list);
+    depths.add(depth);
+  }
+  if (anText !== '' && anPosition === 1) depths.add(anDepth);
+  if (characterDepthPrompt && characterDepthPrompt.text !== '') {
+    depths.add(characterDepthPrompt.depth);
+  }
+  for (const bucket of wiDepth) depths.add(bucket.depth);
+
+  const slots = new Map<number, Segment[]>();
+
+  for (const depth of [...depths].sort((a, b) => a - b)) {
+    const depthPrompts = (presetByDepth.get(depth) ?? []).filter(
+      (prompt) => prompt.content.trim() !== '',
+    );
+    const orders = new Set<number>([EXTENSION_PROMPT_ORDER]);
+    for (const prompt of depthPrompts) orders.add(prompt.injectionOrder);
+
+    const roleMessages: Segment[] = [];
+    // ST 按 order 降序遍历，最后整体反转 → 时序为 order 升序
+    for (const order of [...orders].sort((a, b) => b - a)) {
+      for (const role of INJECTION_ROLE_ORDER) {
+        const sources: InjectionSource[] = depthPrompts
+          .filter((prompt) => prompt.injectionOrder === order && prompt.role === role)
+          .map((prompt) => {
+            const substituted = substituteMacrosDetailed(prompt.content, promptCtx(ctx, prompt));
+            return {
+              id: `injection:${prompt.identifier}`,
+              origin: { kind: 'injection', ref: prompt.identifier } as Segment['origin'],
+              stability: 'turn' as Segment['stability'],
+              text: substituted.text,
+              volatile: substituted.volatile,
+            };
+          })
+          .filter((source) => source.text !== '');
+
+        if (order === EXTENSION_PROMPT_ORDER) {
+          sources.push(...extensionAt(depth, roleToWiRole(role)));
+        }
+
+        const parts = sources.map((source) => source.text.trim()).filter((text) => text !== '');
+        if (parts.length === 0) continue;
+        const first = sources.find((source) => source.text.trim() !== '');
+        if (first === undefined) continue;
+        const locked = depthPrompts.some(
+          (prompt) => prompt.injectionOrder === order && prompt.role === role && prompt.locked,
+        );
+        roleMessages.push({
+          id: nextId(first.id),
+          role,
+          parts: [{ type: 'text', text: parts.join('\n') }],
+          origin: first.origin,
+          anchor: { slot: 'history', depth, order },
+          stability: sources.reduce<Segment['stability']>(
+            (acc, source) =>
+              STABILITY_RANK[source.stability] > STABILITY_RANK[acc] ? source.stability : acc,
+            'static',
+          ),
+          ...(sources.some((source) => source.volatile) ? { volatile: true } : {}),
+          ...(locked ? { locked: true } : {}),
+        });
+      }
+    }
+
+    if (roleMessages.length > 0) {
+      slots.set(depth, roleMessages.reverse());
+    }
   }
 
+  const length = historySegments.length;
   const result: Segment[] = [];
-  for (let i = 0; i < historySegments.length; i += 1) {
+  // depth 降序：depth ≥ 历史长度的注入全都堆在最前，且 ST 里更深的排在更前面
+  const slotEntries = [...slots.entries()].sort((a, b) => b[0] - a[0]);
+  for (let i = 0; i <= length; i += 1) {
+    for (const [depth, list] of slotEntries) {
+      const position = Math.min(Math.max(length - depth, 0), length);
+      if (position === i) result.push(...list);
+    }
     const segment = historySegments[i];
-    result.push(...(slots[i] ?? []));
     if (segment !== undefined) result.push(segment);
   }
-  result.push(...(slots[visible.length] ?? []));
   return result;
 }
 
+function roleToWiRole(role: Role): WIRole {
+  return role === 'user' ? 1 : role === 'assistant' ? 2 : 0;
+}
+
 function buildHistorySegment(
-  node: AssembleHistoryNode,
-  index: number,
+  item: PreparedNode,
   isLastUser: boolean,
-  input: AssembleInput,
-  ctx: MacroContext,
+  namesBehavior: number,
+  input: AssembleInputV2,
   onReasoningDropped: () => void,
 ): Segment {
+  const { node } = item;
   const parts: Part[] = [];
-  let volatile = false;
 
-  // 推理块回传（契约 §2.1-12）：provider+model 匹配才放回，且放在 parts 开头
+  // 推理块回传：provider+model 匹配才放回，且放在 parts 开头
   for (const block of node.reasoning?.opaque ?? []) {
     if (block.provider === input.provider && block.model === input.model) {
       parts.push({
@@ -654,34 +1351,34 @@ function buildHistorySegment(
     }
   }
 
-  for (const part of node.parts) {
-    if (part.type !== 'text') {
-      // image / document / 已有的 reasoning_opaque 原样保留
-      parts.push(part);
+  // ST `setOpenAIMessages` 的 names_behavior：CONTENT 把名字写进正文，COMPLETION 才用 name 字段
+  const name = node.name ?? '';
+  let first = true;
+  for (const part of item.parts) {
+    if (part.type === 'text' && first && namesBehavior === NAMES_BEHAVIOR.CONTENT && name !== '') {
+      parts.push({ type: 'text', text: `${name}: ${part.text}` });
+      first = false;
       continue;
     }
-    // ST 对历史消息同样执行 substituteParams（populateChatHistory → preparePrompt）
-    const substituted = substituteMacrosDetailed(part.text, ctx);
-    volatile ||= substituted.volatile;
-    parts.push({ type: 'text', text: substituted.text });
+    if (part.type === 'text') first = false;
+    parts.push(part);
   }
 
   return {
     id: `history:${node.id}`,
     role: node.role,
     parts,
-    ...(node.name ? { name: node.name } : {}),
+    ...(namesBehavior === NAMES_BEHAVIOR.COMPLETION && name !== '' ? { name } : {}),
     origin: { kind: isLastUser ? 'user_input' : 'history', ref: node.id },
-    anchor: { slot: 'history', order: index },
+    anchor: { slot: 'history', order: item.index },
     stability: isLastUser ? 'turn' : 'history',
-    ...(volatile ? { volatile: true } : {}),
+    ...(item.volatile ? { volatile: true } : {}),
   };
 }
 
 /**
  * ST `ChatCompletion.squashSystemMessages`：把相邻的、无 name 的 system 消息用 `\n` 合并；
- * `newMainChat` / `newChat` 等分隔消息不参与。注意 ST 是在**整条消息列表**上做的，
- * 历史里的 system 消息与深度注入同样会被卷入。
+ * `newMainChat` / `newChat` / `groupNudge` 不参与。作用于**整条消息列表**。
  */
 function squashSystem(segments: readonly Segment[]): Segment[] {
   const squashable = (segment: Segment): boolean =>
@@ -702,6 +1399,7 @@ function squashSystem(segments: readonly Segment[]): Segment[] {
             ? segment.stability
             : previous.stability,
         ...(previous.volatile || segment.volatile ? { volatile: true } : {}),
+        ...(previous.locked || segment.locked ? { locked: true } : {}),
       };
       continue;
     }

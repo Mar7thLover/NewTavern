@@ -1,0 +1,69 @@
+{
+  "id": "preset-squash-system",
+  "description": "squash_system_messages=true：相邻 system 消息合并为一条",
+  "stVersion": "1.18.0",
+  "capturedAt": "2026-09-14T02:10:18.045Z",
+  "inputs": {
+    "card": "quill",
+    "preset": "squash-system",
+    "worldbooks": [],
+    "characterBook": null,
+    "chatLorebook": null,
+    "globalRegex": [],
+    "chat": "quill-basic",
+    "persona": "wren",
+    "settings": {},
+    "authorsNote": null,
+    "priorUserMessages": [],
+    "userMessage": "Which crate?"
+  },
+  "expect": [
+    "开头多条 system 被合并为单条，内容以 \\n 连接"
+  ],
+  "request": {
+    "messages": [
+      {
+        "role": "system",
+        "content": "Write Quill's next reply in a fictional chat between Quill and Wren. Keep it grounded and concrete.\nWren keeps a ledger of every debt owed to her, and none of the ones she owes.\nQuill is a travelling mapmaker with ink-stained fingers and no fixed address.\nCurious, dry-humoured, stubborn about scale bars.\nA rainy evening in the harbour town of Marrow.\n[辅助段：语气克制，不要总结。Restrained tone, no summaries.]"
+      },
+      {
+        "role": "system",
+        "content": "[Example Chat]"
+      },
+      {
+        "role": "system",
+        "content": "Where are we?",
+        "name": "example_user"
+      },
+      {
+        "role": "system",
+        "content": "\"Nowhere yet. Give me an hour and a dry table.\"",
+        "name": "example_assistant"
+      },
+      {
+        "role": "system",
+        "content": "[Start a new Chat]"
+      },
+      {
+        "role": "assistant",
+        "content": "*Quill looks up from a half-drawn coastline.* \"You are late.\""
+      },
+      {
+        "role": "user",
+        "content": "The ferry sank. Again."
+      },
+      {
+        "role": "user",
+        "content": "Which crate?"
+      }
+    ],
+    "model": "newtavern-golden-mock",
+    "temperature": 0.8,
+    "max_tokens": 400,
+    "stream": false,
+    "presence_penalty": 0.2,
+    "frequency_penalty": 0.1,
+    "top_p": 0.95
+  },
+  "notes": []
+}

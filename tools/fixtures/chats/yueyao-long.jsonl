@@ -1,0 +1,9 @@
+{"user_name":"Wren","character_name":"林月谣","create_date":"2026-01-01@00h00m00s","chat_metadata":{}}
+{"name":"林月谣","is_user":false,"is_system":false,"send_date":"2026-01-01@00h01m00s","mes":"*她把一只粗陶杯推过桌面。*「坐。雨停之前，别问路。」","extra":{}}
+{"name":"Wren","is_user":true,"is_system":false,"send_date":"2026-01-01@00h02m00s","mes":"掌柜，今夜可有空房？","extra":{}}
+{"name":"林月谣","is_user":false,"is_system":false,"send_date":"2026-01-01@00h03m00s","mes":"*她翻过账本一页。*「有。价钱翻倍。」","extra":{}}
+{"name":"Wren","is_user":true,"is_system":false,"send_date":"2026-01-01@00h04m00s","mes":"账本上那笔旧债是谁的？","extra":{}}
+{"name":"林月谣","is_user":false,"is_system":false,"send_date":"2026-01-01@00h05m00s","mes":"「不是你的，就别问。」*灯芯拨短了一寸。*","extra":{}}
+{"name":"Wren","is_user":true,"is_system":false,"send_date":"2026-01-01@00h06m00s","mes":"外面的雨要下到什么时候？","extra":{}}
+{"name":"林月谣","is_user":false,"is_system":false,"send_date":"2026-01-01@00h07m00s","mes":"「下到有人来还钱为止。」","extra":{}}
+{"name":"Wren","is_user":true,"is_system":false,"send_date":"2026-01-01@00h08m00s","mes":"那我等。","extra":{}}
