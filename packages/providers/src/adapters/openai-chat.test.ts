@@ -216,6 +216,41 @@ describe('openai-chat buildRequest', () => {
     expect(body.messages[0]?.role).toBe('system');
   });
 
+  it('Segment.name 写进消息的 name 字段，且带 name 的段不与他人合并（契约 §9 AS-8）', () => {
+    const ir = makeIr([
+      { ...text('e1', 'system', 'hi', 'system'), name: 'example_user' },
+      { ...text('e2', 'system', 'yo', 'system'), name: 'example_assistant' },
+      text('s1', 'system', 'SYS', 'system'),
+      text('h1', 'user', 'hello'),
+    ]);
+    const body = openaiChatAdapter.buildRequest(
+      ir,
+      { ...conn, baseUrl: 'https://api.deepseek.com' },
+      'deepseek-chat',
+    ).body as { messages: { role: string; content: unknown; name?: string }[] };
+    expect(body.messages).toEqual([
+      { role: 'system', content: 'hi', name: 'example_user' },
+      { role: 'system', content: 'yo', name: 'example_assistant' },
+      { role: 'system', content: 'SYS' },
+      { role: 'user', content: 'hello' },
+    ]);
+  });
+
+  it('strict 默认不合并相邻同角色；cache-aware 默认合并', () => {
+    const segments = [text('s1', 'system', 'A', 'system'), text('s2', 'system', 'B', 'system')];
+    const strict = openaiChatAdapter.buildRequest(makeIr(segments), conn, 'gpt-5').body as {
+      messages: { content: unknown }[];
+    };
+    expect(strict.messages.map((m) => m.content)).toEqual(['A', 'B', '[Continue]']);
+
+    const cacheAware = openaiChatAdapter.buildRequest(
+      makeIr(segments, { meta: { ...makeIr([]).meta, layoutMode: 'cache-aware' } }),
+      conn,
+      'gpt-5',
+    ).body as { messages: { content: unknown }[] };
+    expect(cacheAware.messages.map((m) => m.content)).toEqual(['A\n\nB', '[Continue]']);
+  });
+
   it('支持 prefill 的端点保留末尾 assistant 段', () => {
     const ir = makeIr([text('h1', 'user', 'hi'), text('h2', 'assistant', '好的，')]);
     const body = openaiChatAdapter.buildRequest(

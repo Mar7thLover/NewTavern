@@ -3,13 +3,12 @@
  * 逐条校验 strict 模式下 `assemblePrompt` 的输出。
  *
  * 流程：fixture 文件 → `@newtavern/compat` 解析 → `map.ts` 映射成契约类型 →
- * `assemblePrompt({ layoutMode: 'strict' })` → 渲染成 OpenAI 消息 → 与快照 deep-equal。
+ * `assemblePrompt({ layoutMode: 'strict' })` → `openaiChatAdapter.buildRequest` → 与快照 deep-equal。
  *
- * 渲染为什么不直接用 `openaiChatAdapter.buildRequest`：
- * `@newtavern/providers` 的 `irToChatMessages` 默认 `mergeSameRole: true` 且丢掉
- * `Segment.name`，而 ST 既不合并相邻同角色消息、又会给示例对话写 `name: example_user`。
- * 因此这里用 `mergeSameRole: false` 调同一个模块，再把 `name` 带回去（见 §9 AS-8）；
- * 采样参数仍然走 `buildRequest` 比对。
+ * 渲染直接走适配器的**默认行为**：契约 §9 AS-8 落地后，`irToChatMessages` 在
+ * `ir.meta.layoutMode === 'strict'` 时默认不合并相邻同角色消息（ST 从不合并），
+ * 且默认把 `Segment.name` 带到 `ChatMessage.name`（示例对话的 example_user / example_assistant）。
+ * 因此这里不再需要任何手工回填。
  */
 
 import fs from 'node:fs';
@@ -26,7 +25,7 @@ import {
   type WIBook,
   type WITimedState,
 } from '@newtavern/core';
-import { irToChatMessages, partsToText } from '@newtavern/providers';
+import { openaiChatAdapter, type Connection } from '@newtavern/providers';
 import { describe, expect, it } from 'vitest';
 
 import { mapCharacterDepthPrompt, mapRegexScript, mapWiSettings, mapWorldbook } from './map.js';
@@ -38,6 +37,13 @@ const REQUESTS = path.join(FIXTURES, 'st-requests');
 /** 录制时 mock 端点返回的固定回复（见 `tools/golden/record/record.mjs`） */
 const MOCK_REPLY = '记录完成。Recorded.';
 const MOCK_MODEL = 'newtavern-golden-mock';
+
+/** 走 openai-chat 适配器渲染用的假连接：未知 host → 只有 streamUsage quirk，system 角色原样保留 */
+const MOCK_CONNECTION: Connection = {
+  id: 'golden',
+  provider: 'openai-chat',
+  baseUrl: 'https://mock.golden.test/v1',
+};
 
 interface CaseInputs {
   card: string;
@@ -267,21 +273,20 @@ interface RenderedMessage {
   name?: string;
 }
 
+interface RenderedBody {
+  messages: RenderedMessage[];
+  [k: string]: unknown;
+}
+
+/** IR → 适配器请求体（默认选项即 ST 语义，见文件头注释） */
+function renderBody(ir: PromptIR): RenderedBody {
+  const req = openaiChatAdapter.buildRequest(ir, MOCK_CONNECTION, MOCK_MODEL);
+  return req.body as RenderedBody;
+}
+
+/** ST 的 `ChatCompletion` 会丢掉空内容消息；适配器不做这件事，比对前统一过滤 */
 function renderMessages(ir: PromptIR): RenderedMessage[] {
-  // mergeSameRole:false → 一段一条消息，与 ST `ChatCompletion.getChat()` 一致
-  const { messages } = irToChatMessages(ir, {
-    mergeSameRole: false,
-    systemPlacement: 'inline',
-  });
-  const nameById = new Map(ir.segments.map((segment) => [segment.id, segment.name]));
-  const out: RenderedMessage[] = [];
-  for (const message of messages) {
-    const content = partsToText(message.parts, '\n');
-    if (content === '') continue;
-    const name = message.segmentIds.map((id) => nameById.get(id)).find((item) => item);
-    out.push({ role: message.role, content, ...(name ? { name } : {}) });
-  }
-  return out;
+  return renderBody(ir).messages.filter((message) => message.content !== '');
 }
 
 /** 首个差异的可读描述 */

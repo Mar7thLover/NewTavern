@@ -206,7 +206,9 @@ function buildRequest(
 
   const { systemBlocks, messages } = irToChatMessages(ir, {
     systemPlacement: 'top',
+    // Gemini 没有消息级 name 字段，且相邻同角色要合并，name 前缀化写进正文（契约 §9 AS-8）
     mergeSameRole: true,
+    nameStrategy: 'prefix',
   });
 
   // 1. system 降级为 user，降级后再合并一次相邻同角色

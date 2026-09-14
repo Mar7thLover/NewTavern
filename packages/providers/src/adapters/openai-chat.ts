@@ -77,6 +77,8 @@ type OpenAiContentPart =
 interface OpenAiMessage {
   role: string;
   content: string | OpenAiContentPart[];
+  /** 说话人名：ST `names_behavior: COMPLETION` 与示例对话（example_user / example_assistant） */
+  name?: string;
 }
 
 function renderParts(parts: readonly Part[], warnings: string[]): string | OpenAiContentPart[] {
@@ -129,7 +131,8 @@ function buildRequest(
   const quirks = resolveQuirks(conn);
   const caps = capabilities(model, conn);
 
-  const flat = irToChatMessages(ir, { systemPlacement: 'inline', mergeSameRole: true });
+  // strict 布局默认不合并相邻同角色（ST 从不合并）；`Segment.name` 默认带到 `name` 字段
+  const flat = irToChatMessages(ir, { systemPlacement: 'inline' });
   const messages = [...flat.messages];
   // 支持 prefill 的端点（DeepSeek 等）保留末尾 assistant 段；不支持的补一条 user
   const tail = messages[messages.length - 1];
@@ -147,6 +150,7 @@ function buildRequest(
   const rendered: OpenAiMessage[] = messages.map((msg) => ({
     role: mapRole(msg, quirks),
     content: renderParts(msg.parts, warnings),
+    ...(msg.name === undefined ? {} : { name: msg.name }),
   }));
 
   const s = ir.sampling;

@@ -1,22 +1,12 @@
-import { substituteMacros, type Part, type PromptIR } from '@newtavern/core';
-import type {
-  Connection,
-  ModelCapabilities,
-  ProviderAdapter,
-  ProviderError,
-  ProviderRequest,
-} from '@newtavern/providers';
+import { substituteMacros, type Part } from '@newtavern/core';
+import type { ModelCapabilities, ProviderError, ProviderRequest } from '@newtavern/providers';
 import { desc, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
 
 import { schema, type Db } from '../db/client.js';
-import {
-  assemblePrompt,
-  type AssembleCharacter,
-  type AssembleHistoryNode,
-  type AssembleInput,
-} from '../services/assemble.js';
+import { assemblePrompt } from '../services/assemble.js';
+import { buildAssembleInput, readFrozenVolatile } from '../services/assemble-input.js';
 import { parseAuthorsNote } from '../services/authors-note.js';
 import {
   clearOpaqueSubtree,
@@ -25,7 +15,6 @@ import {
   loadChat,
   loadNodes,
   patchChat,
-  pathToNode,
   setChatLorebooks,
   textOfParts,
   toChatDetail,
@@ -44,7 +33,10 @@ import {
   type GenerationContext,
 } from '../services/generation-context.js';
 import { isGlobalSystemPromptOverride } from '../services/global-system-prompt.js';
+import { buildInspect } from '../services/inspect.js';
 import type { ProviderService } from '../services/providers.js';
+import { buildProviderRequest, requestForStorage } from '../services/provider-request.js';
+import { applyGlobalChanges } from '../services/variables.js';
 
 /**
  * 聊天与消息树 + 生成 SSE。见 docs/M2-CONTRACT.md §3.4 / §3.5。
@@ -53,8 +45,6 @@ import type { ProviderService } from '../services/providers.js';
 /** SSE 首包填充：iOS Safari 等中间层会缓冲小响应（PLAN §七-9） */
 const SSE_PADDING = 2048;
 const PING_INTERVAL_MS = 15_000;
-/** extra.request 体积上限，超出只存 body 长度（契约 §3.5） */
-const REQUEST_STORE_LIMIT = 200 * 1024;
 
 interface GenerateBody {
   userMessage?: { text: string; name?: string } | null;
@@ -62,46 +52,6 @@ interface GenerateBody {
   connectionId?: string;
   model?: string;
   layoutMode?: 'strict' | 'cache-aware';
-}
-
-/** P 之后会给 buildRequest 增加可选第 4 参数（thinking 等）；用「参数更多」的类型接住三参签名 */
-interface BuildOptions {
-  thinking?: { effort?: string; budgetTokens?: number };
-}
-type BuildRequestFn = (
-  ir: PromptIR,
-  conn: Connection,
-  model: string,
-  options?: BuildOptions,
-) => ProviderRequest;
-
-function buildRequest(
-  adapter: ProviderAdapter,
-  ir: PromptIR,
-  conn: Connection,
-  model: string,
-  thinking?: BuildOptions['thinking'],
-): ProviderRequest {
-  const build: BuildRequestFn = adapter.buildRequest.bind(adapter);
-  return build(ir, conn, model, thinking ? { thinking } : undefined);
-}
-
-function requestForStorage(req: ProviderRequest | null): Record<string, unknown> | null {
-  if (!req) return null;
-  const body = JSON.stringify(req.body ?? null);
-  if (body.length > REQUEST_STORE_LIMIT) {
-    return { method: req.method, url: req.url, bodyLength: body.length, truncated: true };
-  }
-  // headers 含鉴权信息，绝不落库
-  return { method: req.method, url: req.url, body: req.body };
-}
-
-function numberOf(
-  source: Record<string, unknown> | null | undefined,
-  key: string,
-): number | undefined {
-  const value = source?.[key];
-  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined;
 }
 
 /** 存进 `extra.capabilities` 的能力摘要（M3 前端展示用，只留四个字段） */
@@ -122,76 +72,6 @@ function appendNode(db: Db, chat: ChatRow, input: Omit<InsertNodeInput, 'chatId'
     rootNodeId: row.parentId === null ? (chat.rootNodeId ?? row.id) : chat.rootNodeId,
   });
   return row;
-}
-
-function buildAssembleInput(
-  db: Db,
-  chat: ChatRow,
-  parentId: string | null,
-  provider: string,
-  model: string,
-  layoutMode: 'strict' | 'cache-aware',
-  /** 模型能力里的上下文窗口；与预设的 openai_max_context 取较小值后传给组装器 */
-  capsMaxContext: number,
-): AssembleInput {
-  const characterId = chat.characterIds[0];
-  const characterRow = characterId
-    ? db.select().from(schema.characters).where(eq(schema.characters.id, characterId)).get()
-    : undefined;
-  const personaRow = chat.personaId
-    ? db.select().from(schema.personas).where(eq(schema.personas.id, chat.personaId)).get()
-    : undefined;
-  const presetRow = chat.presetId
-    ? db.select().from(schema.presets).where(eq(schema.presets.id, chat.presetId)).get()
-    : undefined;
-
-  const nodes = loadNodes(db, chat.id);
-  const history = parentId ? pathToNode(nodes, parentId) : [];
-
-  // 组装器以 options.maxContextTokens 优先（不会再去看预设），
-  // 所以这里先取「模型能力 maxContext」与「预设 openai_max_context」的较小值。
-  const presetMaxContext =
-    numberOf(presetRow?.sampling, 'openai_max_context') ??
-    numberOf(presetRow?.data as Record<string, unknown> | undefined, 'openai_max_context');
-  const maxContextTokens =
-    presetMaxContext !== undefined ? Math.min(capsMaxContext, presetMaxContext) : capsMaxContext;
-
-  return {
-    chatId: chat.id,
-    model,
-    provider,
-    preset: presetRow
-      ? {
-          id: presetRow.id,
-          format: presetRow.format,
-          data: presetRow.data as Record<string, unknown>,
-          sampling: presetRow.sampling ?? null,
-        }
-      : null,
-    character: characterRow
-      ? {
-          id: characterRow.id,
-          name: characterRow.name,
-          data: characterRow.data as AssembleCharacter['data'],
-        }
-      : null,
-    persona: personaRow
-      ? { id: personaRow.id, name: personaRow.name, description: personaRow.description }
-      : null,
-    history: history
-      .filter((node) => !node.isHidden)
-      .map((node): AssembleHistoryNode => ({
-        id: node.id,
-        role: node.role,
-        name: node.name,
-        parts: (node.parts as Part[] | null) ?? [],
-        // reasoning.opaque 里 provider/model 不匹配的块由 assemblePrompt 负责丢弃
-        reasoning: (node.reasoning as AssembleHistoryNode['reasoning']) ?? null,
-        isHidden: node.isHidden,
-      })),
-    layoutMode,
-    options: { maxContextTokens },
-  };
 }
 
 export function createChatsRoutes(db: Db, providers: ProviderService) {
@@ -483,9 +363,9 @@ export function createChatsRoutes(db: Db, providers: ProviderService) {
         return c.json({ chat: toChatSummary(db, updated) });
       })
       /**
-       * 提示词检查器数据源（契约 §3.6）。
-       * SA 只做路由骨架：参数解析 + 连接/模型解析 + 404/400 分支；
-       * SB 接入组装 v2 后按契约 §6 填充 ir / request / layout / wi 等字段。
+       * 提示词检查器数据源（契约 §3.6 + §6）：dryRun 组装一轮 →
+       * `ir` / `request`（去 headers）/ `strictIr` / `diff` / `layout` / `wi` / `warnings` /
+       * `tokenEstimate` / `lastUsage`。不写库、不推进 WI 时间态、不落变量副作用。
        */
       .get('/:id/inspect', async (c) => {
         const rawParentId = c.req.query('parentId');
@@ -503,14 +383,11 @@ export function createChatsRoutes(db: Db, providers: ProviderService) {
           if (e instanceof GenerationContextError) return c.json(e.body, e.status);
           throw e;
         }
-        return c.json({
-          todo: true,
-          chatId: context.chat.id,
-          parentId: context.parentId,
-          connectionId: context.connectionId,
-          model: context.model,
-          layoutMode: context.layoutMode,
-        });
+        try {
+          return c.json(buildInspect(db, context));
+        } catch (e) {
+          return c.json({ error: 'invalid', message: (e as Error).message }, 400);
+        }
       })
       .post('/:id/generate', async (c) => {
         const chatId = c.req.param('id');
@@ -585,27 +462,32 @@ export function createChatsRoutes(db: Db, providers: ProviderService) {
               });
             }
 
-            // 2. 组装：按模型能力（与预设取较小值）限制上下文预算
+            // 2. 组装 v2：世界书 / 宏 / 正则 / 变量 / 布局（契约 §6）
             const caps = resolved.adapter.capabilities(model, resolved.conn);
-            const ir = assemblePrompt(
-              buildAssembleInput(
-                db,
-                chatNow(),
-                genParentId,
+            const assembled = assemblePrompt(
+              buildAssembleInput(db, {
+                chat: chatNow(),
+                overrides,
+                nodes: loadNodes(db, chatId),
+                parentId: genParentId,
                 provider,
                 model,
                 layoutMode,
-                caps.maxContext,
-              ),
+                caps,
+              }),
             );
+            const ir = assembled.ir;
 
-            // 3. assistant 节点（parts 空），head 移过去
+            // 3. assistant 节点（parts 空），head 移过去；WI 时间态与变量快照随节点落库
             const assistantRow = appendNode(db, chatNow(), {
               parentId: genParentId,
               role: 'assistant',
               parts: [],
               provider,
               model,
+              // WITimedState 没有索引签名，JSON 列要 Record；结构一致，断言即可
+              wiState: assembled.wiState as unknown as Record<string, unknown>,
+              variables: assembled.variables.chat,
             });
             assistantId = assistantRow.id;
             await send('node', {
@@ -618,7 +500,7 @@ export function createChatsRoutes(db: Db, providers: ProviderService) {
             for (let attempt = 0; attempt < maxAttempts; attempt++) {
               const active =
                 attempt === 0 ? resolved : await providers.resolveConnection(connectionId);
-              finalRequest = buildRequest(
+              finalRequest = buildProviderRequest(
                 active.adapter,
                 ir,
                 active.conn,
@@ -702,11 +584,28 @@ export function createChatsRoutes(db: Db, providers: ProviderService) {
                     stopReason: stopReason ?? (genError ? 'error' : 'end'),
                     request: requestForStorage(finalRequest),
                     capabilities: capabilitiesSummary(caps),
+                    // 契约 §6：布局报告、WI 激活摘要与告警随节点返回，供检查器/前端展示
+                    layout: assembled.layout,
+                    activations: ir.meta.activations,
+                    warnings: ir.meta.warnings,
                   },
                 })
                 .where(eq(schema.messageNodes.id, assistantId))
                 .returning()
                 .get();
+              // 全局变量变更入库（chat 作用域已随节点快照落库）
+              applyGlobalChanges(db, assembled.variables.globalChanges, assistantId);
+              // 本轮新冻结的易变段并入 chat.metadata.frozenVolatile，下一轮复用
+              const newFrozen = assembled.layout.newFrozenVolatile;
+              if (Object.keys(newFrozen).length > 0) {
+                const current = chatNow();
+                patchChat(db, chatId, {
+                  metadata: {
+                    ...(current.metadata ?? {}),
+                    frozenVolatile: { ...readFrozenVolatile(current), ...newFrozen },
+                  },
+                });
+              }
               const latencyMs = Date.now() - startedAt;
               db.insert(schema.generationLog)
                 .values({

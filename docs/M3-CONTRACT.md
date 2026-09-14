@@ -754,3 +754,77 @@ tools/fixtures/
   与 `ST_WI_DEFAULTS`（`world_info_recursive` 默认 **true**、`world_info_match_whole_words` 默认 **true**、
   `world_info_include_names` 默认 **true**，与 WI-10 一致）。
 - [AS→FX] 62 个录制用例在 strict 模式下全部逐条 deep-equal 通过，无 `knownDeviations`。
+
+### 修正（2026-09-14，SB 服务端接入组装 v2 + providers 的 name/合并）
+
+**providers（§9 AS-8 的落地，`[AS→P]` 已实现）**
+
+- SB-1 `irToChatMessages` 增 `nameStrategy: 'field' | 'prefix' | 'none'`（默认 `'field'`）与
+  `ChatMessage.name`；`mergeAdjacentSameRole` 只合并 **role 与 name 都相同**的相邻消息
+  （一方有 name、一方没有也不合并）。`mergeSameRole` 的缺省值改为**由 `ir.meta.layoutMode` 决定**：
+  `strict` → false（ST 从不合并，要逐字节一致），`cache-aware` → true。
+  `systemPlacement:'top'` 抽出的顶层 system 块没有 name 字段可放，`'field'` 在那里退化为 `'prefix'`。
+- SB-2 各适配器的策略：
+
+  | 适配器            | nameStrategy | mergeSameRole        | 说明                                              |
+  | ----------------- | ------------ | -------------------- | ------------------------------------------------- |
+  | openai-chat       | `field`（默认） | 按 `layoutMode`（默认） | 渲染出 `name` 字段（ST `names_behavior: COMPLETION`、示例对话） |
+  | anthropic         | `prefix`     | `true`               | 无消息级 name；相邻同角色会被 API 拒绝，必须合并                 |
+  | google            | `prefix`     | `true`               | 同上（contents 里没有 name）                           |
+  | openai-responses  | `prefix`     | `true`               | 同上（input 项没有 name）                             |
+
+- SB-3 黄金测试（`tools/golden/src/golden.test.ts`）改为直接用 `openaiChatAdapter.buildRequest`
+  的**默认行为**，删掉手工回填 `name` 的代码；唯一保留的加工是「过滤空 content 的消息」
+  （ST 的 `ChatCompletion` 会丢弃空消息，适配器不做这件事）。62/62 仍全绿。
+
+**服务端（§6 的落地）**
+
+- SB-4 **WI 默认值以 ST 1.18 源码为准**（`public/scripts/world-info.js` 顶部）：
+  `world_info_recursive = false`、`world_info_match_whole_words = false`、
+  `world_info_include_names = true`。与 WI-10 及前端 `DEFAULT_WORLD_INFO_SETTINGS` 一致，
+  `[WEB→SB]`「WI 默认值不一致」已消除。
+  注意 `tools/golden/src/map.ts` 的 `ST_WI_DEFAULTS` 把 `world_info_recursive` 与
+  `world_info_match_whole_words` 写成了 `true`，与 ST 源码不符；已核对 62 个录制用例对这两项的
+  缺省值不敏感（黄金测试仍全绿），但**服务端不采用该值**。建议 AS 顺手修正 map.ts。
+- SB-5 预算换算按 AS-7，服务端实现 `wiBudgetTokens(pct, maxContext, maxResponse)`
+  （`apps/server/src/services/wi-settings.ts`，与 map.ts 同式）：
+  `maxContext = min(caps.maxContext, 预设 openai_max_context)`、
+  `maxResponse = 预设 openai_max_tokens`（无预设时 0）。`toWISettings` / `readWISettings`
+  的第二个参数由 `maxContext: number` 改为 `{ maxContext, maxResponse }`，
+  并补 `overflowAlert: false`、`characterStrategy: 1`（ST `character_first`）。
+  服务端不再本地声明 `WISettings`，改为从 `@newtavern/core` 导入（§9 [SA→SB] 的收尾）。
+- SB-6 **节点快照沿路径向上取最近的一份**：generate 会先插一条 user 节点，而
+  `wi_state` / `variables` 只写在 assistant 节点上，只读直接父节点会让 chat 变量与 WI 时间态
+  每轮被清零。实现改为在 root→parent 路径上从近到远取第一份非空快照（两者各自独立取）。
+  §6「取父节点」按此理解。
+- SB-7 `layoutPolicy.volatileHandling` 由服务端按布局模式决定（§5 没规定谁来选）：
+  `strict` → `'warn'`（要与 ST 逐字节一致，不能改段文本），
+  `cache-aware` → `'freeze'`（配合 `chat.metadata.frozenVolatile` 稳住可缓存前缀，
+  这也是 `LayoutReport.newFrozenVolatile`（AS-17）唯一会非空的场景）。
+- SB-8 `lorebooks` 的 `scope` 以**本次绑定方式**为准，不看 `lorebooks.scope` 列；
+  顺序与去重：全局（`worldInfo.globalBookIds`）→ 聊天（`chat_lorebooks`）→ 角色
+  （`characters.book_id`），先按 bookId 去重再按**书名**去重（AS-13 / WI-11）。
+  条目映射在 `apps/server/src/services/wi-map.ts`：先 `applyWorldbookEntryColumns(extra.raw, 列)`
+  把数据库行还原成 ST 条目（列覆盖 raw，没有独立列的 `useProbability` / `vectorized` /
+  `match*` / `outletName` / `triggers` / `characterFilter` 从 raw 取到），再走与
+  `tools/golden/src/map.ts` 同源的字段映射。`WIEntry.id = ${bookId}:${uid}`，bookId 是 DB id，
+  时间态快照跨重启稳定。
+- SB-9 `GET /api/chats/:id/inspect` 的响应就是 §6 的十个键
+  （`layoutMode / ir / request / strictIr / diff / layout / wi / warnings / tokenEstimate / lastUsage`），
+  不再带 SA 阶段的 `todo / chatId / parentId / connectionId / model`（前端 `InspectData` 已按此声明）。
+  `strictIr` / `diff` 在 strict 下为 `null`；`request` 去掉 `headers`、保留 `warnings`、
+  不做体积截断（落库的 `extra.request` 仍按 §3.5 截断）。`no_connection` 分支保留。
+- SB-10 `POST /api/inspect/compare` 已挂载（`apps/server/src/routes/inspect.ts` → `/api/inspect`），
+  `[WEB→SB]`「尚未挂载」已消除。细节：强制 strict 组装；`firstDiffIndex` 在无差异时为 **-1**；
+  `hints` 至少一条（一致时是 `['逐条一致']`）；`stRequest` 允许直接是 messages 数组；
+  粘贴内容里没有 messages 时返回 `same:false` + 提示（不是 400）；缺 `chatId` / 缺 `stRequest` → 400。
+- SB-11 生成成功后：新节点写 `wi_state = result.wiState`、`variables = result.variables.chat`；
+  `applyGlobalChanges(result.variables.globalChanges, nodeId)`；
+  `result.layout.newFrozenVolatile` 非空时并入 `chat.metadata.frozenVolatile`；
+  `extra` 增 `layout`（`LayoutReport`）/ `activations`（`ir.meta.activations`）/ `warnings`。
+  首事件即 error 的回退路径会删掉刚建的节点（快照随之消失），也不写全局变量与冻结表。
+- SB-12 新增/改动的服务端模块：`services/assemble-input.ts`（`buildAssembleInput`，
+  generate / inspect / compare 共用）、`services/inspect.ts`（inspect 与 compare 的服务层）、
+  `services/wi-map.ts`、`services/provider-request.ts`（`buildProviderRequest` /
+  `requestForStorage` / `requestForInspect`）。`routes/chats.ts` 不再自己拼组装输入。
+  `InsertNodeInput` 增 `wiState` / `variables` 两个可选字段。

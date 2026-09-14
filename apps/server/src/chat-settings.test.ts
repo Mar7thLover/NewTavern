@@ -118,14 +118,38 @@ describe('WI 设置与全局书', () => {
     // 未设置 → 全默认
     expect(readWIUiSettings(db)).toEqual(DEFAULT_WI_UI_SETTINGS);
     expect(readGlobalBookIds(db)).toEqual([]);
-    expect(toWISettings(DEFAULT_WI_UI_SETTINGS, 32768)).toMatchObject({
-      scanDepth: 2,
-      budgetTokens: 8192,
-      budgetCap: 0,
-      recursive: true,
-      includeNames: false,
+    // 默认值照 ST 1.18 源码（契约 §9 WI-10）：recursive false、matchWholeWords false、includeNames true
+    expect(DEFAULT_WI_UI_SETTINGS).toMatchObject({
+      recursive: false,
+      matchWholeWords: false,
+      includeNames: true,
     });
-    expect('budgetPercent' in toWISettings(DEFAULT_WI_UI_SETTINGS, 100)).toBe(false);
+    // 预算按 AS-7：round(pct × (maxContext − maxResponse) / 100) || 1
+    expect(toWISettings(DEFAULT_WI_UI_SETTINGS, { maxContext: 32768, maxResponse: 768 })).toEqual({
+      scanDepth: 2,
+      budgetTokens: 8000,
+      budgetCap: 0,
+      recursive: false,
+      caseSensitive: false,
+      matchWholeWords: false,
+      useGroupScoring: false,
+      maxRecursionSteps: 0,
+      minActivations: 0,
+      minActivationsDepthMax: 0,
+      includeNames: true,
+      overflowAlert: false,
+      characterStrategy: 1,
+    });
+    // 结果 0 时保底 1（ST 的 `|| 1`）
+    expect(
+      toWISettings(
+        { ...DEFAULT_WI_UI_SETTINGS, budgetPercent: 0 },
+        { maxContext: 32768, maxResponse: 0 },
+      ).budgetTokens,
+    ).toBe(1);
+    expect(
+      'budgetPercent' in toWISettings(DEFAULT_WI_UI_SETTINGS, { maxContext: 100, maxResponse: 0 }),
+    ).toBe(false);
 
     // 部分设置 + 脏字段 → 只覆盖合法项
     await putSetting(app, 'worldInfo.settings', {
@@ -141,7 +165,7 @@ describe('WI 设置与全局书', () => {
       budgetPercent: 10,
       includeNames: true,
     });
-    expect(readWISettings(db, 20000).budgetTokens).toBe(2000);
+    expect(readWISettings(db, { maxContext: 20000, maxResponse: 0 }).budgetTokens).toBe(2000);
 
     await putSetting(app, 'worldInfo.globalBookIds', ['a', 2, 'b']);
     expect(readGlobalBookIds(db)).toEqual(['a', 'b']);
@@ -277,8 +301,8 @@ describe('全局变量', () => {
   });
 });
 
-describe('inspect 骨架', () => {
-  it('解析参数与连接/模型，返回 todo 占位', async () => {
+describe('inspect 参数解析', () => {
+  it('404 / no_connection / 非法 parentId 与 layoutMode；缺省 parentId = head', async () => {
     const { app, db } = makeTestApp(dataDir);
     const conn = insertConnection(db, dataDir, 'fake-inspect');
     const chat = (await (await app.request('/api/chats', json('POST', {}))).json()) as ChatDetail;
@@ -291,39 +315,29 @@ describe('inspect 骨架', () => {
     await putSetting(app, 'generation.default', { connectionId: conn.id, model: 'fake-model-1' });
     const ok = await app.request(`/api/chats/${chat.id}/inspect`);
     expect(ok.status).toBe(200);
-    expect(await ok.json()).toEqual({
-      todo: true,
-      chatId: chat.id,
-      parentId: null,
-      connectionId: conn.id,
-      model: 'fake-model-1',
-      layoutMode: 'strict',
-    });
+    // 完整响应形状见 inspect.test.ts；这里只看参数解析
+    expect((await ok.json()) as { layoutMode: string }).toMatchObject({ layoutMode: 'strict' });
 
-    // 查询参数优先于默认值；parentId 非法 → 400
     const withQuery = (await (
       await app.request(`/api/chats/${chat.id}/inspect?model=other-model&layoutMode=cache-aware`)
-    ).json()) as { model: string; layoutMode: string };
-    expect(withQuery).toMatchObject({ model: 'other-model', layoutMode: 'cache-aware' });
+    ).json()) as { layoutMode: string };
+    expect(withQuery.layoutMode).toBe('cache-aware');
 
     expect((await app.request(`/api/chats/${chat.id}/inspect?parentId=nope`)).status).toBe(400);
     expect((await app.request(`/api/chats/${chat.id}/inspect?layoutMode=weird`)).status).toBe(400);
 
-    // head 有节点时缺省 parentId = head
-    const message = (await (
-      await app.request(
-        `/api/chats/${chat.id}/messages`,
-        json('POST', { role: 'user', text: '你好' }),
-      )
-    ).json()) as { node: { id: string } };
+    // head 有节点时缺省 parentId = head（消息进了 IR）；显式空串 = 从根开始（没有历史）
+    await app.request(
+      `/api/chats/${chat.id}/messages`,
+      json('POST', { role: 'user', text: '你好检查器' }),
+    );
     const atHead = (await (await app.request(`/api/chats/${chat.id}/inspect`)).json()) as {
-      parentId: string;
+      ir: { segments: unknown[] };
     };
-    expect(atHead.parentId).toBe(message.node.id);
-    // 显式空串 = 从根开始
+    expect(JSON.stringify(atHead.ir.segments)).toContain('你好检查器');
     const atRoot = (await (
       await app.request(`/api/chats/${chat.id}/inspect?parentId=`)
-    ).json()) as { parentId: string | null };
-    expect(atRoot.parentId).toBeNull();
+    ).json()) as { ir: { segments: unknown[] } };
+    expect(JSON.stringify(atRoot.ir.segments)).not.toContain('你好检查器');
   });
 });

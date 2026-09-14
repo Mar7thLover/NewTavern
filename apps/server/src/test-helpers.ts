@@ -3,6 +3,8 @@ import os from 'node:os';
 import path from 'node:path';
 
 import {
+  irToChatMessages,
+  partsToText,
   registry,
   type Connection,
   type GenEvent,
@@ -81,20 +83,38 @@ export interface FakeAdapterOptions {
   stream?: ProviderAdapter['stream'];
   models?: ModelInfo[];
   listModels?: () => Promise<ModelInfo[]>;
+  /** 覆盖能力（缓存模式、maxContext 等） */
+  capabilities?: Partial<ModelCapabilities>;
+  /** true：body 带真实的 `messages`（role/content/name），用于断言组装结果 */
+  renderMessages?: boolean;
 }
 
 export function registerFakeAdapter(options: FakeAdapterOptions): ProviderAdapter {
   const events = options.events ?? [];
+  const caps: ModelCapabilities = { ...CAPABILITIES, ...options.capabilities };
   const adapter: ProviderAdapter = {
     id: options.id as ProviderId,
     listModels:
       options.listModels ?? (() => Promise.resolve(options.models ?? [{ id: 'fake-model-1' }])),
-    capabilities: () => CAPABILITIES,
+    capabilities: () => caps,
     buildRequest: (ir, conn: Connection, model): ProviderRequest => ({
       method: 'POST',
       url: `${conn.baseUrl}/chat/completions`,
       headers: { authorization: `Bearer ${conn.apiKey ?? ''}` },
-      body: { model, segments: ir.segments.length, apiKeyTail: (conn.apiKey ?? '').slice(-4) },
+      body: {
+        model,
+        segments: ir.segments.length,
+        apiKeyTail: (conn.apiKey ?? '').slice(-4),
+        ...(options.renderMessages
+          ? {
+              messages: irToChatMessages(ir, { systemPlacement: 'inline' }).messages.map((m) => ({
+                role: m.role,
+                content: partsToText(m.parts, '\n'),
+                ...(m.name === undefined ? {} : { name: m.name }),
+              })),
+            }
+          : {}),
+      },
     }),
     stream:
       options.stream ??

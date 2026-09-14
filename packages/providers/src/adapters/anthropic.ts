@@ -152,7 +152,9 @@ function buildRequest(
 
   const { systemBlocks, messages } = irToChatMessages(ir, {
     systemPlacement: 'top',
+    // Anthropic 没有消息级 name 字段，且相邻同角色会被 API 拒绝，只能前缀化 + 合并（契约 §9 AS-8）
     mergeSameRole: true,
+    nameStrategy: 'prefix',
   });
 
   let working = [...messages];

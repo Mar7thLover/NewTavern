@@ -12,6 +12,7 @@ import { createCharactersRoutes } from './routes/characters.js';
 import { createChatsRoutes } from './routes/chats.js';
 import { createConnectionsRoutes } from './routes/connections.js';
 import { createImportRoutes } from './routes/import.js';
+import { createInspectRoutes } from './routes/inspect.js';
 import { createLorebooksRoutes } from './routes/lorebooks.js';
 import { createModelsRoutes } from './routes/models.js';
 import { createPersonasRoutes } from './routes/personas.js';
@@ -55,6 +56,7 @@ export function createApp({ db, dataDir, webDist }: AppOptions) {
     .route('/assets', createAssetsRoutes(assets))
     .route('/connections', createConnectionsRoutes(db, secrets, providers))
     .route('/chats', createChatsRoutes(db, providers))
+    .route('/inspect', createInspectRoutes(db, providers))
     .route('/models', createModelsRoutes());
 
   app.route('/api', api);

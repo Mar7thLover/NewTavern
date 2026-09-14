@@ -154,7 +154,9 @@ function buildRequest(
 
   const { systemBlocks, messages } = irToChatMessages(ir, {
     systemPlacement: 'top',
+    // Responses 的 input 项没有 name 字段，name 前缀化写进正文（契约 §9 AS-8）
     mergeSameRole: true,
+    nameStrategy: 'prefix',
   });
 
   const working = [...messages];

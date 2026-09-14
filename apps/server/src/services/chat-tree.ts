@@ -230,6 +230,10 @@ export interface InsertNodeInput {
   provider?: string | null;
   model?: string | null;
   extra?: Record<string, unknown> | null;
+  /** WI 时间态快照（契约 §3.5；swipe / 重生从父节点恢复） */
+  wiState?: Record<string, unknown> | null;
+  /** chat 作用域变量的完整快照 */
+  variables?: Record<string, unknown> | null;
 }
 
 export function insertNode(db: Db, input: InsertNodeInput): NodeRow {
@@ -246,6 +250,8 @@ export function insertNode(db: Db, input: InsertNodeInput): NodeRow {
       provider: input.provider ?? null,
       model: input.model ?? null,
       extra: input.extra ?? null,
+      wiState: input.wiState ?? null,
+      variables: input.variables ?? null,
     })
     .returning()
     .get();

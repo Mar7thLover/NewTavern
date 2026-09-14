@@ -362,6 +362,17 @@ describe('anthropic buildRequest', () => {
     });
   });
 
+  it('Anthropic 无 name 字段：Segment.name 前缀化写进正文且照常合并（契约 §9 AS-8）', () => {
+    const ir = makeIr([
+      { ...text('h1', 'user', '你好'), name: '旅人' },
+      { ...text('h2', 'user', '在吗'), name: '旅人' },
+    ]);
+    const out = body(ir).body;
+    expect(out.messages).toHaveLength(1);
+    expect(out.messages[0]?.content).toEqual([{ type: 'text', text: '旅人: 你好\n\n旅人: 在吗' }]);
+    expect(JSON.stringify(out)).not.toContain('"name"');
+  });
+
   it('是纯函数：不改动 IR，两次结果一致', () => {
     const ir = makeIr([text('s1', 'system', 'SYS', 'system'), text('h1', 'user', 'u')], {
       breakpoints: [0],
