@@ -4,9 +4,12 @@ import { createApp } from './app.js';
 import { createDatabase } from './db/client.js';
 import { runMigrations } from './db/migrate.js';
 import { dataDir, dbPath, host, port, webDist } from './env.js';
+import { backfillCharacterBooks } from './services/backfill.js';
 
 const db = createDatabase(dbPath);
 runMigrations(db);
+// 迁移之后、建 app 之前做一次性回填（幂等）
+backfillCharacterBooks(db);
 
 const app = createApp({ db, dataDir, webDist });
 

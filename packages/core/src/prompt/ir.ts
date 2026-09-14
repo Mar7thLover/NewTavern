@@ -61,7 +61,7 @@ export interface Segment {
   locked?: boolean;
 }
 
-export interface WIActivation {
+export interface WIActivationSummary {
   entryId: string;
   bookId?: string;
   /** ST position 0–6 */
@@ -83,7 +83,7 @@ export interface PromptIR {
     chatId: string;
     presetId: string;
     layoutMode: 'strict' | 'cache-aware';
-    activations: WIActivation[];
+    activations: WIActivationSummary[];
     warnings: string[];
     tokenEstimate: number;
   };

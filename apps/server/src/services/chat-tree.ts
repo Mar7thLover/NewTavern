@@ -1,5 +1,5 @@
 import { childrenOf, linearizePath, type Part } from '@newtavern/core';
-import { eq, inArray } from 'drizzle-orm';
+import { asc, eq, inArray, sql } from 'drizzle-orm';
 
 import { schema, type Db } from '../db/client.js';
 
@@ -47,6 +47,12 @@ export type ChatOverrides = {
   sampling?: Record<string, unknown>;
   thinking?: { effort?: string; budgetTokens?: number };
   layoutMode?: 'strict' | 'cache-aware';
+  /** 全局系统提示词的会话覆盖（契约 §3.4） */
+  globalSystemPrompt?: {
+    enabled?: boolean;
+    text?: string;
+    position?: 'before_main' | 'after_main';
+  } | null;
 };
 
 export interface ChatSummary {
@@ -63,6 +69,8 @@ export interface ChatSummary {
   createdAt: Date;
   updatedAt: Date;
   character: { id: string; name: string; avatarAssetId: string | null } | null;
+  /** 聊天绑定的世界书（chat_lorebooks，契约 §3.3） */
+  lorebookIds: string[];
   messageCount: number;
   lastMessageAt: Date | null;
   preview: string | null;
@@ -147,6 +155,27 @@ export function pathToNode(nodes: readonly NodeRow[], nodeId: string): NodeRow[]
   return linearizePath(map, nodeId);
 }
 
+/** 聊天绑定的世界书 id（按插入顺序：rowid 排序，否则会退化成唯一索引的 bookId 序） */
+export function readChatLorebookIds(db: Db, chatId: string): string[] {
+  return db
+    .select({ bookId: schema.chatLorebooks.bookId })
+    .from(schema.chatLorebooks)
+    .where(eq(schema.chatLorebooks.chatId, chatId))
+    .orderBy(asc(sql`rowid`))
+    .all()
+    .map((row) => row.bookId);
+}
+
+/** 全量替换聊天世界书绑定（去重、保持传入顺序） */
+export function setChatLorebooks(db: Db, chatId: string, bookIds: readonly string[]): string[] {
+  const unique = [...new Set(bookIds)];
+  db.delete(schema.chatLorebooks).where(eq(schema.chatLorebooks.chatId, chatId)).run();
+  for (const bookId of unique) {
+    db.insert(schema.chatLorebooks).values({ chatId, bookId }).run();
+  }
+  return unique;
+}
+
 export function toChatSummary(db: Db, chat: ChatRow, nodes?: readonly NodeRow[]): ChatSummary {
   const all = nodes ?? loadNodes(db, chat.id);
   const head = chat.headNodeId ? all.find((node) => node.id === chat.headNodeId) : undefined;
@@ -179,6 +208,7 @@ export function toChatSummary(db: Db, chat: ChatRow, nodes?: readonly NodeRow[])
           avatarAssetId: characterRow.avatarAssetId,
         }
       : null,
+    lorebookIds: readChatLorebookIds(db, chat.id),
     messageCount: all.length,
     lastMessageAt,
     preview: previewText ? previewText.slice(0, PREVIEW_LENGTH) : null,

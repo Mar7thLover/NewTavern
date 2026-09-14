@@ -4,15 +4,13 @@ import path from 'node:path';
 
 import {
   PNG_SIGNATURE,
-  applyWorldbookEntryColumns,
-  buildWorldbook,
   extractPresetSampling,
   listWorldbookEntries,
   normalizeCard,
   parseCardJson,
   parsePreset,
+  parseRegexScripts,
   parseWorldbook,
-  pickWorldbookEntryColumns,
   presetApiFamily,
   readCardFromPng,
   readCharx,
@@ -24,14 +22,20 @@ import {
   writeCardToPng,
   writeCharx,
   type StPreset,
-  type StWorldbookEntry,
   type V3Card,
-  type WorldbookEntriesForm,
 } from '@newtavern/compat';
-import { asc, eq, sql } from 'drizzle-orm';
+import { desc, eq } from 'drizzle-orm';
 
 import { schema, type Db } from '../db/client.js';
 import type { AssetsService } from './assets.js';
+import {
+  extractCharacterBook,
+  rebuildCharacterBook,
+  worldbookFromTable,
+  type LorebookEntryExtra,
+  type LorebookSettings,
+} from './character-book.js';
+import { stRegexToScript, toRegexColumns, toRegexScript, type RegexScript } from './regex-map.js';
 
 export type CharacterFormat = 'png' | 'charx' | 'json';
 
@@ -101,16 +105,6 @@ function toV3Card(data: unknown): V3Card {
   return normalizeCard({ spec: 'chara_card_v3', spec_version: '3.0', data });
 }
 
-type LorebookSettings = {
-  entriesForm?: WorldbookEntriesForm;
-  meta?: Record<string, unknown>;
-};
-
-type LorebookEntryExtra = {
-  stKey?: string;
-  raw?: StWorldbookEntry;
-};
-
 export function createImporter(db: Db, assets: AssetsService, dataDir: string) {
   function saveOriginal(bytes: Uint8Array, format: CharacterFormat) {
     const sha256 = createHash('sha256').update(bytes).digest('hex');
@@ -172,7 +166,7 @@ export function createImporter(db: Db, assets: AssetsService, dataDir: string) {
         ? assets.save({ ...avatar, kind: 'avatar', source: `import:${path.basename(fileName)}` })
         : undefined;
 
-      return db
+      const row = db
         .insert(schema.characters)
         .values({
           name: card.data.name,
@@ -185,6 +179,9 @@ export function createImporter(db: Db, assets: AssetsService, dataDir: string) {
         })
         .returning()
         .get();
+      // 内嵌世界书抽表（契约 §3.1）：data.character_book 原样保留
+      const bookId = extractCharacterBook(db, row);
+      return bookId ? { ...row, bookId } : row;
     },
 
     /** 未修改的卡按原格式导出原件；其余格式由 data 重新生成 */
@@ -194,14 +191,21 @@ export function createImporter(db: Db, assets: AssetsService, dataDir: string) {
       const fileName = `${row.name}.${format}`;
       const mime = FORMAT_MIME[format];
 
-      if (row.sourcePath && row.sourcePath.endsWith(`.${format}`)) {
+      // 书被编辑过 → 用表重建 character_book，不能再走原始字节
+      const rebuiltBook = rebuildCharacterBook(db, row);
+
+      if (!rebuiltBook && row.sourcePath && row.sourcePath.endsWith(`.${format}`)) {
         const absPath = path.join(dataDir, row.sourcePath);
         if (fs.existsSync(absPath)) {
           return { fileName, mime, bytes: new Uint8Array(fs.readFileSync(absPath)) };
         }
       }
 
-      const card = toV3Card(row.data);
+      const card = toV3Card(
+        rebuiltBook
+          ? { ...(row.data as Record<string, unknown>), character_book: rebuiltBook }
+          : row.data,
+      );
       const avatar = readAssetBytes(row.avatarAssetId);
       if (format === 'json') {
         return { fileName, mime, bytes: new TextEncoder().encode(JSON.stringify(card, null, 4)) };
@@ -276,30 +280,38 @@ export function createImporter(db: Db, assets: AssetsService, dataDir: string) {
     exportLorebook(id: string): ExportedFile | undefined {
       const book = db.select().from(schema.lorebooks).where(eq(schema.lorebooks.id, id)).get();
       if (!book) return undefined;
-      const rows = db
-        .select()
-        .from(schema.lorebookEntries)
-        .where(eq(schema.lorebookEntries.bookId, id))
-        .orderBy(asc(sql`rowid`))
-        .all();
-      const settings = (book.settings ?? {}) as LorebookSettings;
-      const items = rows.map((row, index) => {
-        const extra = (row.extra ?? {}) as LorebookEntryExtra;
-        return {
-          key: extra.stKey ?? String(row.uid ?? index),
-          entry: applyWorldbookEntryColumns(extra.raw ?? {}, pickWorldbookEntryColumns(row)),
-        };
-      });
-      const worldbook = buildWorldbook(
-        settings.meta ?? { name: book.name },
-        settings.entriesForm ?? 'object',
-        items,
-      );
       return {
         fileName: `${book.name}.json`,
         mime: 'application/json',
-        bytes: new TextEncoder().encode(serializeWorldbook(worldbook)),
+        bytes: new TextEncoder().encode(serializeWorldbook(worldbookFromTable(db, book))),
       };
+    },
+
+    /** ST 正则脚本 JSON（单条或数组）→ regex_scripts 表（scope='global'，契约 §3.2） */
+    importRegexScripts(fileName: string, bytes: Uint8Array): RegexScript[] {
+      const scripts = guard(() => parseRegexScripts(parseJsonBytes(bytes, '正则脚本')));
+      const last = db
+        .select()
+        .from(schema.regexScripts)
+        .orderBy(desc(schema.regexScripts.displayOrder))
+        .get();
+      let order = (last?.displayOrder ?? -1) + 1;
+      return scripts.map((raw, index) => {
+        const script = stRegexToScript(raw, `${index}`, 'global');
+        if (!script) throw new ImportError(`第 ${index + 1} 个正则脚本缺少 scriptName/findRegex`);
+        const row = db
+          .insert(schema.regexScripts)
+          .values({
+            ...toRegexColumns(script),
+            scope: 'global',
+            displayOrder: order++,
+            // 未知字段原样保留，便于以后无损导出
+            extra: { raw, sourceFile: baseName(fileName) },
+          })
+          .returning()
+          .get();
+        return toRegexScript(row);
+      });
     },
   };
 }

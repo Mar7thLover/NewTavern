@@ -16,6 +16,7 @@ import { createLorebooksRoutes } from './routes/lorebooks.js';
 import { createModelsRoutes } from './routes/models.js';
 import { createPersonasRoutes } from './routes/personas.js';
 import { createPresetsRoutes } from './routes/presets.js';
+import { createRegexRoutes } from './routes/regex.js';
 import { createSettingsRoutes } from './routes/settings.js';
 import { createAssetsService } from './services/assets.js';
 import { createImporter } from './services/importer.js';
@@ -49,6 +50,7 @@ export function createApp({ db, dataDir, webDist }: AppOptions) {
     .route('/characters', createCharactersRoutes(db, importer))
     .route('/presets', createPresetsRoutes(db, importer))
     .route('/lorebooks', createLorebooksRoutes(db, importer))
+    .route('/regex', createRegexRoutes(db))
     .route('/import', createImportRoutes(importer))
     .route('/assets', createAssetsRoutes(assets))
     .route('/connections', createConnectionsRoutes(db, secrets, providers))

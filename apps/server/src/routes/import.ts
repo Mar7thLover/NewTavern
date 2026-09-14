@@ -54,5 +54,9 @@ export function createImportRoutes(importer: Importer) {
     .post(
       '/lorebook',
       handle((name, bytes) => importer.importLorebook(name, bytes)),
+    )
+    .post(
+      '/regex',
+      handle((name, bytes) => importer.importRegexScripts(name, bytes)),
     );
 }
