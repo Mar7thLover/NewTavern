@@ -719,7 +719,7 @@ tools/fixtures/
   本实现按 §4.1 的阶段顺序先宏再扫描。fixture 里没有把宏写进聊天消息，两者没有可观测差异，
   但这是一条有意的偏离，记在此处。
 - AS-16 `AssembleInputV2` 的必填字段只有 `lorebooks / wiSettings / variables / messageCount /
-  providerCaps / rng`（其余 v2 字段可选并有默认值）；`layoutPolicy` 收窄为 `Partial<LayoutPolicy>`。
+providerCaps / rng`（其余 v2 字段可选并有默认值）；`layoutPolicy` 收窄为 `Partial<LayoutPolicy>`。
   `assemblePrompt` 返回 `AssembleResult`；`AssembleResult.layout` 是本次采用的布局报告，
   `strictIr` 只在 `layoutMode === 'cache-aware'` 时给出。
 
@@ -741,7 +741,7 @@ tools/fixtures/
   `diffLayouts` 里它属于 `moved`（strict 侧不存在），被它取代的原段也记在 `moved`。
 - AS-21 `packages/core/src/index.ts` 追加 `export * from './prompt/layout/index.js'`，
   所以 `LayoutReport / LayoutPolicy / LayoutMove / LayoutBreakpoint / LayoutProviderCaps /
-  diffLayouts / layoutStrict / layoutCacheAware / resolveLayoutPolicy` 都可从
+diffLayouts / layoutStrict / layoutCacheAware / resolveLayoutPolicy` 都可从
   `@newtavern/core` 导入（WEB 可以删掉本地声明）。
 
 **待协调**
@@ -766,12 +766,12 @@ tools/fixtures/
   `systemPlacement:'top'` 抽出的顶层 system 块没有 name 字段可放，`'field'` 在那里退化为 `'prefix'`。
 - SB-2 各适配器的策略：
 
-  | 适配器            | nameStrategy | mergeSameRole        | 说明                                              |
-  | ----------------- | ------------ | -------------------- | ------------------------------------------------- |
-  | openai-chat       | `field`（默认） | 按 `layoutMode`（默认） | 渲染出 `name` 字段（ST `names_behavior: COMPLETION`、示例对话） |
-  | anthropic         | `prefix`     | `true`               | 无消息级 name；相邻同角色会被 API 拒绝，必须合并                 |
-  | google            | `prefix`     | `true`               | 同上（contents 里没有 name）                           |
-  | openai-responses  | `prefix`     | `true`               | 同上（input 项没有 name）                             |
+  | 适配器           | nameStrategy    | mergeSameRole           | 说明                                                            |
+  | ---------------- | --------------- | ----------------------- | --------------------------------------------------------------- |
+  | openai-chat      | `field`（默认） | 按 `layoutMode`（默认） | 渲染出 `name` 字段（ST `names_behavior: COMPLETION`、示例对话） |
+  | anthropic        | `prefix`        | `true`                  | 无消息级 name；相邻同角色会被 API 拒绝，必须合并                |
+  | google           | `prefix`        | `true`                  | 同上（contents 里没有 name）                                    |
+  | openai-responses | `prefix`        | `true`                  | 同上（input 项没有 name）                                       |
 
 - SB-3 黄金测试（`tools/golden/src/golden.test.ts`）改为直接用 `openaiChatAdapter.buildRequest`
   的**默认行为**，删掉手工回填 `name` 的代码；唯一保留的加工是「过滤空 content 的消息」
@@ -828,3 +828,7 @@ tools/fixtures/
   `services/wi-map.ts`、`services/provider-request.ts`（`buildProviderRequest` /
   `requestForStorage` / `requestForInspect`）。`routes/chats.ts` 不再自己拼组装输入。
   `InsertNodeInput` 增 `wiState` / `variables` 两个可选字段。
+
+### 修正（2026-09-14，主会话）：WI 默认值以 ST 发行版 settings.json 为准
+
+WI-10 与 SB-4 作废。ST `world-info.js` 里 `let world_info_recursive = false` 等只是模块初值，启动时被发行版自带的 `default/content/settings.json` 覆盖，该文件为 `world_info_recursive: true`、`world_info_match_whole_words: true`、`world_info_include_names: true`、`world_info_case_sensitive: false`；录制用的全新 ST 环境正是这套值（`preset-custom-formats` 用例对 recursive 敏感）。服务端 `DEFAULT_WI_UI_SETTINGS`、前端 `DEFAULT_WORLD_INFO_SETTINGS`、`tools/golden` 的 `ST_WI_DEFAULTS` 已统一为 true / true / true。

@@ -118,10 +118,10 @@ describe('WI 设置与全局书', () => {
     // 未设置 → 全默认
     expect(readWIUiSettings(db)).toEqual(DEFAULT_WI_UI_SETTINGS);
     expect(readGlobalBookIds(db)).toEqual([]);
-    // 默认值照 ST 1.18 源码（契约 §9 WI-10）：recursive false、matchWholeWords false、includeNames true
+    // 默认值照 ST 1.18 发行版 default/content/settings.json：recursive true、matchWholeWords true、includeNames true
     expect(DEFAULT_WI_UI_SETTINGS).toMatchObject({
-      recursive: false,
-      matchWholeWords: false,
+      recursive: true,
+      matchWholeWords: true,
       includeNames: true,
     });
     // 预算按 AS-7：round(pct × (maxContext − maxResponse) / 100) || 1
@@ -129,9 +129,9 @@ describe('WI 设置与全局书', () => {
       scanDepth: 2,
       budgetTokens: 8000,
       budgetCap: 0,
-      recursive: false,
+      recursive: true,
       caseSensitive: false,
-      matchWholeWords: false,
+      matchWholeWords: true,
       useGroupScoring: false,
       maxRecursionSteps: 0,
       minActivations: 0,

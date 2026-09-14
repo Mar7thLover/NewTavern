@@ -36,20 +36,20 @@ export const WI_GLOBAL_BOOKS_KEY = 'worldInfo.globalBookIds';
 
 /**
  * 默认值照 ST 1.18 源码（`public/scripts/world-info.js` 顶部的 `export let world_info_*`）：
- * depth 2 / budget 25% / cap 0 / recursive **false** / caseSensitive false /
- * matchWholeWords **false** / useGroupScoring false / maxRecursionSteps 0 /
+ * depth 2 / budget 25% / cap 0 / recursive **true** / caseSensitive false /
+ * matchWholeWords **true** / useGroupScoring false / maxRecursionSteps 0 /
  * minActivations 0 / minActivationsDepthMax 0 / includeNames **true**。
  *
- * 契约 §9 WI-10 与 [WEB→SB] 要求把旧的契约值（recursive true / includeNames false）改过来；
+ * 以 ST 发行版自带的 default/content/settings.json 为准（模块里的 let 初值会被它覆盖）：recursive、matchWholeWords、includeNames 均为 true；
  * 与前端 `DEFAULT_WORLD_INFO_SETTINGS` 一致。
  */
 export const DEFAULT_WI_UI_SETTINGS: WIUiSettings = {
   scanDepth: 2,
   budgetPercent: 25,
   budgetCap: 0,
-  recursive: false,
+  recursive: true,
   caseSensitive: false,
-  matchWholeWords: false,
+  matchWholeWords: true,
   useGroupScoring: false,
   maxRecursionSteps: 0,
   minActivations: 0,
