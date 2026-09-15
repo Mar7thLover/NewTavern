@@ -58,7 +58,9 @@
       "worldInfo": "World info",
       "globalSystemPrompt": "Global system prompt",
       "regex": "Regex scripts"
-    }
+    },
+    "developerMode": "Developer mode",
+    "developerModeHint": "Show tools for development and debugging, such as the ST diff in the inspector."
   },
   "appearance": {
     "world": "World",
@@ -165,7 +167,39 @@
       "nameRequired": "Name is required.",
       "noDescription": "No description",
       "deleteTitle": "Delete persona?",
-      "deleteMessage": "“{{name}}” will be permanently deleted. This cannot be undone."
+      "deleteMessage": "“{{name}}” will be permanently deleted. This cannot be undone.",
+      "defaultBadge": "Default",
+      "setDefault": "Set as default",
+      "unsetDefault": "Unset default",
+      "defaultHint": "New chats use this persona",
+      "title": "Title",
+      "titlePlaceholder": "Shown under the name; not sent to the model",
+      "avatar": "Avatar",
+      "avatarUpload": "Upload avatar",
+      "avatarChange": "Change",
+      "avatarRemove": "Remove",
+      "avatarHint": "PNG, JPEG or WebP, up to 5 MB",
+      "avatarTooLarge": "The image is larger than 5 MB.",
+      "avatarBadType": "Only PNG, JPEG or WebP.",
+      "position": "Where the description goes",
+      "positions": {
+        "in_prompt": "Persona slot in the preset",
+        "at_depth": "Inject at depth",
+        "top_an": "Before author's note",
+        "bottom_an": "After author's note",
+        "none": "Don't include"
+      },
+      "depth": "Depth",
+      "depthHint": "0 = after the latest message",
+      "role": "Message role",
+      "roles": {
+        "system": "System",
+        "user": "User",
+        "assistant": "Assistant"
+      },
+      "lorebook": "Linked lorebook",
+      "lorebookNone": "None",
+      "lorebookHint": "Active whenever this persona is used."
     }
   },
   "chat": {
@@ -192,7 +226,10 @@
       "hint": "Click a card to open a new chat, or start from blank.",
       "blank": "Blank chat",
       "noCharactersTitle": "No characters yet",
-      "noCharactersHint": "Import a character card in the library first, then come back."
+      "noCharactersHint": "Import a character card in the library first, then come back.",
+      "personaLabel": "Persona",
+      "personaOption": "Start as {{name}}",
+      "personaNone": "No persona"
     },
     "composer": {
       "placeholder": "Say something…",
@@ -530,19 +567,108 @@
       "copy": "Copy JSON"
     },
     "compare": {
-      "title": "Compare with an ST request",
-      "hint": "Paste the request body SillyTavern actually sent; messages are compared one by one.",
+      "title": "Compare with SillyTavern",
+      "hint": "In SillyTavern, send a message using the same card, preset, and chat history, then paste in the request it actually sent to see where the two assembled prompts differ.",
+      "steps": {
+        "1": "Open your browser's DevTools on the SillyTavern page and switch to the Network tab.",
+        "2": "Send a message and find the …/api/backends/chat-completions/generate request.",
+        "3": "Copy its request payload (JSON) and paste it below."
+      },
       "placeholder": "{ \"messages\": [ … ] }",
       "run": "Compare",
       "invalidJson": "Not valid JSON.",
-      "same": "Both sides are identical.",
-      "diffAt": "First difference at message {{index}}",
+      "same": "Identical",
+      "summary": "Ours {{ours}} · SillyTavern {{theirs}} · {{diffs}} differ",
+      "index": "Message {{index}}",
+      "diffKind": {
+        "role": "Role differs",
+        "content": "Content differs",
+        "both": "Role and content differ",
+        "onlyOurs": "Only on our side",
+        "onlyTheirs": "Only on SillyTavern's side"
+      },
       "ours": "Local strict",
       "theirs": "SillyTavern",
       "missing": "(missing)",
       "hints": "Hints",
       "unavailable": "The server has not implemented POST /api/inspect/compare yet."
     }
+  },
+  "presets": {
+    "back": "Presets",
+    "promptCount": "{{total}} prompt entries",
+    "sections": {
+      "basic": "Basics",
+      "sampling": "Sampling",
+      "prompts": "Prompt entries"
+    },
+    "name": "Name",
+    "samplingHint": "Only parameters already in this preset are listed.",
+    "samplingEmpty": "This preset has no sampling parameters.",
+    "sampling": {
+      "temperature": "Temperature",
+      "top_p": "Top P",
+      "top_k": "Top K",
+      "top_a": "Top A",
+      "min_p": "Min P",
+      "frequency_penalty": "Frequency penalty",
+      "presence_penalty": "Presence penalty",
+      "repetition_penalty": "Repetition penalty",
+      "openai_max_tokens": "Max response length",
+      "openai_max_context": "Max context length",
+      "seed": "Seed",
+      "n": "Candidates",
+      "reasoning_effort": "Reasoning effort"
+    },
+    "promptsHint": "In assembly order. Marker entries are filled in during assembly.",
+    "noOrder": "This preset has no prompt_order; assembly uses the default order.",
+    "addPrompt": "Add entry",
+    "newPromptName": "New entry",
+    "prompt": {
+      "toggle": "Enable “{{name}}”",
+      "moveUp": "Move up",
+      "moveDown": "Move down",
+      "missing": "Not defined in this preset",
+      "markerMeta": "Marker · {{what}}",
+      "inChatMeta": "In chat · depth {{depth}} · order {{order}}",
+      "role": "Role",
+      "position": "Position",
+      "depth": "Depth",
+      "order": "Order",
+      "content": "Content",
+      "delete": "Delete entry",
+      "deleteTitle": "Delete entry?",
+      "deleteMessage": "“{{name}}” will be removed from the preset when you save."
+    },
+    "roles": {
+      "system": "System",
+      "user": "User",
+      "assistant": "Assistant"
+    },
+    "positions": {
+      "relative": "Relative",
+      "inChat": "In chat"
+    },
+    "markers": {
+      "chatHistory": "Chat history",
+      "worldInfoBefore": "World info (before)",
+      "worldInfoAfter": "World info (after)",
+      "charDescription": "Character description",
+      "charPersonality": "Character personality",
+      "scenario": "Scenario",
+      "personaDescription": "Persona",
+      "dialogueExamples": "Example dialogue",
+      "other": "Filled in during assembly"
+    },
+    "dirty": "Unsaved changes",
+    "clean": "No unsaved changes",
+    "saved": "Saved",
+    "saving": "Saving…",
+    "discard": "Discard changes",
+    "saveFailed": "Save failed: {{message}}",
+    "leaveTitle": "Leave the editor?",
+    "leaveMessage": "Unsaved changes will be lost.",
+    "leave": "Leave"
   },
   "errors": {
     "no_connection": "No usable connection",

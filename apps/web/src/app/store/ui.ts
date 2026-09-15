@@ -14,10 +14,13 @@ interface UiState {
   mode: ModeSetting;
   /** 每个主题各自的选项（布尔开关）；没存过的 key 用 ThemeMeta.options 的 default */
   themeOptions: Record<string, Record<string, ThemeOptionValue>>;
+  /** 面向开发与排错的工具（比如检查器的 ST 对照）是否显示；默认关闭 */
+  developerMode: boolean;
   setLanguage: (language: Language) => void;
   setThemeId: (themeId: string) => void;
   setMode: (mode: ModeSetting) => void;
   setThemeOption: (themeId: string, key: string, value: ThemeOptionValue) => void;
+  setDeveloperMode: (developerMode: boolean) => void;
 }
 
 /** v1 只有一个 `theme: 'light' | 'dark' | 'system'` 字段 */
@@ -40,6 +43,7 @@ export const useUiStore = create<UiState>()(
       themeId: DEFAULT_THEME_ID,
       mode: 'light',
       themeOptions: {},
+      developerMode: false,
       setLanguage: (language) => set({ language }),
       setThemeId: (themeId) => set({ themeId }),
       setMode: (mode) => set({ mode }),
@@ -50,15 +54,20 @@ export const useUiStore = create<UiState>()(
             [themeId]: { ...state.themeOptions[themeId], [key]: value },
           },
         })),
+      setDeveloperMode: (developerMode) => set({ developerMode }),
     }),
     {
       name: 'newtavern-ui',
       version: 3,
+      // developerMode 不在 v1/v2/v3 的旧存档里：persist 的默认 merge 是
+      // `{ ...currentState, ...persistedState }`，缺失的键会保留 create() 里的初始值
+      // （false），不需要为它单独写迁移或升版本号。
       partialize: (state) => ({
         language: state.language,
         themeId: state.themeId,
         mode: state.mode,
         themeOptions: state.themeOptions,
+        developerMode: state.developerMode,
       }),
       migrate: (persisted, version) => {
         if (version >= 3) return persisted as unknown as UiState;

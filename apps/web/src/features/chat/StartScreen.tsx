@@ -3,8 +3,16 @@ import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 
 import { Button, buttonVariants } from '../../components/ui/button';
-import { Input } from '../../components/ui/field';
-import { assetUrl, useCharacters, useCreateChat, type CharacterSummary } from '../../lib/api';
+import { Input, Select } from '../../components/ui/field';
+import {
+  assetUrl,
+  useCharacters,
+  useCreateChat,
+  useDefaultPersonaId,
+  usePersonas,
+  type CharacterSummary,
+  type CreateChatInput,
+} from '../../lib/api';
 import { EmptyState, QueryStatus, errorMessage } from '../library/shared';
 
 export interface StartScreenProps {
@@ -17,6 +25,18 @@ export function StartScreen({ onCreated }: StartScreenProps) {
   const characters = useCharacters();
   const createChat = useCreateChat();
   const [query, setQuery] = useState('');
+  const personas = usePersonas();
+  const defaultPersona = useDefaultPersonaId();
+  /** null = 跟随默认档案；'' = 不使用档案 */
+  const [personaChoice, setPersonaChoice] = useState<string | null>(null);
+
+  const personaList = personas.data ?? [];
+  const personaReady = personas.data !== undefined && defaultPersona.data !== undefined;
+  const defaultPersonaId =
+    defaultPersona.data && personaList.some((persona) => persona.id === defaultPersona.data)
+      ? defaultPersona.data
+      : '';
+  const selectedPersonaId = personaChoice ?? defaultPersonaId;
 
   const needle = query.trim().toLowerCase();
   const list = (characters.data ?? []).filter(
@@ -25,7 +45,10 @@ export function StartScreen({ onCreated }: StartScreenProps) {
 
   const start = (character: CharacterSummary | null) => {
     if (createChat.isPending) return;
-    createChat.mutate(character ? { characterIds: [character.id] } : {}, {
+    const input: CreateChatInput = character ? { characterIds: [character.id] } : {};
+    // 档案列表与默认设置都到了才显式传；否则不带字段，由服务端套用默认档案
+    if (personaReady) input.personaId = selectedPersonaId || null;
+    createChat.mutate(input, {
       onSuccess: (chat) => onCreated(chat.id),
     });
   };
@@ -54,6 +77,23 @@ export function StartScreen({ onCreated }: StartScreenProps) {
           <Button variant="outline" onClick={() => start(null)} disabled={createChat.isPending}>
             {t('chat.start.blank')}
           </Button>
+          {personaList.length > 0 && (
+            <div data-part="start-persona" className="w-full min-w-0 sm:w-auto sm:max-w-72">
+              <Select
+                aria-label={t('chat.start.personaLabel')}
+                value={selectedPersonaId}
+                disabled={createChat.isPending || !personaReady}
+                onChange={(event) => setPersonaChoice(event.target.value)}
+              >
+                <option value="">{t('chat.start.personaNone')}</option>
+                {personaList.map((persona) => (
+                  <option key={persona.id} value={persona.id}>
+                    {t('chat.start.personaOption', { name: persona.name })}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          )}
         </div>
 
         {createChat.error && (

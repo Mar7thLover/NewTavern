@@ -186,11 +186,15 @@ export interface WIBookSelection {
   chatBookIds: readonly string[];
   /** `characters.book_id`（ST 的 `extensions.world` 语义） */
   characterBookId: string | null;
+  /** `personas.lorebook_id`（ST `persona_description_lorebook`） */
+  personaBookId?: string | null;
 }
 
 /**
- * 按 AS-13 的优先级组装 `lorebooks`：全局 > 聊天 > 角色，**同名只保留优先级最高的一本**
+ * 按 AS-13 的优先级组装 `lorebooks`：全局 > 聊天 > persona > 角色，**同名只保留优先级最高的一本**
  * （WI-11：重名去重由服务端做，引擎不管）。同一本书被绑定多次也只算一次。
+ * persona 的位置依据 ST `world-info.js`：`getPersonaLore` 跳过与聊天书/全局书同名的书，
+ * `getCharacterLore` 跳过与 persona 书同名的书。
  */
 export function loadWIBooks(db: Db, selection: WIBookSelection): WIBook[] {
   const wanted: { id: string; scope: WIScope }[] = [];
@@ -202,6 +206,7 @@ export function loadWIBooks(db: Db, selection: WIBookSelection): WIBook[] {
   };
   for (const id of selection.globalBookIds) push(id, 'global');
   for (const id of selection.chatBookIds) push(id, 'chat');
+  push(selection.personaBookId ?? null, 'persona');
   push(selection.characterBookId, 'char');
   if (wanted.length === 0) return [];
 

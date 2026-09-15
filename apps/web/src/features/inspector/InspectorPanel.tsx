@@ -9,6 +9,7 @@ import { SegmentList } from './SegmentList';
 import { WorldInfoView } from './WorldInfoView';
 import { isInspectPlaceholder, type InspectData } from './types';
 import { useInspect } from './useInspect';
+import { useUiStore } from '../../app/store/ui';
 import { Badge } from '../../components/ui/badge';
 import { IconButton } from '../../components/ui/icon-button';
 import { Segmented } from '../../components/ui/segmented';
@@ -36,9 +37,16 @@ export function InspectorPanel({ chat, isGenerating }: InspectorPanelProps) {
   const { t } = useTranslation();
   const patchChat = usePatchChat();
   const generationDefault = useGenerationDefault();
+  const developerMode = useUiStore((s) => s.developerMode);
   const [tab, setTab] = useState<InspectorTab>('segments');
   const [view, setView] = useState<'current' | 'strict'>('current');
   const [focusId, setFocusId] = useState<string | null>(null);
+  const tabs = developerMode ? TABS : TABS.filter((item) => item !== 'compare');
+
+  // 关掉开发者模式时若还停在「ST 对照」，退回段视图
+  useEffect(() => {
+    if (!developerMode && tab === 'compare') setTab('segments');
+  }, [developerMode, tab]);
 
   const layoutMode: LayoutMode = chat.overrides?.layoutMode ?? 'cache-aware';
   const connectionId = chat.overrides?.connectionId ?? generationDefault.data?.connectionId ?? null;
@@ -117,7 +125,7 @@ export function InspectorPanel({ chat, isGenerating }: InspectorPanelProps) {
           label={t('inspector.title')}
           value={tab}
           onChange={setTab}
-          items={TABS.map((item) => ({ value: item, label: t(`inspector.tabs.${item}`) }))}
+          items={tabs.map((item) => ({ value: item, label: t(`inspector.tabs.${item}`) }))}
         />
       </header>
 

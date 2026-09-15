@@ -70,10 +70,22 @@ export interface AssembleCharacter {
   };
 }
 
+/**
+ * 描述放在哪：ST `persona_description_positions`（`public/scripts/personas.js`）
+ * IN_PROMPT(0) / TOP_AN(2) / BOTTOM_AN(3) / AT_DEPTH(4) / NONE(9)；已废弃的 AFTER_CHAR(1) 在 ST 里被改回 IN_PROMPT。
+ */
+export type PersonaDescriptionPosition = 'in_prompt' | 'top_an' | 'bottom_an' | 'at_depth' | 'none';
+
 export interface AssemblePersona {
   id?: string;
   name: string;
   description: string;
+  /** 缺省 = 'in_prompt'（走预设的 `personaDescription` 标记） */
+  position?: PersonaDescriptionPosition;
+  /** 只在 at_depth 时生效；缺省 = ST `DEFAULT_DEPTH` 2 */
+  depth?: number;
+  /** 只在 at_depth 时生效；缺省 = ST `DEFAULT_ROLE` 0（system） */
+  role?: WIRole;
 }
 
 export interface AssemblePreset {
@@ -236,6 +248,8 @@ export const DEFAULT_PRESET: AssemblePreset = {
 const INJECTION_POSITION_ABSOLUTE = 1;
 const DEFAULT_INJECTION_DEPTH = 4;
 const DEFAULT_INJECTION_ORDER = 100;
+/** ST personas.js `DEFAULT_DEPTH` */
+const PERSONA_DEFAULT_DEPTH = 2;
 /** ST `getExtensionPrompt` 只在 order 恰为 100 的组里追加扩展注入 */
 const EXTENSION_PROMPT_ORDER = 100;
 const PROMPT_ORDER_DUMMY_IDS = ['100001', '100000'];
@@ -530,6 +544,9 @@ export function assemblePrompt(input: AssembleInputV2): AssembleResult {
   const scenario = substituteMacrosDetailed(readString(cardData.scenario) ?? '', seedCtx);
   const mesExamples = substituteMacrosDetailed(readString(cardData.mes_example) ?? '', seedCtx);
   const personaDescription = substituteMacrosDetailed(input.persona?.description ?? '', seedCtx);
+  const personaPosition = input.persona?.position ?? 'in_prompt';
+  // ST 判的是原始描述（`!power_user.persona_description`），不是宏替换后的结果
+  const personaHasDescription = (input.persona?.description ?? '') !== '';
   const creatorNotes = readString(cardData.creator_notes) ?? '';
   const charDepthPromptText = input.characterDepthPrompt?.text ?? '';
 
@@ -630,6 +647,13 @@ export function assemblePrompt(input: AssembleInputV2): AssembleResult {
     },
     state: input.wiState ?? null,
     messageCount: input.messageCount,
+    // AT_DEPTH 的描述在 ST 里以 `scan: true` 注册成扩展提示词（script.js
+    // `addPersonaDescriptionExtensionPrompt`），WI 扫描时 `buffer.addInject` 会把它并进扫描源
+    // （world-info.js `checkWorldInfo`）。ST 在扫描之后才设置它，所以切换聊天后的第一次生成
+    // 扫不到（`clearChat` 清空了 extension_prompts）；这里取稳态行为，每次都并入。
+    ...(personaPosition === 'at_depth' && personaHasDescription
+      ? { injects: [personaDescription.text] }
+      : {}),
     substitute: (text: string) => substitute(text),
     random,
     countTokens: estimateTokens,
@@ -685,12 +709,19 @@ export function assemblePrompt(input: AssembleInputV2): AssembleResult {
   }
   const anBaseText = anShouldAdd ? substitute(an?.text ?? '') : '';
   // ST world-info.js：`${ANTop}\n${AN}\n${ANBottom}` 后去掉首尾各一个换行
-  const anText = anShouldAdd
+  const anWithWi = anShouldAdd
     ? `${wiAnTopTexts.join('\n')}\n${anBaseText}\n${wiAnBottomTexts.join('\n')}`.replace(
         /(^\n)|(\n$)/g,
         '',
       )
     : '';
+  // 用户档案描述 TOP_AN / BOTTOM_AN：ST script.js `addPersonaDescriptionExtensionPrompt`
+  // 在 WI 并入 AN 之后执行，同样只在 `shouldWIAddPrompt`（AN interval 命中）时拼接，不做 trim
+  let anText = anWithWi;
+  if (anShouldAdd && personaHasDescription) {
+    if (personaPosition === 'top_an') anText = `${personaDescription.text}\n${anWithWi}`;
+    else if (personaPosition === 'bottom_an') anText = `${anWithWi}\n${personaDescription.text}`;
+  }
 
   // ── 预设 prompts 与顺序
   const prompts = readPrompts(data);
@@ -848,6 +879,8 @@ export function assemblePrompt(input: AssembleInputV2): AssembleResult {
           );
           break;
         case 'personaDescription':
+          // ST openai.js `preparePromptsForChatCompletion`：只有 IN_PROMPT 才进 personaDescription 标记
+          if (personaPosition !== 'in_prompt') break;
           addTextSegment('persona', personaDescription, { kind: 'persona' }, 'static', {
             locked: prompt.locked,
           });
@@ -903,6 +936,15 @@ export function assemblePrompt(input: AssembleInputV2): AssembleResult {
               anDepth,
               anRole,
               characterDepthPrompt: input.characterDepthPrompt ?? null,
+              personaDepthPrompt:
+                personaPosition === 'at_depth' && personaHasDescription
+                  ? {
+                      text: personaDescription.text,
+                      volatile: personaDescription.volatile,
+                      depth: input.persona?.depth ?? PERSONA_DEFAULT_DEPTH,
+                      role: input.persona?.role ?? 0,
+                    }
+                  : null,
               wiDepth: wi.buckets.depth,
               wiContent,
               nextId,
@@ -1138,6 +1180,8 @@ interface BuildHistoryArgs {
   anDepth: number;
   anRole: WIRole;
   characterDepthPrompt: AssembleDepthPrompt | null;
+  /** 用户档案描述 AT_DEPTH（文本已宏替换） */
+  personaDepthPrompt: (AssembleDepthPrompt & { volatile: boolean }) | null;
   wiDepth: WIScanResult['buckets']['depth'];
   wiContent: (activation: WIActivation) => string;
   nextId: (base: string) => string;
@@ -1168,6 +1212,7 @@ function buildHistory(args: BuildHistoryArgs): Segment[] {
     anDepth,
     anRole,
     characterDepthPrompt,
+    personaDepthPrompt,
     wiDepth,
     wiContent,
     nextId,
@@ -1186,7 +1231,7 @@ function buildHistory(args: BuildHistoryArgs): Segment[] {
 
   /**
    * ST `getExtensionPrompt(IN_CHAT, depth, '\n', role)`：按 key 字典序合并。
-   * 相关 key 的字典序：`2_floating_prompt` < `DEPTH_PROMPT` < `customDepthWI_*`。
+   * 相关 key 的字典序：`2_floating_prompt` < `DEPTH_PROMPT` < `PERSONA_DESCRIPTION` < `customDepthWI_*`。
    */
   const extensionAt = (depth: number, role: WIRole): InjectionSource[] => {
     const sources: InjectionSource[] = [];
@@ -1212,6 +1257,18 @@ function buildHistory(args: BuildHistoryArgs): Segment[] {
         stability: 'static',
         text: substitute(charDepth.text),
         volatile: false,
+      });
+    }
+    // ST script.js `addPersonaDescriptionExtensionPrompt`：
+    // setExtensionPrompt('PERSONA_DESCRIPTION', desc, IN_CHAT, depth, true, role)
+    const persona = personaDepthPrompt;
+    if (persona && persona.text !== '' && persona.depth === depth && persona.role === role) {
+      sources.push({
+        id: 'persona:depth',
+        origin: { kind: 'persona', ref: 'depth' },
+        stability: 'static',
+        text: persona.text,
+        volatile: persona.volatile,
       });
     }
     for (const bucket of wiDepth) {
@@ -1245,6 +1302,9 @@ function buildHistory(args: BuildHistoryArgs): Segment[] {
   if (anText !== '' && anPosition === 1) depths.add(anDepth);
   if (characterDepthPrompt && characterDepthPrompt.text !== '') {
     depths.add(characterDepthPrompt.depth);
+  }
+  if (personaDepthPrompt && personaDepthPrompt.text !== '') {
+    depths.add(personaDepthPrompt.depth);
   }
   for (const bucket of wiDepth) depths.add(bucket.depth);
 

@@ -234,6 +234,7 @@ loadFonts: () =>
 | `chat-list-item`         | 会话列表每一项 `li`（内含按钮与删除键）                                                                    | `data-active`                                                                           |
 | `chat-list-marker`       | `chat-list-item` 内当前项左侧的强调短线 `span`（仅 `active` 时渲染）                                       | —                                                                                       |
 | `start-screen`           | 未选会话时的开始页（滚动容器，`surface-reading`）                                                          | —                                                                                       |
+| `start-persona`          | 开始页「以谁的身份开始」下拉的外层 `div`（有用户档案时才渲染）                                             | —                                                                                       |
 | `character-card`         | 开始页每张角色卡 `button`（3:4）                                                                           | —                                                                                       |
 | `character-card-initial` | `character-card` 内的首字 `span`（无头像图时渲染）                                                         | —                                                                                       |
 | `character-card-name`    | `character-card` 内的名字 `span`                                                                           | —                                                                                       |
@@ -267,6 +268,8 @@ loadFonts: () =>
 | `segment-bar`            | `segment` 左侧来源色条 `span`                                                                              | —                                                                                       |
 | `segment-header`         | `segment` 头部行（来源/角色/稳定性等徽标 + token 数）                                                      | —                                                                                       |
 | `segment-body`           | `segment` 正文（可展开/折叠的文本按钮）                                                                    | —                                                                                       |
+| `compare-view`           | 检查器「ST 对照」页签根（开发者模式打开时才会出现）                                                        | —                                                                                       |
+| `compare-diff`           | 「ST 对照」结果里每一处差异（按消息下标对齐）                                                              | `data-kind="role\|content\|both\|onlyOurs\|onlyTheirs"`                                 |
 
 ### 5.3 其他页面与浮层
 
@@ -274,6 +277,14 @@ loadFonts: () =>
 | --------------------------- | ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
 | `page-header`               | 库页面/连接页的标题块（`LibraryHeader`）；开始页标题块                                                     | —                                                  |
 | `library-item`              | 角色卡按钮 / 预设行 / 世界书行 / 用户档案卡                                                                | `data-kind="character\|preset\|lorebook\|persona"` |
+| `persona-form`              | 用户档案新建/编辑表单 `form`（`modal-body` 内，左头像右字段，窄屏单列）                                    | —                                                  |
+| `persona-avatar-field`      | `persona-form` 左栏：`AvatarFrame` 预览 + 上传/移除按钮                                                    | —                                                  |
+| `persona-depth-fields`      | `persona-form` 里「按深度注入」时出现的深度 + 消息角色两栏                                                 | —                                                  |
+| `preset-editor`             | 预设编辑器页根（`/presets/:id`）                                                                           | —                                                  |
+| `preset-section`            | 编辑器分区 `section`（基本 / 采样参数 / 提示词条目）                                                       | `data-section="basic\|sampling\|prompts"`          |
+| `preset-prompt-list`        | 提示词条目列表 `ol`（按组装使用的 `prompt_order` 排序）                                                    | —                                                  |
+| `preset-prompt-item`        | 每个条目 `li`（开关、上移/下移、名称；普通条目可展开编辑）                                                 | `data-marker`、`data-enabled`、`data-open`         |
+| `preset-save-bar`           | 编辑器底部吸附的保存条（`surface-raised`，保存 / 放弃修改）                                                | `data-dirty`                                       |
 | `connection-card`           | 连接页每个连接 `li`                                                                                        | —                                                  |
 | `settings-nav`              | 设置页分区导航 `nav`                                                                                       | —                                                  |
 | `settings-nav-item`         | 分区按钮                                                                                                   | `data-active`（另有 `aria-current`）               |

@@ -47,7 +47,7 @@ export function createApp({ db, dataDir, webDist }: AppOptions) {
   const api = new Hono()
     .get('/health', (c) => c.json({ ok: true, name: 'newtavern', time: new Date().toISOString() }))
     .route('/settings', createSettingsRoutes(db))
-    .route('/personas', createPersonasRoutes(db))
+    .route('/personas', createPersonasRoutes(db, assets))
     .route('/characters', createCharactersRoutes(db, importer))
     .route('/presets', createPresetsRoutes(db, importer))
     .route('/lorebooks', createLorebooksRoutes(db, importer))

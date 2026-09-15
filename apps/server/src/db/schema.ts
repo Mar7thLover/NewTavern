@@ -147,12 +147,33 @@ export const lorebookEntries = sqliteTable(
   (t) => [index('lorebook_entries_book_idx').on(t.bookId)],
 );
 
+/**
+ * 用户档案，对齐 ST `power_user.persona_descriptions[avatar]`
+ * （`public/scripts/personas.js`：description / title / position / depth / role / lorebook）。
+ * `position` 是列表排序；描述放在哪用 `descriptionPosition`，取值对应 ST
+ * `persona_description_positions` 的 IN_PROMPT(0) / TOP_AN(2) / BOTTOM_AN(3) / AT_DEPTH(4) / NONE(9)。
+ */
 export const personas = sqliteTable('personas', {
   id: id(),
   name: text('name').notNull(),
   description: text('description').notNull().default(''),
+  /** ST `title`：档案卡上名字下面的小字，不进提示词 */
+  title: text('title').notNull().default(''),
   avatarAssetId: text('avatar_asset_id'),
   position: integer('position').notNull().default(0),
+  descriptionPosition: text('description_position', {
+    enum: ['in_prompt', 'top_an', 'bottom_an', 'at_depth', 'none'],
+  })
+    .notNull()
+    .default('in_prompt'),
+  /** ST `DEFAULT_DEPTH = 2`；只在 at_depth 时生效 */
+  depth: integer('depth').notNull().default(2),
+  /** ST `DEFAULT_ROLE = 0`（extension_prompt_roles.SYSTEM）；只在 at_depth 时生效 */
+  role: text('role', { enum: ['system', 'user', 'assistant'] })
+    .notNull()
+    .default('system'),
+  /** ST `lorebook`：绑定的世界书（删除世界书时置空） */
+  lorebookId: text('lorebook_id').references(() => lorebooks.id, { onDelete: 'set null' }),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });

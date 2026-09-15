@@ -5,6 +5,7 @@ import { ChatPage } from '../features/chat/ChatPage';
 import { CharactersPage } from '../features/library/CharactersPage';
 import { LorebooksPage } from '../features/library/LorebooksPage';
 import { PersonasPage } from '../features/library/PersonasPage';
+import { PresetEditorPage } from '../features/library/PresetEditorPage';
 import { PresetsPage } from '../features/library/PresetsPage';
 import { ConnectionsPage } from '../features/settings/ConnectionsPage';
 import { SettingsPage } from '../features/settings/SettingsPage';
@@ -17,6 +18,7 @@ const router = createBrowserRouter([
       { path: '/', element: <ChatPage /> },
       { path: '/characters', element: <CharactersPage /> },
       { path: '/presets', element: <PresetsPage /> },
+      { path: '/presets/:id', element: <PresetEditorPage /> },
       { path: '/lorebooks', element: <LorebooksPage /> },
       { path: '/personas', element: <PersonasPage /> },
       { path: '/studio', element: <PlaceholderPage titleKey="nav.studio" /> },

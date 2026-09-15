@@ -29,8 +29,8 @@ import { readGlobalBookIds, readWISettings } from './wi-settings.js';
  * `AssembleInputV2` 的构造（M3 契约 §6 第一条）。generate / inspect / compare 共用。
  *
  * 各字段的来源：
- * - `lorebooks`：全局 `worldInfo.globalBookIds` + `chat_lorebooks` + `characters.book_id`，
- *   同名按 全局 > 聊天 > 角色 去重（AS-13 / WI-11），条目映射见 `wi-map.ts`；
+ * - `lorebooks`：全局 `worldInfo.globalBookIds` + `chat_lorebooks` + `personas.lorebook_id` + `characters.book_id`，
+ *   同名按 全局 > 聊天 > persona > 角色 去重（AS-13 / WI-11），条目映射见 `wi-map.ts`；
  * - `wiSettings`：`wi-settings.ts`，预算按 AS-7 的 `round(pct × (ctx − maxTokens) / 100) || 1`；
  * - `wiState` / `variables.chat`：沿 root→parent 路径最近的一份节点快照
  *   （`message_nodes.wi_state` / `variables`；user 节点没有快照，所以要向上找）；
@@ -42,6 +42,9 @@ import { readGlobalBookIds, readWISettings } from './wi-settings.js';
  * - `layoutPolicy.frozenVolatile`：`chats.metadata.frozenVolatile`；
  * - `rng.seed`：`${chatId}:${parentId}:${siblingSeq}`（同一 swipe 位重新生成得到同一随机流）。
  */
+
+/** `personas.role` → ST `extension_prompt_roles` */
+const PERSONA_ROLE = { system: 0, user: 1, assistant: 2 } as const;
 
 export interface BuildAssembleInputContext {
   chat: ChatRow;
@@ -191,7 +194,14 @@ export function buildAssembleInput(db: Db, ctx: BuildAssembleInputContext): Asse
         ? { id: characterRow.id, name: characterRow.name, data: characterData }
         : null,
     persona: personaRow
-      ? { id: personaRow.id, name: personaRow.name, description: personaRow.description }
+      ? {
+          id: personaRow.id,
+          name: personaRow.name,
+          description: personaRow.description,
+          position: personaRow.descriptionPosition,
+          depth: personaRow.depth,
+          role: PERSONA_ROLE[personaRow.role],
+        }
       : null,
     history,
     layoutMode: ctx.layoutMode,
@@ -200,6 +210,7 @@ export function buildAssembleInput(db: Db, ctx: BuildAssembleInputContext): Asse
       globalBookIds: readGlobalBookIds(db),
       chatBookIds: readChatLorebookIds(db, chat.id),
       characterBookId: characterRow?.bookId ?? null,
+      personaBookId: personaRow?.lorebookId ?? null,
     }),
     wiSettings: readWISettings(db, { maxContext: maxContextTokens, maxResponse }),
     wiState,

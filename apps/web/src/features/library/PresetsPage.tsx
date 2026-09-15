@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router';
 
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { ImportButton } from '../../components/ImportButton';
@@ -61,7 +62,12 @@ export function PresetsPage() {
                 className="flex flex-col gap-2 px-1 py-3 sm:flex-row sm:items-center sm:gap-4"
               >
                 <div className="min-w-0 flex-1">
-                  <div className="truncate font-medium">{preset.name}</div>
+                  <Link
+                    to={`/presets/${encodeURIComponent(preset.id)}`}
+                    className="focus-ring rounded-control block truncate font-medium hover:text-accent"
+                  >
+                    {preset.name}
+                  </Link>
                   <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-2">
                     <Badge>{t(`library.presets.formats.${preset.format}`)}</Badge>
                     <span>
@@ -74,6 +80,12 @@ export function PresetsPage() {
                   </div>
                 </div>
                 <div className="flex shrink-0 gap-2">
+                  <Link
+                    to={`/presets/${encodeURIComponent(preset.id)}`}
+                    className={buttonVariants({ variant: 'outline', size: 'sm' })}
+                  >
+                    {t('common.edit')}
+                  </Link>
                   <a
                     href={apiUrls.exportPreset(preset.id)}
                     download

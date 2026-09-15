@@ -58,7 +58,9 @@
       "worldInfo": "世界书",
       "globalSystemPrompt": "全局系统提示词",
       "regex": "正则脚本"
-    }
+    },
+    "developerMode": "开发者模式",
+    "developerModeHint": "显示面向开发与排错的工具，比如检查器里的 ST 对照。"
   },
   "appearance": {
     "world": "世界",
@@ -165,7 +167,39 @@
       "nameRequired": "请填写名称。",
       "noDescription": "暂无描述",
       "deleteTitle": "删除用户档案？",
-      "deleteMessage": "将永久删除「{{name}}」，此操作无法撤销。"
+      "deleteMessage": "将永久删除「{{name}}」，此操作无法撤销。",
+      "defaultBadge": "默认",
+      "setDefault": "设为默认",
+      "unsetDefault": "取消默认",
+      "defaultHint": "新对话默认用这个档案",
+      "title": "称号",
+      "titlePlaceholder": "显示在名字下面，不进提示词",
+      "avatar": "头像",
+      "avatarUpload": "上传头像",
+      "avatarChange": "更换",
+      "avatarRemove": "移除",
+      "avatarHint": "PNG、JPEG、WebP，不超过 5MB",
+      "avatarTooLarge": "图片超过 5MB。",
+      "avatarBadType": "只支持 PNG、JPEG、WebP。",
+      "position": "描述放在哪",
+      "positions": {
+        "in_prompt": "预设里的用户描述位置",
+        "at_depth": "按深度注入",
+        "top_an": "作者注释之前",
+        "bottom_an": "作者注释之后",
+        "none": "不放入"
+      },
+      "depth": "深度",
+      "depthHint": "0 = 最新一条消息之后",
+      "role": "消息角色",
+      "roles": {
+        "system": "系统",
+        "user": "用户",
+        "assistant": "AI"
+      },
+      "lorebook": "绑定世界书",
+      "lorebookNone": "不绑定",
+      "lorebookHint": "用这个档案时一起生效。"
     }
   },
   "chat": {
@@ -192,7 +226,10 @@
       "hint": "点一张角色卡新建对话，或者从空白开始。",
       "blank": "空白对话",
       "noCharactersTitle": "还没有角色",
-      "noCharactersHint": "先到角色库导入角色卡，再回来开始对话。"
+      "noCharactersHint": "先到角色库导入角色卡，再回来开始对话。",
+      "personaLabel": "用户档案",
+      "personaOption": "以「{{name}}」的身份开始",
+      "personaNone": "不使用用户档案"
     },
     "composer": {
       "placeholder": "说点什么…",
@@ -438,7 +475,7 @@
       "segments": "段",
       "worldInfo": "世界书",
       "request": "原始请求",
-      "compare": "ST 比对"
+      "compare": "ST 对照"
     },
     "view": {
       "current": "当前布局",
@@ -530,19 +567,108 @@
       "copy": "复制 JSON"
     },
     "compare": {
-      "title": "与 ST 请求比对",
-      "hint": "粘贴 SillyTavern 实际发出的请求体 JSON，逐条比对 messages。",
+      "title": "与 SillyTavern 对照",
+      "hint": "在 SillyTavern 里用同一张卡、同一份预设和同样的聊天记录发一条消息，把它实际发出的请求贴进来，看两边拼出的提示词哪里不一样。",
+      "steps": {
+        "1": "在 SillyTavern 页面打开浏览器开发者工具，切到「网络」。",
+        "2": "发送一条消息，找到 …/api/backends/chat-completions/generate 请求。",
+        "3": "复制它的请求载荷（JSON），粘贴到下面。"
+      },
       "placeholder": "{ \"messages\": [ … ] }",
       "run": "开始比对",
       "invalidJson": "不是合法的 JSON。",
-      "same": "两侧完全一致。",
-      "diffAt": "第 {{index}} 条消息开始不同",
+      "same": "完全一致",
+      "summary": "我们 {{ours}} 条 · SillyTavern {{theirs}} 条 · {{diffs}} 处不同",
+      "index": "第 {{index}} 条",
+      "diffKind": {
+        "role": "角色不同",
+        "content": "内容不同",
+        "both": "角色与内容都不同",
+        "onlyOurs": "仅本地存在",
+        "onlyTheirs": "仅 SillyTavern 存在"
+      },
       "ours": "本地 strict",
       "theirs": "SillyTavern",
       "missing": "（缺少这一条）",
       "hints": "提示",
       "unavailable": "服务端还没有实现比对端点（POST /api/inspect/compare）。"
     }
+  },
+  "presets": {
+    "back": "预设库",
+    "promptCount": "{{total}} 个提示词条目",
+    "sections": {
+      "basic": "基本",
+      "sampling": "采样参数",
+      "prompts": "提示词条目"
+    },
+    "name": "名称",
+    "samplingHint": "只列出这份预设里已有的参数。",
+    "samplingEmpty": "这份预设没有采样参数。",
+    "sampling": {
+      "temperature": "温度",
+      "top_p": "Top P",
+      "top_k": "Top K",
+      "top_a": "Top A",
+      "min_p": "Min P",
+      "frequency_penalty": "频率惩罚",
+      "presence_penalty": "存在惩罚",
+      "repetition_penalty": "重复惩罚",
+      "openai_max_tokens": "最大输出长度",
+      "openai_max_context": "最大上下文长度",
+      "seed": "随机种子",
+      "n": "候选数",
+      "reasoning_effort": "推理强度"
+    },
+    "promptsHint": "按组装顺序排列。标记条目的内容在组装时自动填入。",
+    "noOrder": "这份预设没有提示词顺序（prompt_order），组装时按默认顺序。",
+    "addPrompt": "新增条目",
+    "newPromptName": "新条目",
+    "prompt": {
+      "toggle": "启用「{{name}}」",
+      "moveUp": "上移",
+      "moveDown": "下移",
+      "missing": "预设里没有这个条目的定义",
+      "markerMeta": "占位 · {{what}}",
+      "inChatMeta": "聊天内 · 深度 {{depth}} · 顺序 {{order}}",
+      "role": "角色",
+      "position": "注入位置",
+      "depth": "注入深度",
+      "order": "注入顺序",
+      "content": "正文",
+      "delete": "删除条目",
+      "deleteTitle": "删除条目？",
+      "deleteMessage": "「{{name}}」会从预设中移除，保存后生效。"
+    },
+    "roles": {
+      "system": "系统",
+      "user": "用户",
+      "assistant": "助手"
+    },
+    "positions": {
+      "relative": "相对",
+      "inChat": "聊天内"
+    },
+    "markers": {
+      "chatHistory": "聊天记录",
+      "worldInfoBefore": "世界书（前）",
+      "worldInfoAfter": "世界书（后）",
+      "charDescription": "角色描述",
+      "charPersonality": "角色性格",
+      "scenario": "场景",
+      "personaDescription": "用户档案",
+      "dialogueExamples": "示例对话",
+      "other": "组装时填入"
+    },
+    "dirty": "有未保存的修改",
+    "clean": "没有未保存的修改",
+    "saved": "已保存",
+    "saving": "保存中…",
+    "discard": "放弃修改",
+    "saveFailed": "保存失败：{{message}}",
+    "leaveTitle": "离开编辑器？",
+    "leaveMessage": "未保存的修改会丢失。",
+    "leave": "离开"
   },
   "errors": {
     "no_connection": "没有可用的连接",

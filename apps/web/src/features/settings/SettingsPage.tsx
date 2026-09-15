@@ -9,6 +9,7 @@ import { WorldInfoSettings } from './WorldInfoSettings';
 import { SettingsSection } from './shared';
 import { useUiStore } from '../../app/store/ui';
 import { Button } from '../../components/ui/button';
+import { Switch } from '../../components/ui/switch';
 import { cn } from '../../lib/utils';
 
 const SECTIONS = ['general', 'appearance', 'worldInfo', 'globalSystemPrompt', 'regex'] as const;
@@ -66,24 +67,36 @@ function GeneralSettings() {
   const { t } = useTranslation();
   const language = useUiStore((s) => s.language);
   const setLanguage = useUiStore((s) => s.setLanguage);
+  const developerMode = useUiStore((s) => s.developerMode);
+  const setDeveloperMode = useUiStore((s) => s.setDeveloperMode);
 
   return (
-    <SettingsSection title={t('common.language')} hint={t('settings.languageDescription')}>
-      <div className="flex gap-2">
-        {SUPPORTED_LANGUAGES.map((lang) => (
-          // 当前项只用 1px 墨线描边：一个视图里唯一的实心物件留给主动作
-          <Button
-            key={lang}
-            variant="outline"
-            size="sm"
-            aria-pressed={language === lang}
-            className={cn(language === lang ? 'border-ink text-ink' : 'text-ink-2')}
-            onClick={() => setLanguage(lang as Language)}
-          >
-            {LANGUAGE_LABELS[lang]}
-          </Button>
-        ))}
-      </div>
-    </SettingsSection>
+    <>
+      <SettingsSection title={t('common.language')} hint={t('settings.languageDescription')}>
+        <div className="flex gap-2">
+          {SUPPORTED_LANGUAGES.map((lang) => (
+            // 当前项只用 1px 墨线描边：一个视图里唯一的实心物件留给主动作
+            <Button
+              key={lang}
+              variant="outline"
+              size="sm"
+              aria-pressed={language === lang}
+              className={cn(language === lang ? 'border-ink text-ink' : 'text-ink-2')}
+              onClick={() => setLanguage(lang as Language)}
+            >
+              {LANGUAGE_LABELS[lang]}
+            </Button>
+          ))}
+        </div>
+      </SettingsSection>
+
+      <SettingsSection title={t('settings.developerMode')} hint={t('settings.developerModeHint')}>
+        <Switch
+          checked={developerMode}
+          label={t('settings.developerMode')}
+          onChange={setDeveloperMode}
+        />
+      </SettingsSection>
+    </>
   );
 }

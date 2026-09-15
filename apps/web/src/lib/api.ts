@@ -169,12 +169,30 @@ export interface LorebookDetail extends Omit<LorebookSummary, 'entryCount'> {
   entries: LorebookEntry[];
 }
 
+/** 描述放在哪（对应 ST `persona_description_positions`） */
+export type PersonaDescriptionPosition = 'in_prompt' | 'top_an' | 'bottom_an' | 'at_depth' | 'none';
+
+export const PERSONA_DESCRIPTION_POSITIONS: PersonaDescriptionPosition[] = [
+  'in_prompt',
+  'at_depth',
+  'top_an',
+  'bottom_an',
+  'none',
+];
+
+export type PersonaRole = 'system' | 'user' | 'assistant';
+
 export interface Persona {
   id: string;
   name: string;
   description: string;
+  title: string;
   avatarAssetId: string | null;
   position: number;
+  descriptionPosition: PersonaDescriptionPosition;
+  depth: number;
+  role: PersonaRole;
+  lorebookId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -182,6 +200,11 @@ export interface Persona {
 export interface PersonaInput {
   name: string;
   description?: string;
+  title?: string;
+  descriptionPosition?: PersonaDescriptionPosition;
+  depth?: number;
+  role?: PersonaRole;
+  lorebookId?: string | null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -596,6 +619,30 @@ export function usePreset(id: string | null) {
   });
 }
 
+/** `PUT /api/presets/:id`：整份替换 data（服务端校验并保留未知字段），name 可选 */
+export interface PresetUpdateInput {
+  name?: string;
+  data: Record<string, unknown>;
+}
+
+export function useUpdatePreset(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: PresetUpdateInput) =>
+      mutate<PresetDetail>(`/api/presets/${enc(id)}`, 'PUT', input),
+    onSuccess: (row) => {
+      queryClient.setQueryData(queryKeys.preset(id), row);
+      return Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.presets, exact: true }),
+        // 检查器结果依赖预设：各会话的 inspect 缓存一并失效（只有打开着的面板会立即重取）
+        queryClient.invalidateQueries({
+          predicate: (query) => query.queryKey[0] === 'chats' && query.queryKey[2] === 'inspect',
+        }),
+      ]);
+    },
+  });
+}
+
 export function useDeletePreset() {
   return useDeleteResource('/api/presets', queryKeys.presets);
 }
@@ -647,7 +694,54 @@ export function useDeletePersona() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => mutate(`/api/personas/${enc(id)}`, 'DELETE'),
+    // 删掉的若是默认档案，服务端会一并清掉设置
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.personas }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.setting(DEFAULT_PERSONA_KEY) }),
+      ]),
+  });
+}
+
+/** 上传 / 更换头像（png、jpeg、webp，≤ 5MB） */
+export function useUploadPersonaAvatar() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, file }: { id: string; file: File }) =>
+      uploadFile<Persona>(`/api/personas/${enc(id)}/avatar`, file),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.personas }),
+  });
+}
+
+export function useDeletePersonaAvatar() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => mutate<Persona>(`/api/personas/${enc(id)}/avatar`, 'DELETE'),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.personas }),
+  });
+}
+
+/** 设置 KV 里的默认用户档案 id；新建对话不带 personaId 时服务端用它 */
+export const DEFAULT_PERSONA_KEY = 'defaultPersonaId';
+
+const normalizePersonaId = (value: unknown): string | null =>
+  typeof value === 'string' ? value : null;
+
+export const useDefaultPersonaId = () => useSetting(DEFAULT_PERSONA_KEY, normalizePersonaId);
+
+export function useSetDefaultPersonaId() {
+  const queryClient = useQueryClient();
+  const url = `/api/settings/${enc(DEFAULT_PERSONA_KEY)}`;
+  return useMutation({
+    mutationFn: async (id: string | null) => {
+      if (id === null) {
+        await mutate(url, 'DELETE');
+        return null;
+      }
+      const row = await mutate<{ key: string; value: unknown }>(url, 'PUT', id);
+      return normalizePersonaId(row.value);
+    },
+    onSuccess: (data) => queryClient.setQueryData(queryKeys.setting(DEFAULT_PERSONA_KEY), data),
   });
 }
 
