@@ -5,6 +5,7 @@ import { errorTypeToKind, isAbortError, normalizeUnknownError } from '../errors.
 import { providerFetch, providerGet, trimTrailingSlash } from '../http.js';
 import { irToChatMessages, type ChatMessage } from '../messages.js';
 import { parseSseStream } from '../sse.js';
+import { canDisableThinking, resolveThinking, stEffortToOpenAI } from '../thinking.js';
 import type {
   BuildOptions,
   Connection,
@@ -14,6 +15,7 @@ import type {
   ProviderAdapter,
   ProviderError,
   ProviderRequest,
+  ThinkingOptions,
 } from '../types.js';
 
 /**
@@ -45,11 +47,13 @@ export function detectQuirks(baseUrl: string): Record<string, boolean> {
     };
   }
   if (host === 'api.z.ai' || host.endsWith('.z.ai') || host.includes('bigmodel')) {
-    // Z.AI / 智谱 GLM：流式 delta 带 reasoning_content，无 developer 角色，不认 reasoning_effort
+    // Z.AI / 智谱 GLM：流式 delta 带 reasoning_content，无 developer 角色；
+    // 推理控制（2026-09-14 实测 glm-5.3-flash）：认 reasoning_effort，也认 thinking:{type:enabled|disabled}
     return {
       developerRole: false,
       streamUsage: true,
-      reasoningEffort: false,
+      reasoningEffort: true,
+      thinkingToggle: true,
       reasoningContent: true,
       prefill: true,
     };
@@ -173,11 +177,38 @@ function buildRequest(
 
   if (quirks.streamUsage !== false) body.stream_options = { include_usage: true };
 
-  const effort = opts?.thinking?.effort ?? irThinkingEffort(ir);
-  if (caps.thinking === 'effort' && quirks.reasoningEffort !== false && effort !== undefined) {
-    body.reasoning_effort = effort;
-  } else if (effort !== undefined && caps.thinking !== 'effort') {
-    warnings.push(`模型 ${model} 不支持 reasoning_effort，已丢弃 effort=${effort}`);
+  // 推理控制：会话覆盖 > IR 扩展 > 预设 reasoning_effort（见 thinking.ts）
+  const resolved = resolveThinking(ir, opts);
+  const thinkingOpt: ThinkingOptions = resolved.stEffort
+    ? { effort: stEffortToOpenAI(resolved.stEffort, model) }
+    : resolved.thinking;
+  const sendsEffort = caps.thinking === 'effort' && quirks.reasoningEffort !== false;
+  if (thinkingOpt.enabled === false) {
+    if (!canDisableThinking(caps)) {
+      if (caps.thinking !== 'none') warnings.push(`模型 ${model} 不支持关闭推理，已按默认处理`);
+    } else if (quirks.thinkingToggle) {
+      // Z.AI GLM 等：`thinking:{type:'disabled'}` 开关
+      body.thinking = { type: 'disabled' };
+    } else if (sendsEffort && (caps.effortLevels ?? []).includes('none')) {
+      body.reasoning_effort = 'none';
+    } else {
+      warnings.push(`端点没有可用的关闭推理参数（thinkingToggle / effort=none），已按默认处理`);
+    }
+  } else if (thinkingOpt.effort !== undefined) {
+    const effort = thinkingOpt.effort;
+    if (sendsEffort) {
+      body.reasoning_effort = effort;
+      if (caps.effortLevels && !caps.effortLevels.includes(effort)) {
+        warnings.push(`effort=${effort} 不在 ${model} 的已知档位内，仍按原样发送`);
+      }
+    } else if (caps.thinking !== 'effort') {
+      warnings.push(`模型 ${model} 不支持 reasoning_effort，已丢弃 effort=${effort}`);
+    } else {
+      warnings.push(`连接的 reasoningEffort quirk 已关闭，已丢弃 effort=${effort}`);
+    }
+  }
+  if (thinkingOpt.budgetTokens !== undefined && thinkingOpt.enabled !== false) {
+    warnings.push('OpenAI Chat 用 reasoning_effort 档位控制推理，budgetTokens 已丢弃');
   }
 
   const headers: Record<string, string> = {
@@ -193,14 +224,6 @@ function buildRequest(
     body,
     ...(warnings.length > 0 ? { warnings } : {}),
   };
-}
-
-/** `ir.sampling` 上的扩展字段（core 目前未声明，按可选读取） */
-function irThinkingEffort(ir: PromptIR): string | undefined {
-  const ext = (ir.sampling as Record<string, unknown>).thinking;
-  if (typeof ext !== 'object' || ext === null) return undefined;
-  const effort = (ext as { effort?: unknown }).effort;
-  return typeof effort === 'string' ? effort : undefined;
 }
 
 function capabilities(model: string, conn: Connection): ModelCapabilities {

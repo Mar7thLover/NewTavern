@@ -204,6 +204,29 @@ describe('chats 树操作', () => {
     });
     expect(bad.status).toBe(400);
   });
+
+  it('PATCH overrides.thinking：形状校验，null 表示跟随预设（删掉该键）', async () => {
+    const { app, db } = makeTestApp(dataDir);
+    const characterId = insertCharacter(db);
+    const chat = (await (
+      await app.request('/api/chats', post({ characterIds: [characterId] }))
+    ).json()) as Detail;
+    const patch = (overrides: unknown) =>
+      app.request(`/api/chats/${chat.id}`, { ...post({ overrides }), method: 'PATCH' });
+    type WithOverrides = Detail & { overrides: Record<string, unknown> };
+
+    const off = (await (
+      await patch({ model: 'x', thinking: { enabled: false } })
+    ).json()) as WithOverrides;
+    expect(off.overrides).toEqual({ model: 'x', thinking: { enabled: false } });
+    const cleared = (await (await patch({ model: 'x', thinking: null })).json()) as WithOverrides;
+    expect(cleared.overrides).toEqual({ model: 'x' });
+
+    expect((await patch({ thinking: { effort: 3 } })).status).toBe(400);
+    expect((await patch({ thinking: { budgetTokens: -1 } })).status).toBe(400);
+    expect((await patch({ thinking: { level: 'high' } })).status).toBe(400);
+    expect((await patch({ thinking: 'high' })).status).toBe(400);
+  });
 });
 
 const FAKE_EVENTS: GenEvent[] = [

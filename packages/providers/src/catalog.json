@@ -11,7 +11,11 @@
     "- Gemini 3.x thinking 视为 'level'，effortLevels 只写已公开的 low/high。",
     "- 任何未列入 models[] 的模型只会拿到 providers[] 的保守默认值（caching 视 provider 而定，thinking='none'）。",
     "- imageOut 一律 false：M2 不处理原生生图，M4 再开。",
-    "- glm-*（Z.AI / 智谱，既有 Anthropic 兼容端点也有 OpenAI 兼容端点）：Anthropic 侧实测返回带 signature 的 thinking 块，thinking 用 {type:'enabled',budget_tokens}；OpenAI 侧走 reasoning_content。上下文/输出上限按 200K/32K 保守取值。"
+    "- glm-*（Z.AI / 智谱，既有 Anthropic 兼容端点也有 OpenAI 兼容端点）：Anthropic 侧实测返回带 signature 的 thinking 块；OpenAI 侧走 reasoning_content。上下文/输出上限按 200K/32K 保守取值。",
+    "- glm-* 推理控制（2026-09-14 实测 glm-5.3-flash，OpenAI 兼容端点，同一难题 reasoning_tokens）：不传 ≈5000；reasoning_effort none/minimal/low → 0；medium ≈300；high ≈1600；xhigh ≈1700；max ≈2000；非法值不报错、按默认推理；thinking:{type:'disabled'} → 0 且压过 reasoning_effort。故建模为 thinking='effort'、effortLevels=medium/high/max（low 及以下等同关闭，不单列），canDisableThinking=true，关闭走 thinking.type（quirk thinkingToggle）。",
+    "- glm-* 推理控制（同日实测，Anthropic 兼容端点，thinking 字符数）：不传 ≈5100；output_config.effort low → 无推理块；medium ≈760；high ≈3250；max ≈5300；非法值不报错；thinking:{type:'disabled'} → 无；budget_tokens 1024 与 12000 都照常长推理（预算不生效，只是开关）；thinking:{type:'adaptive'} 被接受。故建模为 thinking='adaptive'（走 output_config.effort）、effortLevels=medium/high/max、canDisableThinking=true。",
+    "canDisableThinking（能否关闭推理）：Anthropic 默认可关（发 thinking:{type:'disabled'}），Fable/Mythos 5 系列始终推理不可关；Gemini 2.5 Flash / Flash-Lite 用 thinkingBudget=0 关闭，2.5 Pro 与 3.x 不可关；OpenAI 系只有 effortLevels 含 none 的模型（GPT-5.1+）可关。",
+    "Gemini 3 Flash 的 thinkingLevel 支持 minimal/low/medium/high（与 ST calculateGoogleBudgetTokens 的 getGemini3FlashBudget 一致），Pro 仍只写 low/high。"
   ],
   "version": 2,
   "updated": "2026-09-13",
@@ -32,6 +36,7 @@
   "providers": {
     "anthropic": {
       "capabilities": {
+        "canDisableThinking": true,
         "caching": "breakpoints",
         "maxBreakpoints": 4,
         "cacheMinTokens": 1024,
@@ -201,6 +206,7 @@
       "capabilities": {
         "thinking": "adaptive",
         "effortLevels": ["low", "medium", "high", "xhigh", "max"],
+        "canDisableThinking": false,
         "systemInMessages": true,
         "prefill": false,
         "maxContext": 1000000,
@@ -213,6 +219,7 @@
       "capabilities": {
         "thinking": "adaptive",
         "effortLevels": ["low", "medium", "high", "xhigh", "max"],
+        "canDisableThinking": false,
         "systemInMessages": true,
         "prefill": false,
         "maxContext": 1000000,
@@ -223,7 +230,9 @@
       "provider": "anthropic",
       "match": "glm-*",
       "capabilities": {
-        "thinking": "budget",
+        "thinking": "adaptive",
+        "effortLevels": ["medium", "high", "max"],
+        "canDisableThinking": true,
         "reasoningRoundtrip": "signature",
         "caching": "breakpoints",
         "maxBreakpoints": 4,
@@ -239,7 +248,9 @@
       "provider": "openai-chat",
       "match": "glm-*",
       "capabilities": {
-        "thinking": "none",
+        "thinking": "effort",
+        "effortLevels": ["medium", "high", "max"],
+        "canDisableThinking": true,
         "caching": "prefix-auto",
         "cacheMinTokens": 1024,
         "imageIn": false,
@@ -394,6 +405,7 @@
       "match": "gemini-2.5-flash*",
       "capabilities": {
         "thinking": "budget",
+        "canDisableThinking": true,
         "maxContext": 1000000,
         "maxOutput": 65536
       }
@@ -451,6 +463,7 @@
       "capabilities": {
         "thinking": "effort",
         "effortLevels": ["none", "minimal", "low", "medium", "high", "xhigh"],
+        "canDisableThinking": true,
         "maxContext": 400000,
         "maxOutput": 128000
       }
@@ -469,6 +482,7 @@
       "match": "gemini-2.5-flash-lite*",
       "capabilities": {
         "thinking": "budget",
+        "canDisableThinking": true,
         "maxContext": 1000000,
         "maxOutput": 65536
       }
@@ -478,7 +492,7 @@
       "match": "gemini-3-flash*",
       "capabilities": {
         "thinking": "level",
-        "effortLevels": ["low", "high"],
+        "effortLevels": ["minimal", "low", "medium", "high"],
         "maxContext": 1000000,
         "maxOutput": 65536
       }

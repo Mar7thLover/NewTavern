@@ -5,6 +5,7 @@ import { errorTypeToKind, isAbortError, normalizeUnknownError } from '../errors.
 import { providerFetch, providerGet, trimTrailingSlash } from '../http.js';
 import { irToChatMessages, mergeAdjacentSameRole, type ChatMessage } from '../messages.js';
 import { parseSseStream } from '../sse.js';
+import { canDisableThinking, resolveThinking, stEffortToClaude } from '../thinking.js';
 import type {
   BuildOptions,
   Connection,
@@ -14,6 +15,7 @@ import type {
   ProviderAdapter,
   ProviderError,
   ProviderRequest,
+  ThinkingOptions,
 } from '../types.js';
 
 /**
@@ -119,16 +121,6 @@ function normalizeSystemRoles(messages: ChatMessage[], systemInMessages: boolean
     const ok = systemInMessages && (next === undefined || next.role === 'assistant');
     return ok ? msg : { ...msg, role: 'user' as const };
   });
-}
-
-function irThinking(ir: PromptIR): { effort?: string; budgetTokens?: number } {
-  const ext = (ir.sampling as Record<string, unknown>).thinking;
-  if (typeof ext !== 'object' || ext === null) return {};
-  const obj = ext as { effort?: unknown; budgetTokens?: unknown };
-  return {
-    ...(typeof obj.effort === 'string' ? { effort: obj.effort } : {}),
-    ...(typeof obj.budgetTokens === 'number' ? { budgetTokens: obj.budgetTokens } : {}),
-  };
 }
 
 interface AnthropicBody {
@@ -249,10 +241,20 @@ function buildRequest(
   };
   if (systemFlat.length > 0) body.system = systemFlat;
 
-  // 6. thinking
-  const thinkingOpt = { ...irThinking(ir), ...opts?.thinking };
+  // 6. thinking（来源：会话覆盖 > IR 扩展 > 预设 reasoning_effort，见 thinking.ts）
+  const resolved = resolveThinking(ir, opts);
+  let thinkingOpt: ThinkingOptions = resolved.stEffort
+    ? stEffortToClaude(resolved.stEffort, caps, body.max_tokens)
+    : resolved.thinking;
+  if (thinkingOpt.enabled === false && !canDisableThinking(caps)) {
+    if (caps.thinking !== 'none') warnings.push(`模型 ${model} 不支持关闭推理，已按默认处理`);
+    thinkingOpt = {};
+  }
   let samplingLocked = false;
-  if (caps.thinking === 'adaptive') {
+  if (thinkingOpt.enabled === false) {
+    // 关闭一律显式 disabled：Z.AI GLM 等兼容端点缺省就推理，只省略参数关不掉
+    body.thinking = { type: 'disabled' };
+  } else if (caps.thinking === 'adaptive') {
     body.thinking = { type: 'adaptive' };
     if (thinkingOpt.effort !== undefined) {
       if (caps.effortLevels && !caps.effortLevels.includes(thinkingOpt.effort)) {

@@ -362,6 +362,55 @@ describe('anthropic buildRequest', () => {
     });
   });
 
+  it('关闭推理：可关的模型发 thinking:disabled，不带 output_config / budget', () => {
+    const ir = makeIr([text('h1', 'user', 'u')], { breakpoints: [] }, { temperature: 0.7 });
+    const opus = body(ir, 'claude-opus-5', { thinking: { enabled: false, effort: 'max' } });
+    expect(opus.body.thinking).toEqual({ type: 'disabled' });
+    expect(opus.body.output_config).toBeUndefined();
+    const haiku = body(ir, 'claude-haiku-4-5', { thinking: { enabled: false } });
+    expect(haiku.body.thinking).toEqual({ type: 'disabled' });
+    // 关闭时采样参数不被 budget thinking 锁定
+    expect(haiku.body.temperature).toBe(0.7);
+    const glm = body(ir, 'glm-5.3-flash', { thinking: { enabled: false } });
+    expect(glm.body.thinking).toEqual({ type: 'disabled' });
+  });
+
+  it('Z.AI GLM（Anthropic 兼容）：档位走 adaptive + output_config.effort', () => {
+    const ir = makeIr([text('h1', 'user', 'u')]);
+    const { req, body: b } = body(ir, 'glm-5.3-flash', { thinking: { effort: 'high' } });
+    expect(b.thinking).toEqual({ type: 'adaptive' });
+    expect(b.output_config).toEqual({ effort: 'high' });
+    expect(req.warnings ?? []).toEqual([]);
+  });
+
+  it('Fable 系列不可关闭：告警并按默认 adaptive 发送', () => {
+    const ir = makeIr([text('h1', 'user', 'u')]);
+    const { req, body: b } = body(ir, 'claude-fable-5-1', { thinking: { enabled: false } });
+    expect(b.thinking).toEqual({ type: 'adaptive' });
+    expect(req.warnings).toContain('模型 claude-fable-5-1 不支持关闭推理，已按默认处理');
+  });
+
+  it('预设 reasoning_effort（ST 语义）：adaptive 走档位，budget 按 max_tokens 比例；会话覆盖优先', () => {
+    const min = makeIr(
+      [text('h1', 'user', 'u')],
+      { breakpoints: [] },
+      { maxTokens: 8192, reasoningEffort: 'min' },
+    );
+    expect(body(min, 'claude-opus-5').body.output_config).toEqual({ effort: 'low' });
+    const high = makeIr(
+      [text('h1', 'user', 'u')],
+      { breakpoints: [] },
+      { maxTokens: 8192, reasoningEffort: 'high' },
+    );
+    expect(body(high, 'claude-haiku-4-5').body.thinking).toEqual({
+      type: 'enabled',
+      budget_tokens: 4096,
+    });
+    expect(body(high, 'claude-haiku-4-5', { thinking: { enabled: false } }).body.thinking).toEqual({
+      type: 'disabled',
+    });
+  });
+
   it('Anthropic 无 name 字段：Segment.name 前缀化写进正文且照常合并（契约 §9 AS-8）', () => {
     const ir = makeIr([
       { ...text('h1', 'user', '你好'), name: '旅人' },

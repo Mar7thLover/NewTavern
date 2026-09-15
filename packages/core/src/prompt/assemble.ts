@@ -1065,6 +1065,12 @@ export function assemblePrompt(input: AssembleInputV2): AssembleResult {
     const value = readSampling(key);
     if (value !== undefined) sampling[target] = value;
   }
+  // ST reasoning_effort：auto = 不发送（ST public/scripts/openai.js getReasoningEffort），故不写入
+  const reasoningEffort =
+    readString(samplingSource.reasoning_effort) ?? readString(data.reasoning_effort);
+  if (reasoningEffort !== undefined && reasoningEffort !== '' && reasoningEffort !== 'auto') {
+    sampling.reasoningEffort = reasoningEffort;
+  }
 
   // ── 历史裁剪
   const maxContextTokens =

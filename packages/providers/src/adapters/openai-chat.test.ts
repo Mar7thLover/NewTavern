@@ -86,12 +86,13 @@ describe('detectQuirks', () => {
     });
   });
 
-  it('api.z.ai：reasoning_content 且无 developer 角色', () => {
+  it('api.z.ai：reasoning_content、无 developer 角色、认 reasoning_effort 与 thinking 开关', () => {
     expect(detectQuirks('https://api.z.ai/api/coding/paas/v4')).toMatchObject({
       reasoningContent: true,
       streamUsage: true,
       developerRole: false,
-      reasoningEffort: false,
+      reasoningEffort: true,
+      thinkingToggle: true,
     });
   });
 
@@ -194,6 +195,58 @@ describe('openai-chat buildRequest', () => {
     (ir.sampling as Record<string, unknown>).thinking = { effort: 'low' };
     const body = openaiChatAdapter.buildRequest(ir, conn, 'gpt-5').body as Record<string, unknown>;
     expect(body.reasoning_effort).toBe('low');
+  });
+
+  it('关闭推理：gpt-5 不可关，告警且不带 reasoning_effort；预设 min → minimal', () => {
+    const ir = makeIr([text('h1', 'user', 'hi')]);
+    const off = openaiChatAdapter.buildRequest(ir, conn, 'gpt-5', { thinking: { enabled: false } });
+    expect((off.body as Record<string, unknown>).reasoning_effort).toBeUndefined();
+    expect(off.warnings).toContain('模型 gpt-5 不支持关闭推理，已按默认处理');
+
+    const preset = makeIr([text('h1', 'user', 'hi')], { sampling: { reasoningEffort: 'min' } });
+    const body = openaiChatAdapter.buildRequest(preset, conn, 'gpt-5').body as Record<
+      string,
+      unknown
+    >;
+    expect(body.reasoning_effort).toBe('minimal');
+  });
+
+  it('Z.AI GLM：关闭发 thinking:disabled，档位发 reasoning_effort，不设则两者都不带', () => {
+    const zai: Connection = {
+      id: 'z',
+      provider: 'openai-chat',
+      baseUrl: 'https://api.z.ai/api/coding/paas/v4',
+      apiKey: 'k',
+    };
+    const ir = makeIr([text('h1', 'user', 'hi')]);
+    const off = openaiChatAdapter.buildRequest(ir, zai, 'glm-5.3-flash', {
+      thinking: { enabled: false },
+    }).body as Record<string, unknown>;
+    expect(off.thinking).toEqual({ type: 'disabled' });
+    expect(off.reasoning_effort).toBeUndefined();
+
+    const high = openaiChatAdapter.buildRequest(ir, zai, 'glm-5.3-flash', {
+      thinking: { effort: 'high' },
+    });
+    expect((high.body as Record<string, unknown>).reasoning_effort).toBe('high');
+    expect((high.body as Record<string, unknown>).thinking).toBeUndefined();
+    expect(high.warnings ?? []).not.toContain(expect.stringContaining('effort'));
+
+    const plain = openaiChatAdapter.buildRequest(ir, zai, 'glm-5.3-flash').body as Record<
+      string,
+      unknown
+    >;
+    expect(plain.thinking).toBeUndefined();
+    expect(plain.reasoning_effort).toBeUndefined();
+
+    // 预设 low：ST 原样发送 low（GLM 上等同不推理），不在已知档位内给提示
+    const low = openaiChatAdapter.buildRequest(
+      makeIr([text('h1', 'user', 'hi')], { sampling: { reasoningEffort: 'low' } }),
+      zai,
+      'glm-5.3-flash',
+    );
+    expect((low.body as Record<string, unknown>).reasoning_effort).toBe('low');
+    expect(low.warnings).toContain('effort=low 不在 glm-5.3-flash 的已知档位内，仍按原样发送');
   });
 
   it('streamUsage quirk 关闭时不带 stream_options', () => {

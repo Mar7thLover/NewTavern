@@ -339,6 +339,41 @@ describe('google buildRequest', () => {
     ).toEqual({ thinkingLevel: 'high', includeThoughts: true });
   });
 
+  it('关闭推理：2.5 Flash thinkingBudget=0；2.5 Pro / 3.x 不可关，告警并按默认', () => {
+    const ir = makeIr([text('h1', 'user', 'u')]);
+    expect(
+      body(ir, 'gemini-2.5-flash', { thinking: { enabled: false } }).body.generationConfig
+        .thinkingConfig,
+    ).toEqual({ thinkingBudget: 0, includeThoughts: false });
+    const pro = body(ir, BUDGET_MODEL, { thinking: { enabled: false } });
+    expect(pro.body.generationConfig.thinkingConfig).toEqual({
+      thinkingBudget: -1,
+      includeThoughts: true,
+    });
+    expect(pro.req.warnings).toContain(`模型 ${BUDGET_MODEL} 不支持关闭推理，已按默认处理`);
+    const level = body(ir, LEVEL_MODEL, { thinking: { enabled: false } });
+    expect(level.body.generationConfig.thinkingConfig).toEqual({
+      thinkingLevel: 'high',
+      includeThoughts: true,
+    });
+  });
+
+  it('预设 reasoning_effort（ST 语义）：3 Pro 档位、2.5 Pro 按 maxOutputTokens 比例', () => {
+    const ir = makeIr(
+      [text('h1', 'user', 'u')],
+      { breakpoints: [] },
+      { maxTokens: 8192, reasoningEffort: 'medium' },
+    );
+    expect(body(ir, LEVEL_MODEL).body.generationConfig.thinkingConfig).toEqual({
+      thinkingLevel: 'low',
+      includeThoughts: true,
+    });
+    expect(body(ir, BUDGET_MODEL).body.generationConfig.thinkingConfig).toEqual({
+      thinkingBudget: 2048,
+      includeThoughts: true,
+    });
+  });
+
   it('是纯函数：不改动 IR，两次结果一致', () => {
     const ir = makeIr([text('s1', 'system', 'SYS', 'system'), text('h1', 'user', 'u')], {
       breakpoints: [0],

@@ -5,4 +5,5 @@ export * from './http.js';
 export * from './messages.js';
 export * from './registry.js';
 export * from './sse.js';
+export * from './thinking.js';
 export * from './types.js';

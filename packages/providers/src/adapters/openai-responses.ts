@@ -5,6 +5,7 @@ import { errorTypeToKind, isAbortError, normalizeUnknownError } from '../errors.
 import { providerFetch, providerGet, trimTrailingSlash } from '../http.js';
 import { irToChatMessages, partsToText, type ChatMessage } from '../messages.js';
 import { parseSseStream } from '../sse.js';
+import { canDisableThinking, resolveThinking, stEffortToOpenAI } from '../thinking.js';
 import type {
   BuildOptions,
   Connection,
@@ -14,6 +15,7 @@ import type {
   ProviderAdapter,
   ProviderError,
   ProviderRequest,
+  ThinkingOptions,
 } from '../types.js';
 
 /**
@@ -123,16 +125,6 @@ function asRecord(v: unknown): Record<string, unknown> | undefined {
   return typeof v === 'object' && v !== null ? (v as Record<string, unknown>) : undefined;
 }
 
-/** `ir.sampling` 上的 thinking 扩展（core 的 SamplingParams 尚未声明，按可选读取） */
-function irThinking(ir: PromptIR): { effort?: string; budgetTokens?: number } {
-  const ext = asRecord((ir.sampling as Record<string, unknown>).thinking);
-  if (!ext) return {};
-  return {
-    ...(typeof ext.effort === 'string' ? { effort: ext.effort } : {}),
-    ...(typeof ext.budgetTokens === 'number' ? { budgetTokens: ext.budgetTokens } : {}),
-  };
-}
-
 interface ResponsesBody {
   model: string;
   input: ResponsesInputItem[];
@@ -216,13 +208,25 @@ function buildRequest(
     if (s.topP !== undefined) body.top_p = s.topP;
   }
 
-  // reasoning：仅 effort 型能力
-  const thinkingOpt = { ...irThinking(ir), ...opts?.thinking };
+  // reasoning：仅 effort 型能力；来源：会话覆盖 > IR 扩展 > 预设 reasoning_effort（见 thinking.ts）
+  const resolved = resolveThinking(ir, opts);
+  const thinkingOpt: ThinkingOptions = resolved.stEffort
+    ? { effort: stEffortToOpenAI(resolved.stEffort, model) }
+    : resolved.thinking;
   if (caps.thinking === 'effort') {
-    body.reasoning = {
-      effort: resolveEffort(thinkingOpt.effort, caps, model, warnings),
-      summary: 'auto',
-    };
+    // 关闭 = effort:'none'（GPT-5.1+），只有档位里有 none 的模型可关
+    const canOff = canDisableThinking(caps) && (caps.effortLevels ?? []).includes('none');
+    let effort: string;
+    if (thinkingOpt.enabled === false && canOff) {
+      effort = 'none';
+    } else {
+      if (thinkingOpt.enabled === false) {
+        warnings.push(`模型 ${model} 不支持关闭推理，已按默认处理`);
+      }
+      const requested = thinkingOpt.enabled === false ? undefined : thinkingOpt.effort;
+      effort = resolveEffort(requested, caps, model, warnings);
+    }
+    body.reasoning = { effort, summary: 'auto' };
     if (thinkingOpt.budgetTokens !== undefined) {
       warnings.push('Responses 用 effort 档位而非 budget_tokens，budgetTokens 已丢弃');
     }

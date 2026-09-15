@@ -33,6 +33,13 @@ export interface ModelCapabilities {
   /** Haiku budget / OpenAI effort / Gemini level / Anthropic adaptive */
   thinking: 'none' | 'budget' | 'effort' | 'level' | 'adaptive';
   effortLevels?: string[];
+  /**
+   * 能否关闭推理（`thinking: { enabled: false }`）。按各家 API 语义在目录里标注：
+   * Anthropic 发 `thinking:{type:'disabled'}`（Fable/Mythos 5 系列始终推理，不可关）；
+   * OpenAI 系只有档位里有 `none` 的模型可关；Gemini 2.5 Flash 系 thinkingBudget=0 可关、Pro 与 3.x 不可关；
+   * Z.AI GLM 发 `thinking:{type:'disabled'}`。缺省视为不可关。
+   */
+  canDisableThinking?: boolean;
   caching: 'none' | 'prefix-auto' | 'breakpoints' | 'explicit-object';
   cacheMinTokens?: number;
   maxBreakpoints?: number;
@@ -57,9 +64,22 @@ export interface ProviderRequest {
   warnings?: string[];
 }
 
+/**
+ * 推理控制的统一表示（会话覆盖 `chat.overrides.thinking`、`ir.sampling.thinking` 共用）。
+ * - `enabled: false`：关闭推理，忽略其余字段；模型不支持关闭时适配器给 warning 并按默认处理
+ * - `effort`：档位（adaptive / effort / level 型模型），取值见能力 `effortLevels`
+ * - `budgetTokens`：预算（budget 型模型）
+ * 全部缺省 = 不干预（适配器默认行为）。
+ */
+export interface ThinkingOptions {
+  enabled?: boolean;
+  effort?: string;
+  budgetTokens?: number;
+}
+
 /** buildRequest 的可选参数：由聊天覆盖项（ChatOverrides.thinking）传入 */
 export interface BuildOptions {
-  thinking?: { effort?: string; budgetTokens?: number };
+  thinking?: ThinkingOptions;
 }
 
 export type ProviderErrorKind =

@@ -1,4 +1,9 @@
-import type { ModelInfo, ProviderErrorKind, ProviderId } from '@newtavern/providers';
+import {
+  canDisableThinking,
+  type ModelInfo,
+  type ProviderErrorKind,
+  type ProviderId,
+} from '@newtavern/providers';
 import { desc, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 
@@ -249,7 +254,9 @@ export function createConnectionsRoutes(db: Db, secrets: Secrets, providers: Pro
       if (!model) return c.json({ error: 'invalid', message: '缺少 model 查询参数' }, 400);
       try {
         const resolved = await providers.resolveConnection(c.req.param('id'));
-        return c.json(resolved.adapter.capabilities(model, resolved.conn));
+        const caps = resolved.adapter.capabilities(model, resolved.conn);
+        // canDisableThinking 按「有推理能力且目录标了可关」归一成布尔，前端直接用
+        return c.json({ ...caps, canDisableThinking: canDisableThinking(caps) });
       } catch (e) {
         if (e instanceof ProviderServiceError && e.code === 'not_found') {
           return c.json({ error: 'not_found' }, 404);

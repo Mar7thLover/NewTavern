@@ -18,14 +18,18 @@ import {
   useConnectionModels,
   useConnections,
   useGenerationDefault,
+  useModelCapabilities,
   usePatchChat,
   usePersonas,
+  usePreset,
   usePresets,
   useRefreshConnectionModels,
   type ChatDetail,
   type ChatOverrides,
   type LayoutMode,
   type MessageNode,
+  type ModelCapabilities,
+  type ThinkingOverride,
   type Usage,
 } from '../../lib/api';
 import { cn } from '../../lib/utils';
@@ -34,6 +38,66 @@ import { Avatar } from '../library/shared';
 const LAYOUT_MODES: LayoutMode[] = ['strict', 'cache-aware'];
 
 const USAGE_ROWS = ['input', 'output', 'cacheRead', 'cacheWrite', 'reasoning'] as const;
+
+/**
+ * budget 型模型（Claude Haiku 4.5、Gemini 2.5、Anthropic 兼容的 GLM 等）的三档预算（token）。
+ * 实际值再夹到 maxOutput − 1024（给正文留余量，且不低于 API 下限 1024）。
+ */
+const BUDGET_LEVELS = [
+  { level: 'low', tokens: 2048 },
+  { level: 'medium', tokens: 8192 },
+  { level: 'high', tokens: 24576 },
+] as const;
+const MIN_BUDGET = 1024;
+
+/** 能力没写 effortLevels 时的兜底档位 */
+const FALLBACK_LEVELS: Partial<Record<NonNullable<ModelCapabilities['thinking']>, string[]>> = {
+  adaptive: ['low', 'medium', 'high'],
+  effort: ['low', 'medium', 'high'],
+  level: ['low', 'high'],
+};
+
+interface ThinkingChoice {
+  /** `off` / `effort:<档位>` / `budget:<档位>` */
+  key: string;
+  thinking: ThinkingOverride;
+  level?: string;
+  tokens?: number;
+}
+
+/** 按模型能力列出可选的推理档位（不含「跟随预设」） */
+function thinkingChoices(caps: ModelCapabilities): ThinkingChoice[] {
+  const choices: ThinkingChoice[] = [];
+  if (caps.canDisableThinking) choices.push({ key: 'off', thinking: { enabled: false } });
+  if (caps.thinking === 'budget') {
+    const limit = Math.max(MIN_BUDGET, (caps.maxOutput ?? 32768) - 1024);
+    const seen = new Set<number>();
+    for (const { level, tokens } of BUDGET_LEVELS) {
+      const budget = Math.min(tokens, limit);
+      if (seen.has(budget)) continue;
+      seen.add(budget);
+      choices.push({
+        key: `budget:${level}`,
+        thinking: { budgetTokens: budget },
+        level,
+        tokens: budget,
+      });
+    }
+    return choices;
+  }
+  const levels = caps.effortLevels ?? FALLBACK_LEVELS[caps.thinking ?? 'none'] ?? [];
+  for (const level of levels) {
+    // 能关闭时 `none` 与「关闭」是同一回事，不重复列出
+    if (level === 'none' && caps.canDisableThinking) continue;
+    choices.push({ key: `effort:${level}`, thinking: { effort: level }, level });
+  }
+  return choices;
+}
+
+function sameThinking(a: ThinkingOverride, b: ThinkingOverride): boolean {
+  if (a.enabled === false || b.enabled === false) return a.enabled === b.enabled;
+  return a.effort === b.effort && a.budgetTokens === b.budgetTokens;
+}
 
 export interface SessionPanelProps {
   chat: ChatDetail;
@@ -58,6 +122,13 @@ export function SessionPanel({ chat, path }: SessionPanelProps) {
 
   const patchOverrides = (partial: Partial<ChatOverrides>) =>
     patchChat.mutate({ id: chat.id, overrides: { ...overrides, ...partial } });
+  /** null = 跟随预设：从 overrides 里删掉 thinking 键 */
+  const setThinking = (thinking: ThinkingOverride | null) => {
+    const next: ChatOverrides = { ...overrides };
+    delete next.thinking;
+    if (thinking) next.thinking = thinking;
+    patchChat.mutate({ id: chat.id, overrides: next });
+  };
 
   const lastUsageNode = [...path].reverse().find((node) => node.usage !== null);
   const sessionUsage = useMemo(() => sumUsage(path), [path]);
@@ -130,6 +201,13 @@ export function SessionPanel({ chat, path }: SessionPanelProps) {
             onChange={(model) => patchOverrides({ model: model || null })}
           />
         </div>
+
+        <ThinkingSelect
+          chat={chat}
+          connectionId={effectiveConnectionId || null}
+          model={effectiveModel || null}
+          onChange={setThinking}
+        />
       </section>
 
       {/* Persona 与预设 */}
@@ -215,6 +293,92 @@ export function SessionPanel({ chat, path }: SessionPanelProps) {
           note={t('chat.panel.messages', { total: path.length })}
         />
       </section>
+    </div>
+  );
+}
+
+/**
+ * 推理强度：只在当前模型支持推理时出现。
+ * 「跟随预设」= 不设覆盖，由预设的 `reasoning_effort` 决定；选项按模型能力给出（可关闭时有「关闭」）。
+ * 换模型后若已存的覆盖不在新模型的选项里，自动清掉（回到跟随预设）。
+ */
+function ThinkingSelect({
+  chat,
+  connectionId,
+  model,
+  onChange,
+}: {
+  chat: ChatDetail;
+  connectionId: string | null;
+  model: string | null;
+  onChange: (thinking: ThinkingOverride | null) => void;
+}) {
+  const { t } = useTranslation();
+  const caps = useModelCapabilities(connectionId, model);
+  const preset = usePreset(chat.presetId);
+  const current = chat.overrides?.thinking;
+
+  const choices = useMemo(() => (caps.data ? thinkingChoices(caps.data) : []), [caps.data]);
+  const selected = current
+    ? choices.find((choice) => sameThinking(choice.thinking, current))
+    : null;
+  const stale = current !== undefined && caps.data !== undefined && selected === undefined;
+
+  // 覆盖不再适用（换了模型 / 模型不支持推理）：清掉一次，避免重复 PATCH
+  const clearedFor = useRef<string | null>(null);
+  const staleKey = `${connectionId ?? ''}|${model ?? ''}|${JSON.stringify(current ?? null)}`;
+  useEffect(() => {
+    if (!stale || clearedFor.current === staleKey) return;
+    clearedFor.current = staleKey;
+    onChange(null);
+  }, [stale, staleKey, onChange]);
+
+  if (!caps.data || !caps.data.thinking || caps.data.thinking === 'none') return null;
+
+  const presetSampling = preset.data?.sampling?.reasoning_effort;
+  const presetEffort =
+    chat.presetId === null
+      ? 'auto'
+      : typeof presetSampling === 'string'
+        ? presetSampling
+        : typeof preset.data?.data.reasoning_effort === 'string'
+          ? preset.data.data.reasoning_effort
+          : 'auto';
+  const levelLabel = (level: string) =>
+    t(`chat.panel.thinkingLevels.${level}`, { defaultValue: level });
+  const labelOf = (choice: ThinkingChoice) => {
+    if (choice.key === 'off') return t('chat.panel.thinkingOff');
+    if (choice.tokens !== undefined && choice.level) {
+      return t('chat.panel.thinkingBudget', {
+        level: levelLabel(choice.level),
+        tokens: choice.tokens.toLocaleString(),
+      });
+    }
+    return levelLabel(choice.level ?? '');
+  };
+
+  return (
+    <div data-part="thinking-select" data-value={selected?.key ?? 'follow'} className="mt-3">
+      <FieldLabel>{t('chat.panel.thinking')}</FieldLabel>
+      <Select
+        size="sm"
+        value={selected?.key ?? ''}
+        onChange={(event) => {
+          const choice = choices.find((item) => item.key === event.target.value);
+          onChange(choice ? choice.thinking : null);
+        }}
+      >
+        <option value="">
+          {t('chat.panel.thinkingFollow', {
+            value: t(`chat.panel.thinkingPreset.${presetEffort}`, { defaultValue: presetEffort }),
+          })}
+        </option>
+        {choices.map((choice) => (
+          <option key={choice.key} value={choice.key}>
+            {labelOf(choice)}
+          </option>
+        ))}
+      </Select>
     </div>
   );
 }

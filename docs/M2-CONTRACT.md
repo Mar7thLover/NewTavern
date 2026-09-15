@@ -75,7 +75,7 @@ src/
 - `usage` 事件：`input` 不含 cacheRead（Anthropic 语义：`input_tokens` 已排除缓存读写；OpenAI 的 `prompt_tokens` 含 cached，需减去）。归一后 **`input + cacheRead + cacheWrite` = 本次总输入**。
 - `listModels(conn)`：OpenAI 类 `GET /models`；Anthropic `GET /v1/models`；Google `GET /v1beta/models`（去掉 `models/` 前缀，过滤支持 `generateContent` 的）。失败抛 `ProviderError`。
 - `normalizeError(e)`：把 `HttpError` / 各家错误体（`error.message`、`error.type`）归一化；Anthropic `overloaded_error`→`overloaded`；Google `promptFeedback.blockReason`/`finishReason==='SAFETY'` → `stop:{reason:'filter'}`。
-- OpenAI 兼容 quirks（`conn.quirks`）：`developerRole`、`reasoningContent`、`prefill`、`streamUsage`、`reasoningEffort`；由 baseUrl 推断默认值（`detectQuirks(baseUrl): Record<string, boolean>`：api.openai.com → developerRole/streamUsage/reasoningEffort；deepseek → reasoningContent；其他默认 streamUsage=true）。
+- OpenAI 兼容 quirks（`conn.quirks`）：`developerRole`、`reasoningContent`、`prefill`、`streamUsage`、`reasoningEffort`、`thinkingToggle`（发 `thinking:{type:'enabled'|'disabled'}` 开关推理）；由 baseUrl 推断默认值（`detectQuirks(baseUrl): Record<string, boolean>`：api.openai.com → developerRole/streamUsage/reasoningEffort；api.z.ai → reasoningContent/reasoningEffort/thinkingToggle；deepseek → reasoningContent；其他默认 streamUsage=true）。
 
 ### 1.3 catalog.json
 

@@ -1,5 +1,10 @@
 import { substituteMacros, type Part } from '@newtavern/core';
-import type { ModelCapabilities, ProviderError, ProviderRequest } from '@newtavern/providers';
+import {
+  canDisableThinking,
+  type ModelCapabilities,
+  type ProviderError,
+  type ProviderRequest,
+} from '@newtavern/providers';
 import { desc, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
@@ -56,14 +61,39 @@ interface GenerateBody {
   layoutMode?: 'strict' | 'cache-aware';
 }
 
-/** 存进 `extra.capabilities` 的能力摘要（M3 前端展示用，只留四个字段） */
+/**
+ * 存进 `extra.capabilities` 的能力摘要（前端展示用）：四个基础字段，
+ * 推理模型再带 `effortLevels`（目录有写时）与 `canDisableThinking`。
+ */
 function capabilitiesSummary(caps: ModelCapabilities): Record<string, unknown> {
   return {
     maxContext: caps.maxContext,
     maxOutput: caps.maxOutput,
     thinking: caps.thinking,
     caching: caps.caching,
+    ...(caps.effortLevels ? { effortLevels: caps.effortLevels } : {}),
+    ...(caps.thinking === 'none' ? {} : { canDisableThinking: canDisableThinking(caps) }),
   };
+}
+
+const THINKING_OVERRIDE_KEYS = new Set(['enabled', 'effort', 'budgetTokens']);
+
+/** `overrides.thinking` 的形状：`{ enabled?: boolean; effort?: string; budgetTokens?: 非负整数 }` */
+function isThinkingOverride(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const obj = value as Record<string, unknown>;
+  if (Object.keys(obj).some((key) => !THINKING_OVERRIDE_KEYS.has(key))) return false;
+  if (obj.enabled !== undefined && typeof obj.enabled !== 'boolean') return false;
+  if (obj.effort !== undefined && (typeof obj.effort !== 'string' || obj.effort === '')) {
+    return false;
+  }
+  if (
+    obj.budgetTokens !== undefined &&
+    !(Number.isInteger(obj.budgetTokens) && (obj.budgetTokens as number) >= 0)
+  ) {
+    return false;
+  }
+  return true;
 }
 
 /** 插入节点并把 head（必要时还有 root）指过去 */
@@ -224,6 +254,15 @@ export function createChatsRoutes(db: Db, providers: ProviderService) {
             !isGlobalSystemPromptOverride(overrides.globalSystemPrompt)
           ) {
             return c.json({ error: 'invalid', message: 'overrides.globalSystemPrompt 非法' }, 400);
+          }
+          // 推理强度：null = 跟随预设（删掉该键）
+          if (overrides && 'thinking' in overrides) {
+            const thinking: unknown = overrides.thinking;
+            if (thinking === null || thinking === undefined) {
+              delete overrides.thinking;
+            } else if (!isThinkingOverride(thinking)) {
+              return c.json({ error: 'invalid', message: 'overrides.thinking 非法' }, 400);
+            }
           }
           patch.overrides = overrides;
         }

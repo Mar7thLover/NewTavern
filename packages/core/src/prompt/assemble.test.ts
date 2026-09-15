@@ -351,6 +351,13 @@ describe('assemblePrompt 段序', () => {
     });
   });
 
+  it('预设 reasoning_effort 写入 sampling.reasoningEffort；auto 不写入', () => {
+    const high = assembleIr(baseInput({ preset: stPreset({ reasoning_effort: 'high' }) }));
+    expect(high.sampling.reasoningEffort).toBe('high');
+    const auto = assembleIr(baseInput({ preset: stPreset({ reasoning_effort: 'auto' }) }));
+    expect(auto.sampling.reasoningEffort).toBeUndefined();
+  });
+
   it('cachePlan 断点 = 最后一个 static 段 + 倒数第二条历史段', () => {
     expect(ir.cachePlan).toEqual({ breakpoints: [14, 18] });
     expect(ir.segments[14]?.id).toBe('history:n3');

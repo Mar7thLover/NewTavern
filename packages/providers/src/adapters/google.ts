@@ -11,6 +11,7 @@ import {
 import { providerFetch, providerGet, trimTrailingSlash } from '../http.js';
 import { irToChatMessages, mergeAdjacentSameRole, type ChatMessage } from '../messages.js';
 import { parseSseStream } from '../sse.js';
+import { canDisableThinking, resolveThinking, stEffortToGoogle } from '../thinking.js';
 import type {
   BuildOptions,
   Connection,
@@ -21,6 +22,7 @@ import type {
   ProviderError,
   ProviderErrorKind,
   ProviderRequest,
+  ThinkingOptions,
 } from '../types.js';
 
 /**
@@ -176,15 +178,6 @@ function renderParts(parts: readonly Part[], model: string, warnings: string[]):
 }
 
 /** `ir.sampling` 上的扩展字段（core 目前未声明，按可选读取） */
-function irThinking(ir: PromptIR): { effort?: string; budgetTokens?: number } {
-  const ext = (ir.sampling as Record<string, unknown>).thinking;
-  if (typeof ext !== 'object' || ext === null) return {};
-  const obj = ext as { effort?: unknown; budgetTokens?: unknown };
-  return {
-    ...(typeof obj.effort === 'string' ? { effort: obj.effort } : {}),
-    ...(typeof obj.budgetTokens === 'number' ? { budgetTokens: obj.budgetTokens } : {}),
-  };
-}
 
 /** system → user（Gemini contents 只有 user/model） */
 function downgradeSystemRoles(messages: readonly ChatMessage[]): ChatMessage[] {
@@ -245,8 +238,19 @@ function buildRequest(
   if (s.repetitionPenalty !== undefined) warnings.push('Gemini 不支持 repetition_penalty，已丢弃');
 
   // 4. thinkingConfig：3.x 走 thinkingLevel，2.5 走 thinkingBudget（-1 = 由模型自动决定）
-  const thinkingOpt = { ...irThinking(ir), ...opts?.thinking };
-  if (caps.thinking === 'level') {
+  //    来源：会话覆盖 > IR 扩展 > 预设 reasoning_effort（见 thinking.ts）
+  const resolved = resolveThinking(ir, opts);
+  let thinkingOpt: ThinkingOptions = resolved.stEffort
+    ? stEffortToGoogle(resolved.stEffort, model, generationConfig.maxOutputTokens)
+    : resolved.thinking;
+  // 只有 budget 型（2.5 Flash 系）能用 thinkingBudget=0 关闭；3.x 的 thinkingLevel 没有「关」
+  if (thinkingOpt.enabled === false && !(canDisableThinking(caps) && caps.thinking === 'budget')) {
+    if (caps.thinking !== 'none') warnings.push(`模型 ${model} 不支持关闭推理，已按默认处理`);
+    thinkingOpt = {};
+  }
+  if (thinkingOpt.enabled === false) {
+    generationConfig.thinkingConfig = { thinkingBudget: 0, includeThoughts: false };
+  } else if (caps.thinking === 'level') {
     const levels = caps.effortLevels ?? DEFAULT_THINKING_LEVELS;
     let level = thinkingOpt.effort ?? FALLBACK_THINKING_LEVEL;
     if (!levels.includes(level)) {

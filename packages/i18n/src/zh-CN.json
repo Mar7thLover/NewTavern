@@ -280,6 +280,27 @@
       "addConnection": "先添加一个连接",
       "model": "模型",
       "modelPlaceholder": "搜索或直接输入模型名",
+      "thinking": "推理强度",
+      "thinkingFollow": "跟随预设（{{value}}）",
+      "thinkingOff": "关闭",
+      "thinkingBudget": "{{level}}（预算 {{tokens}}）",
+      "thinkingLevels": {
+        "none": "不推理",
+        "minimal": "最低",
+        "low": "低",
+        "medium": "中",
+        "high": "高",
+        "xhigh": "很高",
+        "max": "最高"
+      },
+      "thinkingPreset": {
+        "auto": "自动",
+        "min": "最低",
+        "low": "低",
+        "medium": "中",
+        "high": "高",
+        "max": "最高"
+      },
       "persona": "用户档案",
       "none": "不使用",
       "preset": "预设",
@@ -343,7 +364,8 @@
       "reasoningContent": "reasoning_content 推理字段",
       "prefill": "助手消息预填",
       "streamUsage": "流式返回用量",
-      "reasoningEffort": "reasoning_effort 参数"
+      "reasoningEffort": "reasoning_effort 参数",
+      "thinkingToggle": "thinking 开关参数"
     },
     "test": "测试",
     "testing": "测试中…",

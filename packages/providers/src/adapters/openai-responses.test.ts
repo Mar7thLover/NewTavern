@@ -194,6 +194,38 @@ describe('openai-responses buildRequest', () => {
     expect(notAllowed.warnings).toContain('effort=xhigh 不在 gpt-5 的可用档位内，已回退 medium');
   });
 
+  it('关闭推理：档位含 none 的 gpt-5.1 发 effort:none；gpt-5 不可关，告警并回退默认', () => {
+    const ir = makeIr([text('h1', 'user', 'hi')]);
+    const off = openaiResponsesAdapter.buildRequest(ir, conn, 'gpt-5.1', {
+      thinking: { enabled: false },
+    });
+    expect((off.body as Record<string, unknown>).reasoning).toEqual({
+      effort: 'none',
+      summary: 'auto',
+    });
+    const cannot = openaiResponsesAdapter.buildRequest(ir, conn, 'gpt-5', {
+      thinking: { enabled: false },
+    });
+    expect((cannot.body as Record<string, unknown>).reasoning).toEqual({
+      effort: 'medium',
+      summary: 'auto',
+    });
+    expect(cannot.warnings).toContain('模型 gpt-5 不支持关闭推理，已按默认处理');
+  });
+
+  it('预设 reasoning_effort（ST 语义）：gpt-5 的 min → minimal，max → high', () => {
+    const reasoningOf = (effort: string) =>
+      (
+        openaiResponsesAdapter.buildRequest(
+          makeIr([text('h1', 'user', 'hi')], { sampling: { reasoningEffort: effort } }),
+          conn,
+          'gpt-5',
+        ).body as Record<string, unknown>
+      ).reasoning;
+    expect(reasoningOf('min')).toEqual({ effort: 'minimal', summary: 'auto' });
+    expect(reasoningOf('max')).toEqual({ effort: 'high', summary: 'auto' });
+  });
+
   it('非推理模型给了 effort 时丢弃并 warning', () => {
     const ir = makeIr([text('h1', 'user', 'hi')]);
     const req = openaiResponsesAdapter.buildRequest(ir, conn, 'gpt-4.1', {

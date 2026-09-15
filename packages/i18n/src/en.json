@@ -280,6 +280,27 @@
       "addConnection": "Add a connection first",
       "model": "Model",
       "modelPlaceholder": "Search or type a model name",
+      "thinking": "Reasoning effort",
+      "thinkingFollow": "Follow preset ({{value}})",
+      "thinkingOff": "Off",
+      "thinkingBudget": "{{level}} ({{tokens}} budget)",
+      "thinkingLevels": {
+        "none": "None",
+        "minimal": "Minimal",
+        "low": "Low",
+        "medium": "Medium",
+        "high": "High",
+        "xhigh": "Extra high",
+        "max": "Max"
+      },
+      "thinkingPreset": {
+        "auto": "Auto",
+        "min": "Minimum",
+        "low": "Low",
+        "medium": "Medium",
+        "high": "High",
+        "max": "Maximum"
+      },
       "persona": "Persona",
       "none": "None",
       "preset": "Preset",
@@ -343,7 +364,8 @@
       "reasoningContent": "reasoning_content field",
       "prefill": "Assistant prefill",
       "streamUsage": "Usage in stream",
-      "reasoningEffort": "reasoning_effort param"
+      "reasoningEffort": "reasoning_effort param",
+      "thinkingToggle": "thinking on/off param"
     },
     "test": "Test",
     "testing": "Testing…",

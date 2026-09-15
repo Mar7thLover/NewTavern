@@ -16,6 +16,11 @@ export interface SamplingParams {
   maxTokens?: number;
   seed?: number;
   stop?: string[];
+  /**
+   * ST 预设的 `reasoning_effort` 原值（min/low/medium/high/max；auto 不写入）。
+   * 各家映射不同，由 providers 适配器按 ST 的来源规则转换；会话覆盖的 thinking 优先于它。
+   */
+  reasoningEffort?: string;
 }
 
 export interface ToolDef {

@@ -224,6 +224,8 @@ export const PROVIDER_IDS: ProviderId[] = [
 export interface ModelCapabilities {
   thinking?: 'none' | 'budget' | 'effort' | 'level' | 'adaptive';
   effortLevels?: string[];
+  /** 能否关闭推理（`GET /api/connections/:id/capabilities` 总会给出布尔值） */
+  canDisableThinking?: boolean;
   caching?: 'none' | 'prefix-auto' | 'breakpoints' | 'explicit-object';
   cacheMinTokens?: number;
   maxBreakpoints?: number;
@@ -310,13 +312,21 @@ export interface ChatOverrides {
   connectionId?: string | null;
   model?: string | null;
   sampling?: Record<string, unknown>;
-  thinking?: { effort?: string; budgetTokens?: number };
+  /** 推理强度覆盖：`enabled:false` = 关闭；缺省 = 跟随预设 `reasoning_effort` */
+  thinking?: ThinkingOverride;
   layoutMode?: LayoutMode;
   /** 全局系统提示词的按会话覆盖（M3 契约 §3.4），`null` = 不覆盖 */
   globalSystemPrompt?: GlobalSystemPromptOverride | null;
 }
 
 export type LayoutMode = 'strict' | 'cache-aware';
+
+/** 与 providers `ThinkingOptions` 同构 */
+export interface ThinkingOverride {
+  enabled?: boolean;
+  effort?: string;
+  budgetTokens?: number;
+}
 
 export interface MessageNode {
   id: string;
@@ -537,6 +547,8 @@ export const queryKeys = {
   connections: ['connections'] as const,
   connection: (id: string) => ['connections', id] as const,
   connectionModels: (id: string) => ['connections', id, 'models'] as const,
+  modelCapabilities: (id: string, model: string) =>
+    ['connections', id, 'capabilities', model] as const,
   generationDefault: ['settings', 'generation.default'] as const,
   catalogModels: ['models', 'catalog'] as const,
   setting: (key: string) => ['settings', key] as const,
@@ -895,6 +907,19 @@ export function useRefreshConnectionModels() {
     mutationFn: (id: string) =>
       fetchJson<ConnectionModelsResponse>(`/api/connections/${enc(id)}/models?refresh=1`),
     onSuccess: (data, id) => queryClient.setQueryData(queryKeys.connectionModels(id), data),
+  });
+}
+
+/** 某连接下某模型的能力（目录 + 连接的 modelOverrides 合并后） */
+export function useModelCapabilities(connectionId: string | null, model: string | null) {
+  return useQuery({
+    queryKey: queryKeys.modelCapabilities(connectionId ?? '', model ?? ''),
+    queryFn: () =>
+      fetchJson<ModelCapabilities>(
+        `/api/connections/${enc(connectionId ?? '')}/capabilities?model=${enc(model ?? '')}`,
+      ),
+    enabled: connectionId !== null && model !== null && model !== '',
+    staleTime: 5 * 60_000,
   });
 }
 

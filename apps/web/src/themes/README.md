@@ -259,6 +259,7 @@ loadFonts: () =>
 | `composer-hint`          | 输入框下方快捷键提示                                                                                       | —                                                                                       |
 | `tabs` / `tab`           | 分段控件 / 页签（右栏「会话 · 检查器」、布局模式、检查器页签等）                                           | `tab`：`data-active`                                                                    |
 | `session-panel`          | 会话设置面板根                                                                                             | —                                                                                       |
+| `thinking-select`        | 会话面板「推理强度」下拉的外层 `div`（在「模型」下方；当前模型不支持推理时不渲染）                         | `data-value`（`follow` / `off` / `effort:<档位>` / `budget:<档位>`）                    |
 | `panel-section`          | 会话面板里的折叠小节（作者注释 / 世界书 / 系统提示词）                                                     | `data-open`                                                                             |
 | `usage-card`             | 用量卡                                                                                                     | —                                                                                       |
 | `usage-bar`              | `usage-card` 内缓存命中比例条的底线（1px 发丝）`div`                                                       | —                                                                                       |

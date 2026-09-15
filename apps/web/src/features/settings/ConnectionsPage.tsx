@@ -53,6 +53,7 @@ const QUIRK_KEYS = [
   'prefill',
   'streamUsage',
   'reasoningEffort',
+  'thinkingToggle',
 ] as const;
 
 type FormTarget = null | 'new' | ConnectionSummary;

@@ -5,7 +5,9 @@ import type { PromptIR } from './assemble.js';
 /** extra.request 体积上限，超出只存 body 长度（契约 §3.5） */
 const REQUEST_STORE_LIMIT = 200 * 1024;
 
+/** 同 providers `ThinkingOptions`：`enabled:false` = 关闭推理 */
 export interface ThinkingOptions {
+  enabled?: boolean;
   effort?: string;
   budgetTokens?: number;
 }

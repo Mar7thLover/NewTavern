@@ -45,7 +45,8 @@ export type ChatOverrides = {
   connectionId?: string | null;
   model?: string | null;
   sampling?: Record<string, unknown>;
-  thinking?: { effort?: string; budgetTokens?: number };
+  /** 推理控制，形状同 providers `ThinkingOptions`；`enabled:false` = 关闭；缺省 = 跟随预设 */
+  thinking?: { enabled?: boolean; effort?: string; budgetTokens?: number };
   layoutMode?: 'strict' | 'cache-aware';
   /** 全局系统提示词的会话覆盖（契约 §3.4） */
   globalSystemPrompt?: {
