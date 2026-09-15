@@ -1,0 +1,1917 @@
+/**
+ * 酒馆 · Jiuguan —— 一间真的酒馆（docs/DESIGN.md §3.4）。
+ *
+ * 橡木桌面（canvas）、皮革包边的账本（面板，四周缝线）、羊皮纸（阅读面，烧灼边）、
+ * 黄铜（主动作、铆钉、头像框）、蜡封（swipe）。东西有重量，光有方向，按钮按下去会陷进去。
+ *
+ * 两种模式是同一间屋子的两个时刻：
+ *  - 夜灯（dark，默认）：光从桌上的灯来，暖黄，影短而朝正下；皮与木在灯下是深的，字是烫印的奶白；
+ *  - 白日（light）：光从左上的窗来，冷白，影长、落向右下；皮是本色的浅鞍革，字是深棕的墨。
+ *
+ * 两套墨：
+ *  - 皮革/橡木上的字：--jg-l-*（外壳默认，也用于纸条下方的操作条）；
+ *  - 羊皮纸上的字：--jg-p-*（PAPER 选择器在纸面元素上改写槽位）。
+ *
+ * 纹理全部是 SVG feTurbulence 自绘；为了 2x 屏的栅格化成本，瓦片小、倍频少、不用光照滤镜。
+ * 元素规则一律写在 @scope ([data-theme='jiuguan']) to ([data-theme]) 里（themes/README.md §1.2）。
+ */
+
+/* ================================================================== */
+/* 纹理                                                                */
+/* ================================================================== */
+
+[data-theme='jiuguan'] {
+  /* 细噪点：尘与毛孔 */
+  --jg-tex-specks: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n' x='0' y='0' width='1' height='1'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='1' seed='4' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .06 0 0 0 0 .03 0 0 0 0 .01 1.2 0 0 0 -.62'/></filter><rect width='160' height='160' filter='url(%23n)'/></svg>");
+
+  /* 橡木：横向拉长的湍流；同一张噪声分出暗纹与亮纹 */
+  --jg-tex-grain:
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='256' height='128'><filter id='w' x='0' y='0' width='1' height='1'><feTurbulence type='fractalNoise' baseFrequency='.0078125 .109375' numOctaves='3' seed='7' stitchTiles='stitch' result='t'/><feColorMatrix in='t' values='0 0 0 0 .07 0 0 0 0 .035 0 0 0 0 .015 1.5 0 0 0 -.72' result='d'/><feColorMatrix in='t' values='0 0 0 0 .9 0 0 0 0 .74 0 0 0 0 .5 -.9 0 0 0 .3' result='l'/><feMerge><feMergeNode in='d'/><feMergeNode in='l'/></feMerge></filter><rect width='256' height='128' filter='url(%23w)'/></svg>"),
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='224' height='96'><filter id='v' x='0' y='0' width='1' height='1'><feTurbulence type='fractalNoise' baseFrequency='.004464286 .114583333' numOctaves='2' seed='23' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .07 0 0 0 0 .035 0 0 0 0 .015 1 0 0 0 -.5'/></filter><rect width='224' height='96' filter='url(%23v)'/></svg>");
+
+  /* 皮革：细胞状的荔枝纹（turbulence 的谷）+ 低频的揉皱 */
+  --jg-tex-leather: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='g' x='0' y='0' width='1' height='1'><feTurbulence type='turbulence' baseFrequency='.22' numOctaves='2' seed='11' stitchTiles='stitch' result='t'/><feColorMatrix in='t' values='0 0 0 0 .05 0 0 0 0 .025 0 0 0 0 .01 -1.5 0 0 0 .42' result='a'/><feTurbulence type='fractalNoise' baseFrequency='.02' numOctaves='2' seed='2' stitchTiles='stitch' result='c'/><feColorMatrix in='c' values='0 0 0 0 .04 0 0 0 0 .02 0 0 0 0 .01 .9 0 0 0 -.38' result='b'/><feMerge><feMergeNode in='b'/><feMergeNode in='a'/></feMerge></filter><rect width='200' height='200' filter='url(%23g)'/></svg>");
+
+  /* 羊皮纸：低频的斑驳 + 竖向纤维；透明度压得很低，不许压过字 */
+  --jg-tex-parchment: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='256' height='256'><filter id='m' x='0' y='0' width='1' height='1'><feTurbulence type='fractalNoise' baseFrequency='.01171875' numOctaves='3' seed='3' stitchTiles='stitch' result='t'/><feColorMatrix in='t' values='0 0 0 0 .52 0 0 0 0 .36 0 0 0 0 .16 .6 0 0 0 -.26' result='a'/><feTurbulence type='fractalNoise' baseFrequency='.0625 .796875' numOctaves='1' seed='5' stitchTiles='stitch' result='f'/><feColorMatrix in='f' values='0 0 0 0 .45 0 0 0 0 .32 0 0 0 0 .15 .5 0 0 0 -.23' result='b'/><feMerge><feMergeNode in='a'/><feMergeNode in='b'/></feMerge></filter><rect width='256' height='256' filter='url(%23m)'/></svg>");
+}
+
+/* ================================================================== */
+/* 夜灯（dark，默认）                                                   */
+/* ================================================================== */
+
+[data-theme='jiuguan'][data-mode='dark'] {
+  /* ---- 材质 ---- */
+  --jg-oak: oklch(0.3 0.04 55);
+  --jg-leather: oklch(0.29 0.04 42);
+  --jg-leather-deep: oklch(0.21 0.032 40);
+  --jg-leather-pad: oklch(0.255 0.036 38);
+  --jg-stitch: oklch(0.8 0.05 78 / 0.5);
+  --jg-parch: oklch(0.885 0.042 80);
+  --jg-note: oklch(0.905 0.032 84);
+
+  --jg-brass-1: oklch(0.93 0.085 92);
+  --jg-brass-2: oklch(0.8 0.115 83);
+  --jg-brass-3: oklch(0.63 0.11 71);
+  --jg-brass-4: oklch(0.47 0.085 62);
+  --jg-brass-deep: oklch(0.33 0.058 52);
+  --jg-brass-shine: oklch(0.98 0.05 92 / 0.85);
+
+  --jg-wax-hi: oklch(0.56 0.17 29);
+  --jg-wax-mid: oklch(0.42 0.145 26);
+  --jg-wax-lo: oklch(0.29 0.1 22);
+
+  --jg-flame: oklch(0.9 0.14 85);
+  --jg-glow: oklch(0.83 0.16 72 / 0.6);
+
+  /* ---- 光与影：灯在桌子上方偏右，影子短、朝正下、暖 ---- */
+  --jg-hi: oklch(0.86 0.07 78 / 0.18);
+  --jg-groove: oklch(0.13 0.022 40 / 0.85);
+  --jg-emboss: 0 1px 0 oklch(0.07 0.02 40 / 0.6);
+  --jg-emboss-lg: 0 1px 0 oklch(0.07 0.02 40 / 0.65), 0 2px 6px oklch(0.07 0.02 40 / 0.4);
+  --jg-sunk: oklch(0.1 0.02 40 / 0.32);
+  --jg-sunk-inset: inset 0 1px 2px oklch(0.05 0.02 40 / 0.6);
+  --jg-cast-sm: 0 1px 1.5px oklch(0.08 0.02 40 / 0.6);
+  --jg-cast-md: 0 1px 1px oklch(0.08 0.02 40 / 0.45), 0 3px 7px oklch(0.08 0.02 40 / 0.45);
+  --jg-cast-lg: 0 2px 4px oklch(0.08 0.02 40 / 0.55), 0 8px 22px oklch(0.06 0.02 40 / 0.55);
+  --jg-cast-lamp: 0 5px 9px oklch(0.08 0.02 40 / 0.55);
+  --jg-cast-panel: 3px 0 8px oklch(0.06 0.02 40 / 0.5);
+  --jg-drop: drop-shadow(0 1.5px 1.2px oklch(0.08 0.02 40 / 0.65));
+  --jg-rivet-cast: 0 1.5px 1.2px oklch(0.12 0.03 45 / 0.75), 0 0 0 1.5px oklch(0.42 0.07 55 / 0.16);
+  --jg-light-panel: radial-gradient(
+    120% 55% at 62% -8%,
+    oklch(0.8 0.11 72 / 0.1),
+    oklch(0.8 0.11 72 / 0) 70%
+  );
+
+  /* ---- 皮革/橡木上的字 ---- */
+  --jg-l-ink: oklch(0.93 0.025 82);
+  --jg-l-ink-2: oklch(0.8 0.035 76);
+  --jg-l-ink-3: oklch(0.68 0.035 70);
+  --jg-l-story: oklch(0.86 0.03 80);
+  --jg-l-accent: var(--jg-brass-2);
+  --jg-l-accent-soft: oklch(0.8 0.115 83 / 0.1);
+  --jg-l-edge: oklch(0.16 0.025 40);
+  --jg-l-edge-strong: oklch(0.46 0.05 62);
+  --jg-l-control: oklch(0.2 0.03 40);
+  --jg-l-danger: oklch(0.7 0.14 32);
+  --jg-l-danger-soft: oklch(0.45 0.13 28 / 0.22);
+  --jg-l-btn: oklch(0.36 0.042 45);
+  --jg-l-btn-edge: oklch(0.15 0.024 40);
+  --jg-l-btn-hi: oklch(0.7 0.06 70 / 0.3);
+  --jg-l-well-edge: oklch(0.13 0.02 40);
+  --jg-l-well-shade: oklch(0.05 0.01 40 / 0.55);
+  --jg-l-well-hi: oklch(0.62 0.05 65 / 0.2);
+  --jg-l-chip: oklch(0.23 0.032 42);
+  --jg-l-option: oklch(0.21 0.032 40);
+
+  /* 夜里橡木与皮面同一套字；灯光不按视口固定 */
+  --jg-light-attach: scroll;
+  --jg-light-dock: none;
+  --jg-o-ink: var(--jg-l-ink);
+  --jg-o-ink-2: var(--jg-l-ink-2);
+  --jg-o-ink-3: var(--jg-l-ink-3);
+  --jg-o-story: var(--jg-l-story);
+  --jg-o-accent: var(--jg-l-accent);
+  --jg-o-accent-soft: var(--jg-l-accent-soft);
+  --jg-o-edge: var(--jg-l-edge);
+  --jg-o-edge-strong: var(--jg-l-edge-strong);
+  --jg-o-control: var(--jg-l-control);
+  --jg-o-danger: var(--jg-l-danger);
+  --jg-o-danger-soft: var(--jg-l-danger-soft);
+  --jg-o-btn: var(--jg-l-btn);
+  --jg-o-btn-edge: var(--jg-l-btn-edge);
+  --jg-o-btn-hi: var(--jg-l-btn-hi);
+  --jg-o-well-edge: var(--jg-l-well-edge);
+  --jg-o-well-shade: var(--jg-l-well-shade);
+  --jg-o-well-hi: var(--jg-l-well-hi);
+  --jg-o-chip: var(--jg-l-chip);
+  --jg-o-hi: var(--jg-hi);
+  --jg-o-groove: var(--jg-groove);
+  --jg-o-emboss: var(--jg-emboss);
+  --jg-o-emboss-lg: var(--jg-emboss-lg);
+  --jg-o-sunk: var(--jg-sunk);
+  --jg-o-sunk-inset: var(--jg-sunk-inset);
+
+  --raised: oklch(0.33 0.042 44);
+  --overlay: oklch(0.07 0.02 40 / 0.62);
+  --ink-on-primary: oklch(0.27 0.05 55);
+  --primary-glow: var(--jg-glow);
+  --success: oklch(0.76 0.09 120);
+  --success-soft: oklch(0.6 0.08 120 / 0.15);
+  --warning-soft: oklch(0.8 0.115 83 / 0.12);
+  --info-soft: oklch(0.8 0.035 76 / 0.1);
+
+  --origin-l0: 0.5;
+  --origin-step: 0.042;
+  --origin-c: 0.085;
+  --origin-h: 72;
+
+  /* ---- 羊皮纸上的墨 ---- */
+  --jg-p-ink: oklch(0.25 0.04 50);
+  --jg-p-ink-2: oklch(0.4 0.045 55);
+  --jg-p-ink-3: oklch(0.49 0.045 60);
+  --jg-p-story: oklch(0.32 0.045 52);
+  --jg-p-quote: oklch(0.21 0.05 42);
+  --jg-p-action: oklch(0.43 0.05 58);
+  --jg-p-accent: oklch(0.47 0.1 62);
+  --jg-p-edge: oklch(0.7 0.05 68);
+  --jg-p-edge-strong: oklch(0.52 0.06 58);
+  --jg-p-control: oklch(0.835 0.047 77);
+  --jg-p-danger: oklch(0.47 0.16 28);
+  --jg-p-btn: oklch(0.93 0.032 84);
+  --jg-p-btn-edge: oklch(0.58 0.06 60);
+  --jg-p-btn-hi: oklch(1 0.02 90 / 0.75);
+  --jg-p-well-edge: oklch(0.62 0.06 60);
+  --jg-p-well-shade: oklch(0.42 0.07 55 / 0.35);
+  --jg-p-well-hi: oklch(0.99 0.02 90 / 0.6);
+  --jg-p-chip: oklch(0.84 0.045 78);
+
+  color-scheme: dark;
+  scrollbar-color: oklch(0.42 0.045 52) transparent;
+}
+
+/* ================================================================== */
+/* 白日（light）：浅色本色鞍革、蜂蜜色橡木、左上的窗光                    */
+/* ================================================================== */
+
+[data-theme='jiuguan'][data-mode='light'] {
+  /* 白天：窗光照亮的本色鞍革最亮，垫板次之，蜂蜜橡木桌面最深（字换奶白） */
+  --jg-oak: oklch(0.48 0.07 62);
+  --jg-leather: oklch(0.79 0.052 74);
+  --jg-leather-deep: oklch(0.6 0.06 62);
+  --jg-leather-pad: oklch(0.71 0.058 68);
+  --jg-stitch: oklch(0.97 0.02 88 / 0.85);
+  --jg-parch: oklch(0.94 0.026 86);
+  --jg-note: oklch(0.96 0.018 90);
+
+  --jg-brass-1: oklch(0.96 0.06 95);
+  --jg-brass-2: oklch(0.83 0.105 85);
+  --jg-brass-3: oklch(0.66 0.1 73);
+  --jg-brass-4: oklch(0.51 0.08 64);
+  --jg-brass-deep: oklch(0.37 0.055 54);
+  --jg-brass-shine: oklch(0.99 0.012 230 / 0.92);
+
+  --jg-wax-hi: oklch(0.58 0.165 29);
+  --jg-wax-mid: oklch(0.45 0.14 26);
+  --jg-wax-lo: oklch(0.31 0.1 22);
+
+  --jg-flame: oklch(0.9 0.14 85);
+  --jg-glow: oklch(0.85 0.14 75 / 0.5);
+
+  /* 窗在左上：冷白高光、长影落向右下 */
+  --jg-hi: oklch(0.99 0.01 230 / 0.45);
+  --jg-groove: oklch(0.42 0.05 55 / 0.55);
+  --jg-emboss: none;
+  --jg-emboss-lg: 1px 1px 0 oklch(0.98 0.015 90 / 0.5), 3px 4px 6px oklch(0.3 0.05 50 / 0.18);
+  --jg-sunk: oklch(0.35 0.05 50 / 0.13);
+  --jg-sunk-inset: inset 1px 2px 3px oklch(0.3 0.05 50 / 0.3);
+  --jg-cast-sm: 1px 1.5px 1.5px oklch(0.3 0.04 50 / 0.4);
+  --jg-cast-md: 1px 1px 1px oklch(0.3 0.04 50 / 0.3), 6px 8px 14px oklch(0.3 0.04 50 / 0.28);
+  --jg-cast-lg: 2px 3px 3px oklch(0.3 0.04 50 / 0.3), 16px 20px 34px oklch(0.25 0.04 50 / 0.36);
+  --jg-cast-lamp: 5px 8px 12px oklch(0.3 0.04 50 / 0.42);
+  --jg-cast-panel: 10px 6px 18px oklch(0.3 0.04 50 / 0.3);
+  --jg-drop: drop-shadow(2.5px 3px 1.8px oklch(0.3 0.04 50 / 0.45));
+  --jg-rivet-cast:
+    0.6px 1.8px 1.2px oklch(0.3 0.05 50 / 0.55), 0 0 0 1.5px oklch(0.45 0.06 55 / 0.14);
+  /* 窗光：左上方斜落的一块冷白光，两道窗框影把它分成三格，影子向右下拉长 */
+  --jg-light-panel: linear-gradient(
+    128deg,
+    oklch(0.99 0.012 230 / 0.36) 0%,
+    oklch(0.99 0.012 230 / 0.3) 12.5%,
+    oklch(0.99 0.012 230 / 0.05) 14.5%,
+    oklch(0.99 0.012 230 / 0.05) 16%,
+    oklch(0.99 0.012 230 / 0.28) 18%,
+    oklch(0.99 0.012 230 / 0.2) 28.5%,
+    oklch(0.99 0.012 230 / 0.03) 30.5%,
+    oklch(0.99 0.012 230 / 0.03) 32%,
+    oklch(0.99 0.012 230 / 0.15) 34%,
+    oklch(0.99 0.012 230 / 0) 50%
+  );
+  /* 按视口固定：侧栏、会话栏、垫板、桌面上落的是同一块光 */
+  --jg-light-attach: fixed;
+  --jg-light-dock: var(--jg-light-panel);
+
+  --jg-l-ink: oklch(0.22 0.045 50);
+  --jg-l-ink-2: oklch(0.29 0.045 52);
+  --jg-l-ink-3: oklch(0.32 0.045 55);
+  --jg-l-story: oklch(0.27 0.045 52);
+  --jg-l-accent: oklch(0.38 0.095 58);
+  --jg-l-accent-soft: oklch(0.4 0.09 60 / 0.1);
+  --jg-l-edge: oklch(0.5 0.06 58);
+  --jg-l-edge-strong: oklch(0.4 0.06 55);
+  --jg-l-control: oklch(0.89 0.03 82);
+  --jg-l-danger: oklch(0.45 0.16 28);
+  --jg-l-danger-soft: oklch(0.5 0.16 28 / 0.12);
+  --jg-l-btn: oklch(0.8 0.05 74);
+  --jg-l-btn-edge: oklch(0.47 0.06 58);
+  --jg-l-btn-hi: oklch(0.99 0.01 230 / 0.6);
+  --jg-l-well-edge: oklch(0.5 0.06 58);
+  --jg-l-well-shade: oklch(0.35 0.05 50 / 0.3);
+  --jg-l-well-hi: oklch(0.99 0.01 230 / 0.45);
+  --jg-l-chip: oklch(0.8 0.045 72);
+  --jg-l-option: oklch(0.94 0.02 85);
+
+  /* 橡木桌面上的字：白天橡木比鞍革深，字是奶白烫印 */
+  --jg-o-ink: oklch(0.975 0.014 86);
+  --jg-o-ink-2: oklch(0.94 0.02 84);
+  --jg-o-ink-3: oklch(0.9 0.025 82);
+  --jg-o-story: oklch(0.95 0.018 85);
+  --jg-o-accent: oklch(0.9 0.09 88);
+  --jg-o-accent-soft: oklch(0.95 0.06 95 / 0.14);
+  --jg-o-edge: oklch(0.3 0.04 50);
+  --jg-o-edge-strong: oklch(0.72 0.05 75);
+  --jg-o-control: oklch(0.34 0.045 50);
+  --jg-o-danger: oklch(0.86 0.1 40);
+  --jg-o-danger-soft: oklch(0.45 0.13 28 / 0.3);
+  --jg-o-btn: oklch(0.4 0.05 52);
+  --jg-o-btn-edge: oklch(0.27 0.04 48);
+  --jg-o-btn-hi: oklch(0.99 0.01 230 / 0.35);
+  --jg-o-well-edge: oklch(0.26 0.035 46);
+  --jg-o-well-shade: oklch(0.1 0.02 40 / 0.45);
+  --jg-o-well-hi: oklch(0.99 0.01 230 / 0.25);
+  --jg-o-chip: oklch(0.36 0.045 50);
+  --jg-o-hi: oklch(0.99 0.01 230 / 0.22);
+  --jg-o-groove: oklch(0.2 0.03 45 / 0.6);
+  --jg-o-emboss: 0 1px 0 oklch(0.2 0.03 45 / 0.55);
+  --jg-o-emboss-lg: 1px 2px 0 oklch(0.2 0.03 45 / 0.5), 5px 7px 10px oklch(0.15 0.03 45 / 0.3);
+  --jg-o-sunk: oklch(0.15 0.03 45 / 0.28);
+  --jg-o-sunk-inset: inset 1px 2px 3px oklch(0.1 0.02 40 / 0.45);
+
+  --raised: oklch(0.78 0.055 72);
+  --overlay: oklch(0.25 0.04 50 / 0.42);
+  --ink-on-primary: oklch(0.28 0.05 55);
+  --primary-glow: var(--jg-glow);
+  --success: oklch(0.42 0.09 130);
+  --success-soft: oklch(0.5 0.09 130 / 0.12);
+  --warning-soft: oklch(0.4 0.09 60 / 0.12);
+  --info-soft: oklch(0.4 0.04 55 / 0.1);
+
+  --origin-l0: 0.4;
+  --origin-step: 0.04;
+  --origin-c: 0.09;
+  --origin-h: 66;
+
+  --jg-p-ink: oklch(0.24 0.04 50);
+  --jg-p-ink-2: oklch(0.39 0.045 55);
+  --jg-p-ink-3: oklch(0.48 0.045 60);
+  --jg-p-story: oklch(0.31 0.045 52);
+  --jg-p-quote: oklch(0.2 0.05 42);
+  --jg-p-action: oklch(0.42 0.05 58);
+  --jg-p-accent: oklch(0.45 0.1 62);
+  --jg-p-edge: oklch(0.74 0.045 70);
+  --jg-p-edge-strong: oklch(0.55 0.055 60);
+  --jg-p-control: oklch(0.885 0.035 80);
+  --jg-p-danger: oklch(0.47 0.16 28);
+  --jg-p-btn: oklch(0.965 0.02 88);
+  --jg-p-btn-edge: oklch(0.6 0.055 62);
+  --jg-p-btn-hi: oklch(1 0 0 / 0.85);
+  --jg-p-well-edge: oklch(0.64 0.055 62);
+  --jg-p-well-shade: oklch(0.45 0.06 55 / 0.28);
+  --jg-p-well-hi: oklch(1 0 0 / 0.7);
+  --jg-p-chip: oklch(0.89 0.036 80);
+
+  /* 白天的纹理：浅色底上同样的透明度会显得很脏，全部减半以下 */
+  --jg-tex-specks: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n' x='0' y='0' width='1' height='1'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='1' seed='4' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .2 0 0 0 0 .12 0 0 0 0 .05 .7 0 0 0 -.38'/></filter><rect width='160' height='160' filter='url(%23n)'/></svg>");
+  --jg-tex-grain:
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='256' height='128'><filter id='w' x='0' y='0' width='1' height='1'><feTurbulence type='fractalNoise' baseFrequency='.0078125 .109375' numOctaves='3' seed='7' stitchTiles='stitch' result='t'/><feColorMatrix in='t' values='0 0 0 0 .3 0 0 0 0 .18 0 0 0 0 .08 1.1 0 0 0 -.54' result='d'/><feColorMatrix in='t' values='0 0 0 0 1 0 0 0 0 .92 0 0 0 0 .75 -.7 0 0 0 .24' result='l'/><feMerge><feMergeNode in='d'/><feMergeNode in='l'/></feMerge></filter><rect width='256' height='128' filter='url(%23w)'/></svg>"),
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='224' height='96'><filter id='v' x='0' y='0' width='1' height='1'><feTurbulence type='fractalNoise' baseFrequency='.004464286 .114583333' numOctaves='2' seed='23' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .3 0 0 0 0 .18 0 0 0 0 .08 .8 0 0 0 -.4'/></filter><rect width='224' height='96' filter='url(%23v)'/></svg>");
+  --jg-tex-leather: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='g' x='0' y='0' width='1' height='1'><feTurbulence type='turbulence' baseFrequency='.26' numOctaves='2' seed='11' stitchTiles='stitch' result='t'/><feColorMatrix in='t' values='0 0 0 0 .3 0 0 0 0 .18 0 0 0 0 .08 -.75 0 0 0 .2' result='a'/><feTurbulence type='fractalNoise' baseFrequency='.03' numOctaves='2' seed='2' stitchTiles='stitch' result='c'/><feColorMatrix in='c' values='0 0 0 0 .3 0 0 0 0 .18 0 0 0 0 .08 .3 0 0 0 -.13' result='b'/><feMerge><feMergeNode in='b'/><feMergeNode in='a'/></feMerge></filter><rect width='200' height='200' filter='url(%23g)'/></svg>");
+  color-scheme: light;
+  scrollbar-color: oklch(0.5 0.06 58) transparent;
+}
+
+/* ================================================================== */
+/* 槽位映射、形、字、动（两种模式共用）                                    */
+/* ================================================================== */
+
+[data-theme='jiuguan'] {
+  /* 皮面上的光影槽位（嵌在橡木区里的皮面复位用） */
+  --jg-l-hi: var(--jg-hi);
+  --jg-l-groove: var(--jg-groove);
+  --jg-l-emboss: var(--jg-emboss);
+  --jg-l-emboss-lg: var(--jg-emboss-lg);
+  --jg-l-sunk: var(--jg-sunk);
+  --jg-l-sunk-inset: var(--jg-sunk-inset);
+
+  --canvas: var(--jg-oak);
+  --reading: var(--jg-parch);
+  --panel: var(--jg-leather);
+
+  --ink: var(--jg-l-ink);
+  --ink-2: var(--jg-l-ink-2);
+  --ink-3: var(--jg-l-ink-3);
+  --ink-story: var(--jg-l-story);
+  --ink-quote: var(--jg-l-ink);
+  --ink-action: var(--jg-l-ink-2);
+  --ink-link: var(--jg-l-accent);
+  --accent: var(--jg-l-accent);
+  --accent-soft: var(--jg-l-accent-soft);
+  --primary: var(--jg-brass-2);
+  --primary-2: var(--jg-brass-4);
+  --primary-edge: var(--jg-brass-deep);
+  --primary-soft: var(--jg-l-accent-soft);
+  --edge: var(--jg-l-edge);
+  --edge-strong: var(--jg-l-edge-strong);
+  --edge-focus: var(--jg-brass-2);
+  --edge-highlight: var(--jg-hi);
+  --control: var(--jg-l-control);
+  --danger: var(--jg-l-danger);
+  --danger-soft: var(--jg-l-danger-soft);
+  --warning: var(--jg-l-accent);
+  --info: var(--jg-l-ink-2);
+  --jg-btn: var(--jg-l-btn);
+  --jg-btn-edge: var(--jg-l-btn-edge);
+  --jg-btn-hi: var(--jg-l-btn-hi);
+  --jg-well-edge: var(--jg-l-well-edge);
+  --jg-well-shade: var(--jg-l-well-shade);
+  --jg-well-hi: var(--jg-l-well-hi);
+  --jg-chip: var(--jg-l-chip);
+
+  --r-panel: 10px;
+  --r-card: 6px;
+  --r-control: 6px;
+  --r-pill: 999px;
+  --shadow-panel: var(--jg-cast-md);
+  --shadow-raised: var(--jg-cast-lg);
+  --shadow-control: var(--jg-cast-sm);
+
+  /* 物理的：按压 100ms 线性、不回弹；面板翻开 240ms */
+  --ease: cubic-bezier(0.25, 0.8, 0.3, 1);
+  --dur-panel: 240ms;
+  --dur-hover: 140ms;
+  --dur-press: 100ms;
+  --motion-pulse: jg-breathe;
+
+  /* 橡木：噪点 + 木纹 + 年轮细纹（repeating-linear-gradient）+ 木板拼缝 */
+  --texture-canvas:
+    var(--jg-tex-specks), var(--jg-tex-grain),
+    repeating-linear-gradient(
+      179.2deg,
+      oklch(0.1 0.02 40 / 0) 0 11px,
+      oklch(0.1 0.02 40 / 0.07) 11px 12.5px,
+      oklch(0.1 0.02 40 / 0) 12.5px 29px,
+      oklch(0.75 0.06 65 / 0.05) 29px 32px,
+      oklch(0.1 0.02 40 / 0) 32px 47px
+    ),
+    repeating-linear-gradient(
+      180deg,
+      oklch(0.1 0.02 40 / 0) 0 171px,
+      oklch(0.1 0.02 40 / 0.5) 171px 172px,
+      oklch(0.85 0.06 70 / 0.12) 172px 173px
+    );
+  --texture-reading: var(--jg-tex-parchment);
+
+  /* 故事：霞鹜文楷 17 / 1.9，墨色略带棕；界面：思源宋体小号，像账本手写；标题：楷 */
+  --font-ui: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', STSong, SimSun, Georgia, serif;
+  --font-story:
+    'LXGW WenKai Screen', 'LXGW WenKai', KaiTi, STKaiti, 'Noto Serif SC', Georgia, serif;
+  --font-display: var(--font-story);
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+  --story-size: 17px;
+  --story-leading: 1.9;
+  --story-measure: 38em;
+  --story-paragraph-gap: 0.6em;
+  /* 动作（*…*）不做合成斜体：霞鹜文楷没有斜体字面，靠更浅一档的墨区分 */
+  --action-style: normal;
+
+  --gap-message: 0.6rem;
+  --icon-stroke: 1.6;
+}
+
+/* ================================================================== */
+/* 元素规则                                                            */
+/* ================================================================== */
+
+@scope ([data-theme='jiuguan']) to ([data-theme]) {
+  /* ---------------------------------------------------------------- */
+  /* 纸面元素：改写成羊皮纸上的墨                                        */
+  /* ---------------------------------------------------------------- */
+
+  :is(
+    [data-part='message'],
+    [data-part='composer'],
+    [data-part='character-card'],
+    [data-part='settings-section'],
+    [data-part='connection-card'],
+    [data-part='library-item'],
+    [data-part='modal'],
+    [data-part='generation-error'],
+    :is(ul, ol):has(> [data-part='library-item']:is([data-kind='preset'], [data-kind='lorebook']))
+  ) {
+    --ink: var(--jg-p-ink);
+    --ink-2: var(--jg-p-ink-2);
+    --ink-3: var(--jg-p-ink-3);
+    --ink-story: var(--jg-p-story);
+    --ink-quote: var(--jg-p-quote);
+    --ink-action: var(--jg-p-action);
+    --ink-link: var(--jg-p-accent);
+    --accent: var(--jg-p-accent);
+    --accent-soft: oklch(0.47 0.1 62 / 0.1);
+    --primary-soft: oklch(0.47 0.1 62 / 0.12);
+    --edge: var(--jg-p-edge);
+    --edge-strong: var(--jg-p-edge-strong);
+    --edge-focus: var(--jg-p-accent);
+    --control: var(--jg-p-control);
+    --danger: var(--jg-p-danger);
+    --danger-soft: oklch(0.55 0.16 28 / 0.12);
+    --warning: var(--jg-p-accent);
+    --success: oklch(0.42 0.08 130);
+    --info: var(--jg-p-ink-2);
+    --jg-btn: var(--jg-p-btn);
+    --jg-btn-edge: var(--jg-p-btn-edge);
+    --jg-btn-hi: var(--jg-p-btn-hi);
+    --jg-well-edge: var(--jg-p-well-edge);
+    --jg-well-shade: var(--jg-p-well-shade);
+    --jg-well-hi: var(--jg-p-well-hi);
+    --jg-chip: var(--jg-p-chip);
+    --jg-groove: oklch(0.55 0.06 60 / 0.45);
+    --jg-hi: oklch(1 0.02 90 / 0.55);
+    --jg-emboss: 0 1px 0 oklch(1 0.02 90 / 0.5);
+    --jg-sunk: oklch(0.45 0.07 55 / 0.08);
+    --jg-sunk-inset: inset 0 1px 2px oklch(0.4 0.07 55 / 0.3);
+    --origin-l0: 0.42;
+    --origin-c: 0.09;
+    color: var(--ink);
+    scrollbar-color: oklch(0.62 0.06 62) transparent;
+  }
+
+  /* 橡木桌面上的区域（白天字是奶白；夜里与皮面同一套） */
+  :is([data-part='app-header'], [data-part='chat-header'], [data-part='main']) {
+    --ink: var(--jg-o-ink);
+    --ink-2: var(--jg-o-ink-2);
+    --ink-3: var(--jg-o-ink-3);
+    --ink-story: var(--jg-o-story);
+    --ink-quote: var(--jg-o-ink);
+    --ink-action: var(--jg-o-ink-2);
+    --ink-link: var(--jg-o-accent);
+    --accent: var(--jg-o-accent);
+    --accent-soft: var(--jg-o-accent-soft);
+    --primary-soft: var(--jg-o-accent-soft);
+    --edge: var(--jg-o-edge);
+    --edge-strong: var(--jg-o-edge-strong);
+    --edge-focus: var(--jg-brass-2);
+    --control: var(--jg-o-control);
+    --danger: var(--jg-o-danger);
+    --danger-soft: var(--jg-o-danger-soft);
+    --warning: var(--jg-o-accent);
+    --info: var(--jg-o-ink-2);
+    --jg-btn: var(--jg-o-btn);
+    --jg-btn-edge: var(--jg-o-btn-edge);
+    --jg-btn-hi: var(--jg-o-btn-hi);
+    --jg-well-edge: var(--jg-o-well-edge);
+    --jg-well-shade: var(--jg-o-well-shade);
+    --jg-well-hi: var(--jg-o-well-hi);
+    --jg-chip: var(--jg-o-chip);
+    --jg-hi: var(--jg-o-hi);
+    --jg-groove: var(--jg-o-groove);
+    --jg-emboss: var(--jg-o-emboss);
+    --jg-emboss-lg: var(--jg-o-emboss-lg);
+    --jg-sunk: var(--jg-o-sunk);
+    --jg-sunk-inset: var(--jg-o-sunk-inset);
+    color: var(--ink);
+  }
+
+  /* 皮面区域（包括纸条下方落在皮面上的操作条） */
+  :is(
+    [data-part='sidebar'],
+    [data-part='chat-aside'],
+    [data-part='drawer'],
+    [data-part='message-list'],
+    [data-part='start-screen'],
+    [data-part='composer-dock'],
+    [data-part='message'] > [data-part='message-actions']
+  ) {
+    --ink: var(--jg-l-ink);
+    --ink-2: var(--jg-l-ink-2);
+    --ink-3: var(--jg-l-ink-3);
+    --ink-story: var(--jg-l-story);
+    --ink-quote: var(--jg-l-ink);
+    --ink-action: var(--jg-l-ink-2);
+    --ink-link: var(--jg-l-accent);
+    --accent: var(--jg-l-accent);
+    --accent-soft: var(--jg-l-accent-soft);
+    --primary-soft: var(--jg-l-accent-soft);
+    --edge: var(--jg-l-edge);
+    --edge-strong: var(--jg-l-edge-strong);
+    --edge-focus: var(--jg-brass-2);
+    --control: var(--jg-l-control);
+    --danger: var(--jg-l-danger);
+    --danger-soft: var(--jg-l-danger-soft);
+    --warning: var(--jg-l-accent);
+    --info: var(--jg-l-ink-2);
+    --jg-btn: var(--jg-l-btn);
+    --jg-btn-edge: var(--jg-l-btn-edge);
+    --jg-btn-hi: var(--jg-l-btn-hi);
+    --jg-well-edge: var(--jg-l-well-edge);
+    --jg-well-shade: var(--jg-l-well-shade);
+    --jg-well-hi: var(--jg-l-well-hi);
+    --jg-chip: var(--jg-l-chip);
+    --jg-hi: var(--jg-l-hi);
+    --jg-groove: var(--jg-l-groove);
+    --jg-emboss: var(--jg-l-emboss);
+    --jg-emboss-lg: var(--jg-l-emboss-lg);
+    --jg-sunk: var(--jg-l-sunk);
+    --jg-sunk-inset: var(--jg-l-sunk-inset);
+    color: var(--ink);
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* 外壳：橡木桌、皮面侧栏                                            */
+  /* ---------------------------------------------------------------- */
+
+  [data-part='sidebar'],
+  [data-part='chat-aside'],
+  [data-part='drawer'] {
+    position: relative;
+    background-color: var(--jg-leather);
+    background-image: var(--jg-light-panel), var(--jg-tex-specks), var(--jg-tex-leather);
+    background-attachment: var(--jg-light-attach), scroll, scroll;
+    border-color: var(--jg-leather-deep);
+  }
+
+  [data-part='sidebar'] {
+    z-index: 1;
+    box-shadow:
+      inset -1px 0 0 var(--jg-hi),
+      var(--jg-cast-panel);
+  }
+
+  [data-part='chat-aside'][data-side='start'] {
+    box-shadow:
+      inset -1px 0 0 var(--jg-hi),
+      inset 1px 0 0 oklch(0.1 0.02 40 / 0.3);
+  }
+
+  [data-part='chat-aside'][data-side='end'] {
+    box-shadow:
+      inset 1px 0 0 var(--jg-hi),
+      inset -1px 0 0 oklch(0.1 0.02 40 / 0.3);
+  }
+
+  /* 皮革四周的缝线：1px 浅色虚线 */
+  :is([data-part='sidebar'], [data-part='chat-aside'], [data-part='drawer'])::after {
+    content: '';
+    position: absolute;
+    inset: 6px;
+    border: 1px dashed var(--jg-stitch);
+    border-radius: 7px;
+    pointer-events: none;
+  }
+
+  [data-part='brand'] > :first-child {
+    font-family: var(--font-display);
+    font-size: 21px;
+    font-weight: 400;
+    letter-spacing: 0.06em;
+    color: var(--jg-l-accent);
+    text-shadow: var(--jg-emboss);
+  }
+
+  [data-part='brand'] > :last-child {
+    font-size: 11px;
+    letter-spacing: 0.04em;
+  }
+
+  [data-part='nav-item'],
+  [data-part='settings-nav-item'] {
+    position: relative;
+    letter-spacing: 0.04em;
+    text-shadow: var(--jg-emboss);
+  }
+
+  /* 当前项：压进皮面的一块凹槽 + 黄铜字 */
+  :is([data-part='nav-item'], [data-part='settings-nav-item'])[data-active='true'] {
+    color: var(--accent);
+    background-color: var(--jg-sunk);
+    box-shadow:
+      var(--jg-sunk-inset),
+      0 1px 0 var(--jg-hi);
+  }
+
+  [data-part='nav'][data-variant='sidebar'] [data-part='nav-item'] {
+    padding-inline-start: 1.35rem;
+  }
+
+  /* 侧栏当前项前面一颗小铜钉 */
+  [data-part='nav'][data-variant='sidebar'] [data-part='nav-item'][data-active='true']::before {
+    content: '';
+    position: absolute;
+    left: 8px;
+    top: 50%;
+    width: 5px;
+    height: 5px;
+    margin-top: -2.5px;
+    border-radius: 50%;
+    background: radial-gradient(
+      circle at 35% 30%,
+      var(--jg-brass-shine) 0 0.7px,
+      var(--jg-brass-2) 1.4px,
+      var(--jg-brass-4) 2.6px
+    );
+    box-shadow: var(--jg-rivet-cast);
+  }
+
+  [data-part='app-header'],
+  [data-part='chat-header'] {
+    border-color: var(--jg-groove);
+    box-shadow: 0 1px 0 var(--jg-hi);
+  }
+
+  [data-part='chat-header'] > div:not([data-part]) > div {
+    font-family: var(--font-display);
+    font-size: 17px;
+    font-weight: 400;
+    letter-spacing: 0.05em;
+    text-shadow: var(--jg-emboss);
+  }
+
+  /* 在线：一粒点亮的琥珀灯珠；离线：熄灭的红 */
+  [data-part='server-status'] > span:first-child {
+    width: 7px;
+    height: 7px;
+    border: 1px solid var(--jg-brass-deep);
+    background: radial-gradient(
+      circle at 35% 30%,
+      oklch(0.97 0.08 92),
+      oklch(0.8 0.15 72) 55%,
+      oklch(0.52 0.12 55)
+    );
+    box-shadow: 0 0 6px var(--jg-glow);
+  }
+
+  [data-part='server-status'][data-online='false'] > span:first-child {
+    background: radial-gradient(circle at 35% 30%, var(--jg-wax-hi), var(--jg-wax-lo));
+    box-shadow: var(--jg-cast-sm);
+  }
+
+  [data-part='page-header'] h1 {
+    font-weight: 400;
+    letter-spacing: 0.06em;
+    text-shadow: var(--jg-emboss-lg);
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* 会话列表                                                          */
+  /* ---------------------------------------------------------------- */
+
+  [data-part='chat-list-header'] {
+    padding-block: 0.85rem;
+    padding-inline: 1rem 0.85rem;
+    border-color: var(--jg-groove);
+    box-shadow: 0 1px 0 var(--jg-hi);
+  }
+
+  [data-part='chat-list-header'] > span {
+    font-family: var(--font-display);
+    font-size: 16px;
+    font-weight: 400;
+    letter-spacing: 0.08em;
+    text-shadow: var(--jg-emboss);
+  }
+
+  /* 分隔一律是刻槽：1px 暗 + 1px 亮 */
+  .divide-edge > :not(:last-child) {
+    border-color: var(--jg-groove);
+  }
+
+  .divide-edge > :not(:first-child) {
+    box-shadow: inset 0 1px 0 var(--jg-hi);
+  }
+
+  [data-part='chat-list-item'] > button {
+    padding-inline: 1rem 2.25rem;
+  }
+
+  [data-part='chat-list-item'][data-active='true'] {
+    background-color: var(--jg-sunk);
+    box-shadow:
+      var(--jg-sunk-inset),
+      inset 0 -1px 0 var(--jg-hi);
+  }
+
+  /* 当前项的标记：一根黄铜压条 */
+  [data-part='chat-list-item'] > span[aria-hidden] {
+    width: 3px;
+    height: 2.75rem;
+    inset-inline-start: 4px;
+    border-radius: 2px;
+    background: linear-gradient(90deg, var(--jg-brass-1), var(--jg-brass-2) 45%, var(--jg-brass-4));
+    box-shadow: var(--jg-cast-sm);
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* 对话：皮面垫板、钉在上面的羊皮纸条                                  */
+  /* ---------------------------------------------------------------- */
+
+  [data-part='message-list'],
+  [data-part='start-screen'],
+  [data-part='composer-dock'] {
+    background-color: var(--jg-leather-pad);
+    background-image: var(--jg-light-dock), var(--jg-tex-specks), var(--jg-tex-leather);
+    background-attachment: var(--jg-light-attach), scroll, scroll;
+  }
+
+  [data-part='message-list'],
+  [data-part='start-screen'] {
+    background-image: var(--jg-light-panel), var(--jg-tex-specks), var(--jg-tex-leather);
+    background-attachment: var(--jg-light-attach), scroll, scroll;
+  }
+
+  [data-part='message-list'] {
+    box-shadow: inset 0 8px 12px -10px oklch(0.06 0.02 40 / 0.5);
+  }
+
+  [data-part='composer-dock'] {
+    position: relative;
+  }
+
+  /* 垫板四周的缝线：列表的父级（不滚动）画上半框，输入区画下半框，连成一圈 */
+  :has(> [data-part='message-list']):not([data-part]),
+  :has(> [data-part='start-screen']):not([data-part]),
+  [data-part='chat-view']:has(> [data-part='message-list']) {
+    position: relative;
+  }
+
+  :has(> [data-part='message-list']):not([data-part])::after {
+    content: '';
+    position: absolute;
+    inset: 7px 7px -1px;
+    border: 1px dashed var(--jg-stitch);
+    border-bottom: 0;
+    border-radius: 8px 8px 0 0;
+    pointer-events: none;
+  }
+
+  [data-part='composer-dock']::after {
+    content: '';
+    position: absolute;
+    inset: 0 7px 7px;
+    border: 1px dashed var(--jg-stitch);
+    border-top: 0;
+    border-radius: 0 0 8px 8px;
+    pointer-events: none;
+  }
+
+  /* 预览卡：列表与输入区是同一个父级，整圈缝在它上面 */
+  [data-part='chat-view']:has(> [data-part='message-list'])::after,
+  :has(> [data-part='start-screen']):not([data-part])::after {
+    content: '';
+    position: absolute;
+    inset: 7px;
+    border: 1px dashed var(--jg-stitch);
+    border-radius: 8px;
+    pointer-events: none;
+  }
+
+  [data-part='chat-view']:has(> [data-part='message-list']) > [data-part='composer-dock']::after {
+    content: none;
+  }
+
+  /* 纸条画在装饰层里（带歪角与烧灼）；消息只负责留出纸边 */
+  [data-part='message'] {
+    isolation: isolate;
+    padding: 16px 20px 0 28px;
+  }
+
+  [data-part='message'] > .flex:not([data-part]) {
+    padding-bottom: 14px;
+  }
+
+  [data-part='message-ornament'] {
+    z-index: -1;
+  }
+
+  /* 操作条统一 2px + 28px 高，落在纸条下方的皮面上 */
+  [data-part='message'] > [data-part='message-actions'] {
+    height: 28px;
+    margin-top: 2px;
+    margin-inline-start: -6px;
+  }
+
+  [data-part='message']:has(> [data-part='message-actions']) .jg-strip {
+    bottom: 30px;
+  }
+
+  /* 带蜡封的操作条高一些：蜡封与两枚铜钮整件落在纸条下沿之下的皮面上 */
+  [data-part='message'] > [data-part='message-actions']:has(.jg-seal) {
+    height: 40px;
+    margin-top: 4px;
+  }
+
+  [data-part='message']:has(> [data-part='message-actions'] .jg-seal) .jg-strip {
+    bottom: 44px;
+  }
+
+  .jg-strip {
+    position: absolute;
+    inset: 0;
+    border-radius: var(--jg-shape, 10px);
+    transform: rotate(var(--jg-tilt, 0deg));
+    background-color: var(--jg-parch);
+    background-image:
+      radial-gradient(
+        130% 120% at var(--jg-burn-at, 0% 0%),
+        oklch(0.5 0.08 55 / 0) 60%,
+        oklch(0.6 0.085 62 / 0.14) 86%,
+        oklch(0.46 0.085 52 / 0.3) 100%
+      ),
+      radial-gradient(
+        150% 150% at 50% 45%,
+        oklch(0.62 0.08 62 / 0) 64%,
+        oklch(0.62 0.08 62 / 0.16) 96%
+      ),
+      var(--jg-tex-parchment);
+    box-shadow:
+      inset 0 0 0 1px oklch(0.5 0.075 55 / 0.16),
+      inset 0 0 2px 1px oklch(0.45 0.085 52 / 0.2),
+      inset 0 0 14px 1px oklch(0.64 0.085 62 / 0.2),
+      var(--jg-cast-md);
+  }
+
+  /* 用户的纸条：更新、更白的便笺，烧灼轻得多 */
+  .jg-strip[data-role='user'] {
+    background-color: var(--jg-note);
+    background-image:
+      radial-gradient(
+        160% 150% at 50% 45%,
+        oklch(0.62 0.08 62 / 0) 72%,
+        oklch(0.62 0.08 62 / 0.09) 98%
+      ),
+      var(--jg-tex-parchment);
+    box-shadow:
+      inset 0 0 0 1px oklch(0.55 0.06 60 / 0.14),
+      inset 0 0 8px 1px oklch(0.65 0.07 65 / 0.12),
+      var(--jg-cast-md);
+  }
+
+  /* 6px 黄铜铆钉：顶部高光、底部暗边、落在纸上的一点影 */
+  .jg-rivet {
+    position: absolute;
+    left: 12px;
+    top: 12px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: radial-gradient(
+      circle at 34% 30%,
+      var(--jg-brass-shine) 0 0.7px,
+      var(--jg-brass-2) 1.5px,
+      var(--jg-brass-3) 2.3px,
+      var(--jg-brass-deep) 3px
+    );
+    box-shadow: var(--jg-rivet-cast);
+  }
+
+  [data-part='message-header'] > span:first-child {
+    font-weight: 700;
+    letter-spacing: 0.04em;
+  }
+
+  /* 推理区：纸上压出的一块浅凹 */
+  [data-part='reasoning'] {
+    border: 0;
+    background-color: var(--jg-sunk);
+    box-shadow:
+      var(--jg-sunk-inset),
+      0 1px 0 oklch(1 0.02 90 / 0.5);
+  }
+
+  [data-part='generation-error'] {
+    position: relative;
+    border: 0;
+    border-radius: var(--r-card);
+    background-color: var(--jg-parch);
+    background-image:
+      linear-gradient(90deg, oklch(0.47 0.16 28 / 0.1), oklch(0.47 0.16 28 / 0) 40%),
+      var(--jg-tex-parchment);
+    box-shadow:
+      inset 3px 0 0 var(--jg-wax-mid),
+      inset 0 0 12px oklch(0.6 0.08 60 / 0.2),
+      var(--jg-cast-md);
+  }
+
+  [data-part='empty-state'] > p:first-of-type {
+    font-weight: 400;
+    letter-spacing: 0.05em;
+    text-shadow: var(--jg-emboss);
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* 输入区：嵌在黄铜框里的一张羊皮纸                                    */
+  /* ---------------------------------------------------------------- */
+
+  [data-part='composer'] {
+    border: 2px solid transparent;
+    border-radius: var(--r-panel);
+    background:
+      radial-gradient(
+          160% 160% at 50% 40%,
+          oklch(0.6 0.08 60 / 0) 60%,
+          oklch(0.6 0.08 60 / 0.14) 100%
+        )
+        padding-box,
+      var(--jg-tex-parchment) padding-box,
+      linear-gradient(var(--jg-parch), var(--jg-parch)) padding-box,
+      linear-gradient(
+          180deg,
+          var(--jg-brass-1),
+          var(--jg-brass-3) 45%,
+          var(--jg-brass-4) 80%,
+          var(--jg-brass-2)
+        )
+        border-box;
+    box-shadow:
+      inset 0 2px 4px oklch(0.38 0.07 52 / 0.32),
+      inset 0 0 0 1px oklch(0.35 0.06 52 / 0.3),
+      0 0 0 1px var(--jg-brass-deep),
+      var(--jg-cast-md);
+  }
+
+  [data-part='composer']:focus-within {
+    border-color: transparent;
+    box-shadow:
+      inset 0 2px 4px oklch(0.38 0.07 52 / 0.32),
+      inset 0 0 0 1px oklch(0.35 0.06 52 / 0.3),
+      0 0 0 1px var(--jg-brass-deep),
+      0 0 12px var(--jg-glow),
+      var(--jg-cast-md);
+  }
+
+  [data-part='composer-input'] {
+    font-family: var(--font-story);
+    font-size: 16px;
+    color: var(--jg-p-ink);
+  }
+
+  [data-part='composer-input']::placeholder {
+    color: var(--jg-p-ink-3);
+  }
+
+  [data-part='composer-hint'] {
+    letter-spacing: 0.04em;
+    text-shadow: var(--jg-emboss);
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* 1. 黄铜灯发送键                                                    */
+  /* ---------------------------------------------------------------- */
+
+  .jg-lamp {
+    margin-bottom: 3px;
+    border: 1px solid var(--jg-brass-deep);
+    border-radius: 999px;
+    background:
+      radial-gradient(circle at 34% 24%, var(--jg-brass-shine) 0, oklch(1 0 0 / 0) 40%),
+      linear-gradient(
+        180deg,
+        var(--jg-brass-1),
+        var(--jg-brass-2) 36%,
+        var(--jg-brass-3) 72%,
+        var(--jg-brass-4)
+      );
+    box-shadow:
+      inset 0 1px 0 var(--jg-brass-shine),
+      inset 0 -2px 2px oklch(0.34 0.06 52 / 0.45),
+      0 3px 0 var(--jg-brass-deep),
+      var(--jg-cast-lamp);
+    transition:
+      transform var(--dur-press) linear,
+      box-shadow var(--dur-press) linear,
+      filter var(--dur-hover) linear;
+  }
+
+  .jg-lamp:hover:not(:disabled) {
+    filter: brightness(1.06);
+  }
+
+  /* 真的被按进去：下沉 3px，外投影消失 */
+  .jg-lamp:active:not(:disabled) {
+    transform: translateY(3px);
+    box-shadow:
+      inset 0 1px 0 var(--jg-brass-shine),
+      inset 0 -1px 1px oklch(0.34 0.06 52 / 0.4),
+      inset 0 2px 3px oklch(0.34 0.06 52 / 0.35),
+      0 0 0 var(--jg-brass-deep),
+      0 0 0 oklch(0 0 0 / 0);
+  }
+
+  .jg-lamp[data-lamp='idle'] {
+    filter: saturate(0.7) brightness(0.92);
+  }
+
+  .jg-lamp-glyph path {
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .jg-cut path {
+    stroke: oklch(0.3 0.06 52);
+    stroke-width: 1.3;
+  }
+
+  .jg-cut-hi path {
+    stroke: oklch(0.97 0.06 92 / 0.55);
+    stroke-width: 1.1;
+  }
+
+  .jg-lamp .jg-flame {
+    fill: oklch(0.3 0.06 52 / 0);
+    stroke: oklch(0.3 0.06 52);
+    stroke-width: 1.2;
+  }
+
+  .jg-lamp[data-lamp='idle'] .jg-lamp-glyph {
+    opacity: 0.6;
+  }
+
+  .jg-lamp[data-lamp='ready'] .jg-flame {
+    fill: oklch(0.3 0.06 52 / 0.85);
+  }
+
+  /* 生成中：灯芯点亮 */
+  .jg-lamp-glow {
+    position: absolute;
+    inset: -14px;
+    border-radius: 50%;
+    background: radial-gradient(
+      circle,
+      oklch(0.95 0.13 88 / 0.55) 0,
+      oklch(0.86 0.16 74 / 0.42) 42%,
+      oklch(0.82 0.16 70 / 0) 72%
+    );
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .jg-lamp[data-lamp='generating'] .jg-lamp-glow {
+    opacity: 0.85;
+  }
+
+  .jg-lamp[data-lamp='generating'] .jg-flame {
+    fill: var(--jg-flame);
+    stroke: oklch(0.55 0.14 55);
+    filter: drop-shadow(0 0 2.5px oklch(0.88 0.17 75));
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* 3. 蜡封：压在纸条下沿                                              */
+  /* ---------------------------------------------------------------- */
+
+  .jg-seal {
+    filter: var(--jg-drop);
+  }
+
+  .jg-seal {
+    transform: rotate(-6deg);
+  }
+
+  .jg-wax-hi {
+    stop-color: var(--jg-wax-hi);
+  }
+
+  .jg-wax-mid {
+    stop-color: var(--jg-wax-mid);
+  }
+
+  .jg-wax-lo {
+    stop-color: var(--jg-wax-lo);
+  }
+
+  .jg-wax-ring {
+    fill: none;
+    stroke: oklch(0.22 0.08 22 / 0.75);
+    stroke-width: 1;
+  }
+
+  .jg-wax-ring-hi {
+    fill: none;
+    stroke: oklch(0.72 0.13 32 / 0.4);
+    stroke-width: 0.9;
+  }
+
+  /* 压印在蜡上的「2/3」：上沿暗、下沿亮 */
+  .jg-seal-num {
+    font-family: var(--font-display);
+    font-size: 12px;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    white-space: nowrap;
+    color: oklch(0.86 0.075 45);
+    text-shadow:
+      0 -1px 0 oklch(0.2 0.08 22 / 0.85),
+      0 1px 0 oklch(0.7 0.13 32 / 0.45);
+    transform: rotate(6deg) translateY(0.5px);
+  }
+
+  /* 蜡封两侧的小铜钮：浮雕、按下陷进去 */
+  .jg-seal-arrow {
+    border: 1px solid var(--jg-brass-deep);
+    border-radius: 999px;
+    color: oklch(0.3 0.06 52);
+    background:
+      radial-gradient(circle at 35% 28%, var(--jg-brass-shine) 0, oklch(1 0 0 / 0) 45%),
+      linear-gradient(180deg, var(--jg-brass-1), var(--jg-brass-2) 45%, var(--jg-brass-4));
+    box-shadow:
+      0 1.5px 0 var(--jg-brass-deep),
+      var(--jg-cast-sm);
+    transition:
+      transform var(--dur-press) linear,
+      box-shadow var(--dur-press) linear;
+  }
+
+  .jg-seal-arrow:hover {
+    filter: brightness(1.06);
+  }
+
+  .jg-seal-arrow:active:not(:disabled) {
+    transform: translateY(1.5px);
+    box-shadow:
+      inset 0 1px 2px oklch(0.34 0.06 52 / 0.4),
+      0 0 0 var(--jg-brass-deep);
+  }
+
+  .jg-seal-arrow:disabled {
+    filter: saturate(0.45) brightness(0.9);
+    opacity: 0.6;
+  }
+
+  .jg-seal-arrow path {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.9;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* 4. 铜框肖像                                                        */
+  /* ---------------------------------------------------------------- */
+
+  .avatar-frame,
+  .avatar-frame[data-role='user'] {
+    border: 3px solid transparent;
+    border-radius: 999px;
+    color: oklch(0.92 0.045 82);
+    background:
+      radial-gradient(circle at 40% 30%, oklch(0.42 0.05 48), oklch(0.24 0.035 42)) padding-box,
+      conic-gradient(
+          from 210deg,
+          var(--jg-brass-1),
+          var(--jg-brass-3) 22%,
+          var(--jg-brass-deep) 45%,
+          var(--jg-brass-3) 62%,
+          var(--jg-brass-2) 82%,
+          var(--jg-brass-1)
+        )
+        border-box;
+    box-shadow:
+      inset 0 1px 3px oklch(0.06 0.02 40 / 0.7),
+      0 0 0 1px oklch(0.3 0.05 50 / 0.6),
+      var(--jg-cast-sm);
+    font-family: var(--font-display);
+    text-shadow: 0 1px 1px oklch(0.06 0.02 40 / 0.7);
+  }
+
+  .avatar-frame:has(img) {
+    background:
+      linear-gradient(oklch(0.24 0.035 42), oklch(0.24 0.035 42)) padding-box,
+      conic-gradient(
+          from 210deg,
+          var(--jg-brass-1),
+          var(--jg-brass-3) 22%,
+          var(--jg-brass-deep) 45%,
+          var(--jg-brass-3) 62%,
+          var(--jg-brass-2) 82%,
+          var(--jg-brass-1)
+        )
+        border-box;
+  }
+
+  .avatar-frame img {
+    border-radius: 999px;
+  }
+
+  /* 不是正方形的肖像（角色库的大卡）：长方形的铜画框 */
+  .avatar-frame[class*='aspect-'] {
+    border-radius: 6px;
+  }
+
+  .avatar-frame[class*='aspect-'] img {
+    border-radius: 3px;
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* 流式光标：墨点                                                     */
+  /* ---------------------------------------------------------------- */
+
+  .jg-ink-drop {
+    vertical-align: baseline;
+    background: radial-gradient(
+      circle at 40% 38%,
+      var(--jg-p-quote) 0 45%,
+      oklch(0.3 0.05 45 / 0.55) 70%,
+      oklch(0.3 0.05 45 / 0) 100%
+    );
+  }
+
+  .jg-ink-drop[data-kind='reasoning'] {
+    background: radial-gradient(
+      circle at 40% 38%,
+      var(--jg-p-ink-3) 0 45%,
+      oklch(0.45 0.05 55 / 0) 100%
+    );
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* 5. 空状态插画                                                      */
+  /* ---------------------------------------------------------------- */
+
+  .jg-still-life {
+    color: var(--ink-2);
+    filter: var(--jg-drop);
+    overflow: visible;
+  }
+
+  .jg-still-lines path {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .jg-still-lines .jg-still-faint {
+    stroke-width: 1;
+    opacity: 0.55;
+  }
+
+  .jg-still-glow-core {
+    stop-color: oklch(0.86 0.15 78 / 0.34);
+  }
+
+  .jg-still-glow-edge {
+    stop-color: oklch(0.86 0.15 78 / 0);
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* 动作材质                                                          */
+  /* ---------------------------------------------------------------- */
+
+  /* 黄铜铭牌按钮：浮雕、底部 2px 厚度，按下陷进去 */
+  .action-primary {
+    border: 1px solid var(--jg-brass-deep);
+    border-radius: var(--r-control);
+    color: oklch(0.26 0.05 55);
+    background: linear-gradient(
+      180deg,
+      var(--jg-brass-1),
+      var(--jg-brass-2) 40%,
+      var(--jg-brass-3) 88%,
+      var(--jg-brass-4)
+    );
+    box-shadow:
+      inset 0 1px 0 var(--jg-brass-shine),
+      inset 0 -1px 0 oklch(0.4 0.07 58 / 0.6),
+      0 2px 0 var(--jg-brass-deep),
+      var(--jg-cast-sm);
+    text-shadow: 0 1px 0 oklch(0.95 0.07 92 / 0.5);
+    letter-spacing: 0.04em;
+    transition:
+      transform var(--dur-press) linear,
+      box-shadow var(--dur-press) linear,
+      filter var(--dur-hover) linear;
+  }
+
+  .action-primary:hover:not(:disabled),
+  .action-primary:active:not(:disabled) {
+    background: linear-gradient(
+      180deg,
+      var(--jg-brass-1),
+      var(--jg-brass-2) 40%,
+      var(--jg-brass-3) 88%,
+      var(--jg-brass-4)
+    );
+    filter: brightness(1.05);
+  }
+
+  .action-primary:active:not(:disabled) {
+    transform: translateY(2px);
+    box-shadow:
+      inset 0 1px 0 var(--jg-brass-shine),
+      inset 0 2px 3px oklch(0.4 0.07 58 / 0.45),
+      0 0 0 var(--jg-brass-deep),
+      0 0 0 oklch(0 0 0 / 0);
+  }
+
+  .action-primary:disabled {
+    opacity: 0.55;
+    filter: saturate(0.6);
+  }
+
+  /* 次要按钮：凸起的一小块皮（或纸上的一块厚卡），1px 亮 + 1px 暗 */
+  .action-quiet {
+    border: 1px solid var(--jg-btn-edge);
+    border-radius: var(--r-control);
+    color: var(--ink);
+    background: linear-gradient(
+      180deg,
+      color-mix(in oklch, var(--jg-btn), white 9%),
+      var(--jg-btn)
+    );
+    box-shadow:
+      inset 0 1px 0 var(--jg-btn-hi),
+      0 1px 0 var(--jg-btn-edge),
+      var(--jg-cast-sm);
+    transition:
+      transform var(--dur-press) linear,
+      box-shadow var(--dur-press) linear,
+      filter var(--dur-hover) linear;
+  }
+
+  .action-quiet:hover:not(:disabled) {
+    border-color: var(--jg-btn-edge);
+    background: linear-gradient(
+      180deg,
+      color-mix(in oklch, var(--jg-btn), white 14%),
+      color-mix(in oklch, var(--jg-btn), white 4%)
+    );
+  }
+
+  .action-quiet:active:not(:disabled),
+  .action-quiet[aria-pressed='true'] {
+    transform: translateY(1px);
+    background: color-mix(in oklch, var(--jg-btn), black 9%);
+    box-shadow:
+      inset 0 2px 3px oklch(0.06 0.02 40 / 0.3),
+      0 0 0 var(--jg-btn-edge);
+  }
+
+  .action-quiet[aria-pressed='true'] {
+    color: var(--accent);
+    font-weight: 700;
+  }
+
+  .action-ghost {
+    color: var(--ink-2);
+    border-radius: var(--r-control);
+  }
+
+  .action-ghost:hover:not(:disabled) {
+    color: var(--ink);
+    background-color: var(--accent-soft);
+  }
+
+  .action-ghost:active:not(:disabled) {
+    box-shadow: var(--jg-sunk-inset);
+  }
+
+  .action-danger:hover:not(:disabled) {
+    background-color: var(--danger-soft);
+    color: var(--danger);
+  }
+
+  /* 确认删除：一块暗红的蜡 */
+  .action-danger-solid {
+    border: 1px solid var(--jg-wax-lo);
+    border-radius: var(--r-control);
+    color: oklch(0.95 0.03 60);
+    background: linear-gradient(180deg, var(--jg-wax-hi), var(--jg-wax-mid) 60%, var(--jg-wax-lo));
+    box-shadow:
+      inset 0 1px 0 oklch(0.75 0.12 35 / 0.5),
+      0 2px 0 oklch(0.24 0.08 22),
+      var(--jg-cast-sm);
+    text-shadow: 0 -1px 0 oklch(0.2 0.08 22 / 0.7);
+    transition:
+      transform var(--dur-press) linear,
+      box-shadow var(--dur-press) linear;
+  }
+
+  .action-danger-solid:hover:not(:disabled) {
+    opacity: 1;
+    filter: brightness(1.06);
+  }
+
+  .action-danger-solid:active:not(:disabled) {
+    transform: translateY(2px);
+    box-shadow:
+      inset 0 2px 3px oklch(0.2 0.08 22 / 0.5),
+      0 0 0 oklch(0.24 0.08 22);
+  }
+
+  /* 回到底部：一枚小铜扣 */
+  .surface-raised.action-quiet {
+    border-color: var(--jg-brass-deep);
+    color: oklch(0.27 0.05 55);
+    background:
+      radial-gradient(circle at 34% 26%, var(--jg-brass-shine) 0, oklch(1 0 0 / 0) 42%),
+      linear-gradient(180deg, var(--jg-brass-1), var(--jg-brass-2) 40%, var(--jg-brass-4));
+    box-shadow:
+      0 2px 0 var(--jg-brass-deep),
+      var(--jg-cast-md);
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* 小件                                                              */
+  /* ---------------------------------------------------------------- */
+
+  .chip {
+    border: 1px solid var(--jg-well-edge);
+    border-radius: 4px;
+    color: var(--ink-2);
+    background-color: var(--jg-chip);
+    box-shadow:
+      inset 0 1px 1px var(--jg-well-shade),
+      0 1px 0 var(--jg-well-hi);
+  }
+
+  .chip-outline {
+    border-color: var(--edge-strong);
+    border-radius: 4px;
+    color: var(--ink-2);
+  }
+
+  .chip-accent {
+    border-color: var(--accent);
+    border-radius: 4px;
+    color: var(--accent);
+    box-shadow: 0 1px 0 var(--jg-hi);
+  }
+
+  /* 表单控件：压下去的凹槽，上沿暗、下沿亮 */
+  .field {
+    border: 1px solid var(--jg-well-edge);
+    border-radius: var(--r-control);
+    background-color: var(--control);
+    background-image: linear-gradient(180deg, var(--jg-well-shade), oklch(0 0 0 / 0) 6px);
+    box-shadow: 0 1px 0 var(--jg-well-hi);
+  }
+
+  .field:focus-visible,
+  .field:focus-within {
+    border-color: var(--edge-focus);
+    box-shadow:
+      0 1px 0 var(--jg-well-hi),
+      0 0 0 1px color-mix(in oklch, var(--edge-focus), transparent 55%);
+  }
+
+  select.field option {
+    background-color: var(--jg-l-option);
+    color: var(--jg-l-ink);
+  }
+
+  input[type='checkbox'],
+  input[type='radio'] {
+    accent-color: var(--jg-brass-3);
+  }
+
+  /* 开关：凹槽里的一颗黄铜钮 */
+  .switch-track {
+    border: 1px solid var(--jg-well-edge);
+    background-color: var(--control);
+    box-shadow:
+      inset 0 1px 2px var(--jg-well-shade),
+      0 1px 0 var(--jg-well-hi);
+  }
+
+  .switch-track[aria-checked='true'] {
+    border-color: var(--jg-brass-4);
+    background-color: color-mix(in oklch, var(--jg-brass-3), var(--control) 50%);
+  }
+
+  .switch-thumb,
+  .switch-track[aria-checked='true'] .switch-thumb {
+    background: radial-gradient(
+      circle at 35% 30%,
+      var(--jg-brass-shine) 0,
+      var(--jg-brass-2) 40%,
+      var(--jg-brass-4)
+    );
+    box-shadow:
+      0 1px 0 var(--jg-brass-deep),
+      var(--jg-cast-sm);
+  }
+
+  .switch-track[aria-checked='false'] .switch-thumb {
+    filter: saturate(0.5) brightness(0.85);
+  }
+
+  /* 页签：一道刻槽，当前项压一根黄铜条 */
+  [data-part='tabs'] {
+    border-color: var(--jg-groove);
+    box-shadow: 0 1px 0 var(--jg-hi);
+  }
+
+  [data-part='tab'] {
+    letter-spacing: 0.06em;
+    text-shadow: var(--jg-emboss);
+  }
+
+  [data-part='tab'][data-active='true'] {
+    color: var(--accent);
+    border-image: linear-gradient(90deg, var(--jg-brass-4), var(--jg-brass-1), var(--jg-brass-4)) 1;
+  }
+
+  [data-part='panel-section'],
+  [data-part='usage-card'],
+  [data-part='segment'],
+  hr {
+    border-color: var(--jg-groove);
+  }
+
+  [data-part='panel-section'] + [data-part='panel-section'] {
+    box-shadow: inset 0 1px 0 var(--jg-hi);
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* 库、连接、设置：钉在橡木桌上的羊皮纸                                 */
+  /* ---------------------------------------------------------------- */
+
+  :is(
+    [data-part='character-card'],
+    [data-part='connection-card'],
+    [data-part='library-item']:is([data-kind='character'], [data-kind='persona']),
+    [data-part='settings-section'],
+    :is(ul, ol):has(> [data-part='library-item']:is([data-kind='preset'], [data-kind='lorebook']))
+  ) {
+    position: relative;
+    border: 0;
+    background-color: var(--jg-parch);
+    background-image:
+      radial-gradient(
+        150% 130% at 0% 0%,
+        oklch(0.5 0.08 55 / 0) 66%,
+        oklch(0.58 0.085 60 / 0.13) 90%,
+        oklch(0.46 0.085 52 / 0.2) 100%
+      ),
+      var(--jg-tex-parchment);
+    box-shadow:
+      inset 0 0 0 1px oklch(0.5 0.075 55 / 0.16),
+      inset 0 0 2px 1px oklch(0.45 0.085 52 / 0.2),
+      inset 0 0 14px 1px oklch(0.64 0.085 62 / 0.18),
+      var(--jg-cast-md);
+  }
+
+  :is(
+    [data-part='character-card'],
+    [data-part='connection-card'],
+    [data-part='library-item']:is([data-kind='character'], [data-kind='persona']),
+    [data-part='settings-section'],
+    :is(ul, ol):has(> [data-part='library-item']:is([data-kind='preset'], [data-kind='lorebook']))
+  )::before {
+    content: '';
+    position: absolute;
+    z-index: 2;
+    left: 12px;
+    top: 12px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: radial-gradient(
+      circle at 34% 30%,
+      var(--jg-brass-shine) 0 0.7px,
+      var(--jg-brass-2) 1.5px,
+      var(--jg-brass-3) 2.3px,
+      var(--jg-brass-deep) 3px
+    );
+    box-shadow: var(--jg-rivet-cast);
+    pointer-events: none;
+  }
+
+  [data-part='character-card'] {
+    border-radius: 9px 12px 8px 11px / 11px 8px 12px 9px;
+    transition:
+      transform var(--dur-press) linear,
+      box-shadow var(--dur-hover) linear;
+  }
+
+  [data-part='character-card']:hover:not(:disabled) {
+    box-shadow:
+      inset 0 0 0 1px oklch(0.5 0.075 55 / 0.16),
+      inset 0 0 2px 1px oklch(0.45 0.085 52 / 0.2),
+      inset 0 0 14px 1px oklch(0.64 0.085 62 / 0.18),
+      var(--jg-cast-lg);
+  }
+
+  [data-part='character-card']:active:not(:disabled) {
+    transform: translateY(1px);
+  }
+
+  [data-part='character-card'] > span:first-child > span {
+    font-size: 44px;
+    color: var(--jg-p-story);
+    text-shadow: 0 1px 0 oklch(1 0.02 90 / 0.6);
+  }
+
+  [data-part='connection-card'] {
+    border-radius: 8px 12px 9px 11px / 12px 9px 11px 8px;
+  }
+
+  [data-part='connection-card'] > div:first-child {
+    padding-inline-start: 1.4rem;
+  }
+
+  [data-part='library-item']:is([data-kind='character'], [data-kind='persona']) {
+    border-radius: 11px 8px 12px 9px / 9px 12px 8px 11px;
+  }
+
+  [data-part='settings-section'] {
+    padding: 22px 24px 24px 26px;
+    border-radius: 10px 14px 9px 13px / 13px 9px 14px 10px;
+  }
+
+  [data-part='settings-section'] h2 {
+    font-family: var(--font-display);
+    font-size: 18px;
+    font-weight: 400;
+    letter-spacing: 0.06em;
+  }
+
+  :is(ul, ol):has(> [data-part='library-item']:is([data-kind='preset'], [data-kind='lorebook'])) {
+    padding: 8px 20px 8px 24px;
+    border-radius: 10px 13px 9px 12px / 12px 9px 13px 10px;
+  }
+
+  /* 外观页的主题卡：嵌在纸上的一块小画框 */
+  [data-part='theme-card'] {
+    border-color: var(--jg-p-edge-strong);
+    background-color: oklch(0.45 0.07 55 / 0.05);
+    box-shadow:
+      0 1px 0 oklch(1 0.02 90 / 0.5),
+      var(--jg-cast-sm);
+  }
+
+  [data-part='theme-card'][data-active='true'] {
+    border-color: var(--jg-brass-3);
+    box-shadow:
+      0 0 0 2px var(--jg-brass-2),
+      0 0 0 3px var(--jg-brass-deep),
+      var(--jg-cast-md);
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* 浮层：皮面包边的羊皮纸夹、皮面抽屉                                   */
+  /* ---------------------------------------------------------------- */
+
+  [data-part='modal-overlay'] {
+    background: radial-gradient(
+      120% 100% at 50% 35%,
+      oklch(0.2 0.03 45 / 0.35),
+      oklch(0.06 0.02 40 / 0.7)
+    );
+  }
+
+  [data-part='modal'] {
+    position: relative;
+    border: 7px solid transparent;
+    border-radius: 12px;
+    background:
+      radial-gradient(
+          150% 130% at 100% 0%,
+          oklch(0.5 0.08 55 / 0) 66%,
+          oklch(0.58 0.085 60 / 0.12) 92%,
+          oklch(0.46 0.085 52 / 0.18) 100%
+        )
+        padding-box,
+      var(--jg-tex-parchment) padding-box,
+      linear-gradient(var(--jg-parch), var(--jg-parch)) padding-box,
+      var(--jg-tex-leather) border-box,
+      linear-gradient(var(--jg-leather), var(--jg-leather)) border-box;
+    box-shadow:
+      inset 0 0 0 1px oklch(0.35 0.06 50 / 0.4),
+      inset 0 0 16px 2px oklch(0.6 0.085 62 / 0.18),
+      0 0 0 1px var(--jg-leather-deep),
+      var(--jg-cast-lg);
+  }
+
+  [data-part='modal']::after {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border: 1px dashed var(--jg-stitch);
+    border-radius: 9px;
+    pointer-events: none;
+  }
+
+  [data-part='modal'] h2 {
+    font-family: var(--font-display);
+    font-size: 18px;
+    font-weight: 400;
+    letter-spacing: 0.05em;
+  }
+
+  [data-part='drawer'] {
+    box-shadow: var(--jg-cast-lg);
+  }
+
+  [data-part='drawer'] > div:first-of-type:not(:last-child) {
+    border-color: var(--jg-groove);
+    box-shadow: 0 1px 0 var(--jg-hi);
+  }
+}
+
+/* 窄屏：纸边收一点，给字留地方 */
+@media (max-width: 639px) {
+  @scope ([data-theme='jiuguan']) to ([data-theme]) {
+    [data-part='message'] {
+      padding: 14px 13px 0 24px;
+    }
+
+    .jg-rivet {
+      left: 10px;
+      top: 10px;
+    }
+
+    [data-part='settings-section'] {
+      padding: 18px 16px 18px 20px;
+    }
+
+    :is(ul, ol):has(> [data-part='library-item']:is([data-kind='preset'], [data-kind='lorebook'])) {
+      padding-inline: 14px 16px;
+    }
+  }
+}
+
+/* ================================================================== */
+/* 光：夜里桌上一盏灯，白天左上一扇窗                                    */
+/* ================================================================== */
+
+@scope ([data-theme='jiuguan'][data-mode='dark']) to ([data-theme]) {
+  .jg-light {
+    background:
+      radial-gradient(52% 42% at 64% -4%, oklch(0.84 0.13 76 / 0.2), oklch(0.84 0.13 76 / 0) 70%),
+      radial-gradient(90% 70% at 64% 0%, oklch(0.7 0.11 65 / 0.12), oklch(0.7 0.11 65 / 0) 75%);
+  }
+
+  .jg-vignette {
+    background: radial-gradient(
+      140% 110% at 60% 15%,
+      oklch(0.08 0.02 40 / 0) 45%,
+      oklch(0.07 0.02 40 / 0.55) 100%
+    );
+  }
+}
+
+@scope ([data-theme='jiuguan'][data-mode='light']) to ([data-theme]) {
+  /* 窗光：与面板同一块按视口固定的光，落在橡木上稍弱 */
+  .jg-light {
+    background: var(--jg-light-panel);
+    opacity: 0.8;
+  }
+
+  /* 白天：10–11px 的宋体在浅底上太细，抬到 12px（预览卡是缩影，保持原尺寸） */
+  :scope:not([data-part='theme-preview']) :is(.text-\[10px\], .text-\[11px\]) {
+    font-size: 12px;
+  }
+
+  .jg-vignette {
+    background: radial-gradient(
+      150% 120% at 12% 8%,
+      oklch(0.3 0.04 50 / 0) 50%,
+      oklch(0.25 0.04 50 / 0.3) 100%
+    );
+  }
+
+  /* 头像的肖像底在白天也是深胡桃木，字仍是奶白 */
+  .jg-still-glow {
+    display: none;
+  }
+}
+
+/* ================================================================== */
+/* 动：翻开账本、灯的呼吸、墨点                                          */
+/* ================================================================== */
+
+@keyframes jg-breathe {
+  0%,
+  100% {
+    opacity: 0.62;
+    text-shadow: 0 0 0 oklch(0.85 0.15 75 / 0);
+  }
+  50% {
+    opacity: 1;
+    text-shadow: 0 0 10px oklch(0.85 0.15 75 / 0.55);
+  }
+}
+
+@keyframes jg-lamp {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(0.94);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.06);
+  }
+}
+
+@keyframes jg-ink {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes jg-ledger-l {
+  from {
+    opacity: 0;
+    transform: perspective(1400px) rotateY(-9deg);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes jg-ledger-r {
+  from {
+    opacity: 0;
+    transform: perspective(1400px) rotateY(9deg);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @scope ([data-theme='jiuguan']) to ([data-theme]) {
+    [data-part='modal'],
+    [data-part='drawer'][data-side='left'],
+    [data-part='chat-aside'][data-side='start'] {
+      transform-origin: 0% 50%;
+      animation: jg-ledger-l var(--dur-panel) var(--ease) both;
+    }
+
+    [data-part='drawer'][data-side='right'],
+    [data-part='chat-aside'][data-side='end'] {
+      transform-origin: 100% 50%;
+      animation: jg-ledger-r var(--dur-panel) var(--ease) both;
+    }
+
+    .jg-lamp[data-lamp='generating'] .jg-lamp-glow {
+      animation: jg-lamp 1.9s ease-in-out infinite;
+    }
+
+    .jg-lamp[data-lamp='generating'] .jg-flame {
+      animation: jg-ink 1.9s ease-in-out infinite;
+    }
+
+    .jg-ink-drop {
+      animation: jg-ink 1.4s ease-in-out infinite;
+    }
+  }
+}
+
+/* 预览卡里的光不能按视口固定：它只是一张卡 */
+@scope ([data-theme='jiuguan'][data-part='theme-preview']) to ([data-theme]) {
+  [data-part='message-list'],
+  [data-part='composer-dock'] {
+    background-attachment: scroll;
+  }
+}

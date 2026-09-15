@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { ArrowDown, Sparkles } from 'lucide-react';
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { ArrowDown } from 'lucide-react';
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { MessageItem } from './MessageItem';
@@ -10,7 +10,8 @@ import { useChatStore } from '../../app/store/chat';
 import { Button } from '../../components/ui/button';
 import { IconButton } from '../../components/ui/icon-button';
 import { usePersonas, type ChatDetail, type MessageNode } from '../../lib/api';
-import { cn } from '../../lib/utils';
+import { slotSeconds } from '../../themes/apply';
+import { useSignature } from '../../themes/signature';
 
 /** 用户上滑超过这个距离就停止自动跟随 */
 const FOLLOW_THRESHOLD_PX = 96;
@@ -32,6 +33,7 @@ export function MessageList({
   onRegenerate,
 }: MessageListProps) {
   const { t } = useTranslation();
+  const { MessageDivider } = useSignature();
   const personas = usePersonas();
   const streaming = useChatStore((state) => state.streaming);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -81,9 +83,10 @@ export function MessageList({
       <div
         ref={scrollRef}
         onScroll={onScroll}
-        className="h-full overflow-x-hidden overflow-y-auto overscroll-contain"
+        data-part="message-list"
+        className="surface-reading h-full overflow-x-hidden overflow-y-auto overscroll-contain"
       >
-        <div className="mx-auto flex w-full max-w-3xl min-w-0 flex-col gap-5 px-4 py-6 sm:px-6">
+        <div className="gap-message mx-auto flex w-full max-w-3xl min-w-0 flex-col px-4 py-8 sm:px-6">
           {path.length === 0 ? (
             <EmptyChatGuide hasCharacter={Boolean(chat.character)} />
           ) : (
@@ -95,31 +98,35 @@ export function MessageList({
                   ? (node.name ?? t('chat.system'))
                   : (node.name ?? chat.character?.name ?? t('chat.assistant'));
               return (
-                <MessageItem
-                  key={node.id}
-                  chatId={chat.id}
-                  node={node}
-                  nodes={chat.nodes}
-                  displayName={displayName}
-                  avatarAssetId={
-                    isUser
-                      ? (persona?.avatarAssetId ?? null)
-                      : (chat.character?.avatarAssetId ?? null)
-                  }
-                  busy={generation.isGenerating}
-                  stream={streaming[node.id]}
-                  // 0 = head，向上递增
-                  depth={path.length - 1 - index}
-                  applyDisplayRegex={applyDisplayRegex}
-                  onSwitchSibling={onSwitchSibling}
-                  onRegenerate={onRegenerate}
-                />
+                <Fragment key={node.id}>
+                  {/* 记忆物件：消息之间的分隔方式（素 = 没有分隔物，只有留白） */}
+                  {index > 0 && <MessageDivider role={node.role} index={index} />}
+                  <MessageItem
+                    chatId={chat.id}
+                    node={node}
+                    index={index}
+                    nodes={chat.nodes}
+                    displayName={displayName}
+                    avatarAssetId={
+                      isUser
+                        ? (persona?.avatarAssetId ?? null)
+                        : (chat.character?.avatarAssetId ?? null)
+                    }
+                    busy={generation.isGenerating}
+                    stream={streaming[node.id]}
+                    // 0 = head，向上递增
+                    depth={path.length - 1 - index}
+                    applyDisplayRegex={applyDisplayRegex}
+                    onSwitchSibling={onSwitchSibling}
+                    onRegenerate={onRegenerate}
+                  />
+                </Fragment>
               );
             })
           )}
 
           {generation.isGenerating && generation.streamingNodeId === null && (
-            <p className="text-sm text-muted-foreground" role="status">
+            <p className="pulse-live text-sm text-ink-2" role="status">
               {t('chat.generating')}
             </p>
           )}
@@ -139,17 +146,17 @@ export function MessageList({
       <AnimatePresence>
         {!following && path.length > 0 && (
           <motion.div
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 6 }}
-            transition={{ duration: 0.15 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: slotSeconds('--dur-panel') }}
             className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center"
           >
             <IconButton
               label={t('chat.scrollToBottom')}
               size="md"
               variant="outline"
-              className="pointer-events-auto rounded-full bg-card shadow-md"
+              className="surface-raised pointer-events-auto rounded-pill"
               onClick={() => scrollToBottom()}
             >
               <ArrowDown aria-hidden />
@@ -161,14 +168,20 @@ export function MessageList({
   );
 }
 
-/** 空对话引导语：没有角色 / 没有开场白时给一句提示 */
+/** 空对话引导语：插画由主题决定（素没有插画，只有一行大字） */
 function EmptyChatGuide({ hasCharacter }: { hasCharacter: boolean }) {
   const { t } = useTranslation();
+  const { EmptyIllustration } = useSignature();
   return (
-    <div className="flex flex-col items-center gap-3 px-6 py-20 text-center">
-      <Sparkles aria-hidden className="size-7 text-primary/70" />
-      <p className="text-base font-medium">{t('chat.emptyTitle')}</p>
-      <p className="max-w-sm text-sm text-muted-foreground">
+    <div
+      data-part="empty-state"
+      className="flex flex-col items-center gap-4 px-6 py-24 text-center"
+    >
+      <EmptyIllustration kind="chat" />
+      <p className="font-display text-[28px] leading-snug font-light tracking-tight">
+        {t('chat.emptyTitle')}
+      </p>
+      <p className="max-w-sm text-sm leading-relaxed text-ink-2">
         {hasCharacter ? t('chat.emptyWithCharacterHint') : t('chat.emptyBlankHint')}
       </p>
     </div>
@@ -194,12 +207,11 @@ function GenerationErrorCard({
   return (
     <div
       role="alert"
-      className={cn(
-        'rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive',
-      )}
+      data-part="generation-error"
+      className="rounded-card border-danger bg-danger-soft border px-4 py-3 text-sm text-danger"
     >
       <div className="font-medium">{label}</div>
-      {message && <p className="mt-1 break-words text-destructive/90">{message}</p>}
+      {message && <p className="mt-1 break-words">{message}</p>}
       <div className="mt-2 flex gap-2">
         {retryable && (
           <Button size="sm" variant="outline" onClick={onRetry}>

@@ -39,28 +39,25 @@ export function PanelSection({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <section className="rounded-lg border border-border bg-card/50">
+    <section data-part="panel-section" data-open={open} className="edge-rule border-b">
       <button
         type="button"
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
-        className="flex w-full cursor-pointer items-center gap-2 px-3 py-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+        className="focus-ring-inset flex w-full cursor-pointer items-center gap-2 py-2.5 text-left"
       >
         <ChevronDown
           aria-hidden
-          className={cn(
-            'size-4 shrink-0 text-muted-foreground transition-transform',
-            !open && '-rotate-90',
-          )}
+          className={cn('size-4 shrink-0 text-ink-2 motion-transform', !open && '-rotate-90')}
         />
-        <span className="min-w-0 flex-1 truncate text-xs font-medium tracking-wide text-muted-foreground uppercase">
+        <span className="min-w-0 flex-1 truncate text-xs font-medium tracking-wide text-ink-2 uppercase">
           {title}
         </span>
         {summary !== undefined && (
-          <span className="shrink-0 text-[11px] text-muted-foreground">{summary}</span>
+          <span className="shrink-0 text-[11px] text-ink-2">{summary}</span>
         )}
       </button>
-      {open && <div className="space-y-3 border-t border-border px-3 py-3">{children}</div>}
+      {open && <div className="space-y-3 pb-3">{children}</div>}
     </section>
   );
 }
@@ -115,7 +112,7 @@ export function AuthorsNoteSection({ chat }: { chat: ChatDetail }) {
       title={t('authorsNote.title')}
       summary={savedPosition ? t(savedPosition.labelKey) : t('authorsNote.empty')}
     >
-      <p className="text-[11px] leading-relaxed text-muted-foreground">{t('authorsNote.hint')}</p>
+      <p className="text-[11px] leading-relaxed text-ink-2">{t('authorsNote.hint')}</p>
 
       <div>
         <FieldLabel htmlFor={`an-text-${chat.id}`}>{t('authorsNote.text')}</FieldLabel>
@@ -178,7 +175,7 @@ export function AuthorsNoteSection({ chat }: { chat: ChatDetail }) {
           </Select>
         </div>
       </div>
-      <p className="text-[11px] text-muted-foreground">{t('authorsNote.depthHint')}</p>
+      <p className="text-[11px] text-ink-2">{t('authorsNote.depthHint')}</p>
 
       <div>
         <FieldLabel>{t('authorsNote.interval')}</FieldLabel>
@@ -190,7 +187,7 @@ export function AuthorsNoteSection({ chat }: { chat: ChatDetail }) {
           onChange={(event) => update({ interval: Number(event.target.value) || 1 }, false)}
           onBlur={() => dirty && commit(draft)}
         />
-        <p className="mt-1 text-[11px] text-muted-foreground">{t('authorsNote.intervalHint')}</p>
+        <p className="mt-1 text-[11px] text-ink-2">{t('authorsNote.intervalHint')}</p>
       </div>
 
       <div className="flex items-center justify-between gap-2">
@@ -227,16 +224,14 @@ export function ChatLorebooksSection({ chat }: { chat: ChatDetail }) {
         selected.length > 0 ? t('worldInfo.selected', { total: selected.length }) : t('common.none')
       }
     >
-      <p className="text-[11px] leading-relaxed text-muted-foreground">
-        {t('worldInfo.chatBooksHint')}
-      </p>
+      <p className="text-[11px] leading-relaxed text-ink-2">{t('worldInfo.chatBooksHint')}</p>
       <LorebookPicker
         selected={selected}
         disabled={setLorebooks.isPending}
         onChange={(bookIds) => setLorebooks.mutate({ chatId: chat.id, bookIds })}
       />
       {setLorebooks.error && (
-        <p role="alert" className="text-[11px] text-destructive">
+        <p role="alert" className="text-[11px] text-danger">
           {setLorebooks.error instanceof Error
             ? setLorebooks.error.message
             : String(setLorebooks.error)}
@@ -286,7 +281,7 @@ export function ChatSystemPromptSection({ chat }: { chat: ChatDetail }) {
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="text-sm">{t('globalSystemPrompt.override')}</div>
-          <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+          <p className="mt-0.5 text-[11px] leading-relaxed text-ink-2">
             {t('globalSystemPrompt.overrideHint')}
           </p>
         </div>

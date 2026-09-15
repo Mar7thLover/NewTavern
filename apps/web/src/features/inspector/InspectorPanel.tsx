@@ -11,6 +11,7 @@ import { isInspectPlaceholder, type InspectData } from './types';
 import { useInspect } from './useInspect';
 import { Badge } from '../../components/ui/badge';
 import { IconButton } from '../../components/ui/icon-button';
+import { Segmented } from '../../components/ui/segmented';
 import {
   ApiError,
   useGenerationDefault,
@@ -65,38 +66,31 @@ export function InspectorPanel({ chat, isGenerating }: InspectorPanelProps) {
   const noConnection = inspect.error instanceof ApiError && inspect.error.code === 'no_connection';
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <header className="shrink-0 space-y-2.5 border-b border-border px-3 py-2.5">
+    <div data-part="inspector" className="flex h-full min-h-0 flex-col">
+      <header className="shrink-0 space-y-2.5 border-b edge-rule px-3 py-2.5">
         <div className="flex items-center gap-2">
-          <div className="flex flex-1 gap-1 rounded-md bg-muted/60 p-0.5">
-            {LAYOUT_MODES.map((mode) => (
-              <button
-                key={mode}
-                type="button"
-                onClick={() =>
-                  patchChat.mutate({
-                    id: chat.id,
-                    overrides: { ...(chat.overrides ?? {}), layoutMode: mode },
-                  })
-                }
-                className={cn(
-                  'flex-1 cursor-pointer rounded px-2 py-1 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                  layoutMode === mode
-                    ? 'bg-card font-medium text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground',
-                )}
-              >
-                {t(`chat.panel.layout.${mode === 'cache-aware' ? 'cacheAware' : 'strict'}`)}
-              </button>
-            ))}
-          </div>
+          <Segmented
+            className="flex-1"
+            stretch
+            value={layoutMode}
+            onChange={(mode) =>
+              patchChat.mutate({
+                id: chat.id,
+                overrides: { ...(chat.overrides ?? {}), layoutMode: mode },
+              })
+            }
+            items={LAYOUT_MODES.map((mode) => ({
+              value: mode,
+              label: t(`chat.panel.layout.${mode === 'cache-aware' ? 'cacheAware' : 'strict'}`),
+            }))}
+          />
           <IconButton
             label={t('inspector.refresh')}
             variant="outline"
             disabled={isGenerating || inspect.isFetching}
             onClick={() => void inspect.refetch()}
           >
-            <RefreshCw aria-hidden className={cn(inspect.isFetching && 'animate-spin')} />
+            <RefreshCw aria-hidden className={cn(inspect.isFetching && 'opacity-40')} />
           </IconButton>
         </div>
 
@@ -119,39 +113,28 @@ export function InspectorPanel({ chat, isGenerating }: InspectorPanelProps) {
           <Stat label={t('inspector.lastCacheWrite')} value={data?.lastUsage?.cacheWrite ?? null} />
         </div>
 
-        <nav className="flex gap-1 overflow-x-auto">
-          {TABS.map((item) => (
-            <button
-              key={item}
-              type="button"
-              onClick={() => setTab(item)}
-              className={cn(
-                'cursor-pointer rounded-md px-2 py-1 text-xs whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                tab === item
-                  ? 'bg-accent font-medium text-accent-foreground'
-                  : 'text-muted-foreground hover:text-foreground',
-              )}
-            >
-              {t(`inspector.tabs.${item}`)}
-            </button>
-          ))}
-        </nav>
+        <Segmented
+          label={t('inspector.title')}
+          value={tab}
+          onChange={setTab}
+          items={TABS.map((item) => ({ value: item, label: t(`inspector.tabs.${item}`) }))}
+        />
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {isGenerating && (
-          <p className="border-b border-border px-3 py-2 text-xs text-muted-foreground">
+          <p className="border-b edge-rule px-3 py-2 text-xs text-ink-2">
             {t('inspector.generatingHint')}
           </p>
         )}
 
         {noConnection ? (
           // 没有默认连接 / 模型时 inspect 直接 400，这里给出口而不是干巴巴的错误码
-          <div className="m-3 rounded-lg border border-dashed border-border p-4 text-sm">
+          <div className="edge-rule m-3 border-t pt-4 text-sm">
             <p>{t('errors.no_connection')}</p>
             <Link
               to="/connections"
-              className="mt-2 inline-block text-primary underline underline-offset-2"
+              className="mt-2 inline-block text-accent underline underline-offset-2"
             >
               {t('chat.panel.addConnection')}
             </Link>
@@ -164,9 +147,7 @@ export function InspectorPanel({ chat, isGenerating }: InspectorPanelProps) {
               onRetry={() => void inspect.refetch()}
             />
             {isGenerating && !inspect.data && (
-              <p className="py-6 text-center text-sm text-muted-foreground">
-                {t('inspector.noData')}
-              </p>
+              <p className="py-6 text-center text-sm text-ink-2">{t('inspector.noData')}</p>
             )}
           </div>
         ) : inspect.data && isInspectPlaceholder(inspect.data) ? (
@@ -196,7 +177,7 @@ export function InspectorPanel({ chat, isGenerating }: InspectorPanelProps) {
             }}
           />
         ) : (
-          <p className="p-4 text-sm text-muted-foreground">{t('inspector.noData')}</p>
+          <p className="p-4 text-sm text-ink-2">{t('inspector.noData')}</p>
         )}
       </div>
     </div>
@@ -241,9 +222,9 @@ function InspectorBody({
   return (
     <div>
       {warnings.length > 0 && (
-        <ul className="space-y-1 border-b border-border bg-destructive/5 px-3 py-2">
+        <ul className="space-y-1 border-b edge-rule bg-danger-soft px-3 py-2">
           {warnings.map((warning, index) => (
-            <li key={index} className="flex gap-1.5 text-[11px] leading-relaxed text-destructive">
+            <li key={index} className="flex gap-1.5 text-[11px] leading-relaxed text-danger">
               <AlertTriangle aria-hidden className="mt-0.5 size-3 shrink-0" />
               <span className="min-w-0">{warning}</span>
             </li>
@@ -252,25 +233,18 @@ function InspectorBody({
       )}
 
       {strictIr && (
-        <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2">
-          <div className="flex gap-1 rounded-md bg-muted/60 p-0.5">
-            {(['current', 'strict'] as const).map((item) => (
-              <button
-                key={item}
-                type="button"
-                onClick={() => onView(item)}
-                className={cn(
-                  'cursor-pointer rounded px-2 py-0.5 text-[11px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                  view === item
-                    ? 'bg-card font-medium text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground',
-                )}
-              >
-                {t(`inspector.view.${item}`)}
-              </button>
-            ))}
-          </div>
-          <span className="text-[11px] text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-2 border-b edge-rule px-3 py-2">
+          <Segmented
+            className="border-b-0"
+            size="sm"
+            value={view}
+            onChange={onView}
+            items={[
+              { value: 'current', label: t('inspector.view.current') },
+              { value: 'strict', label: t('inspector.view.strict') },
+            ]}
+          />
+          <span className="text-[11px] text-ink-2">
             {data.diff
               ? [
                   t('inspector.diff.moved', { total: data.diff.moved.length }),
@@ -282,7 +256,7 @@ function InspectorBody({
         </div>
       )}
 
-      <div className="px-3 pt-2 text-[11px] text-muted-foreground">
+      <div className="px-3 pt-2 text-[11px] text-ink-2">
         {t('inspector.segments.count', { total: showing.segments.length })}
       </div>
 
@@ -305,15 +279,13 @@ function InspectorBody({
 function PlaceholderCard({ rows }: { rows: [string, string | null][] }) {
   const { t } = useTranslation();
   return (
-    <div className="m-3 rounded-lg border border-dashed border-border p-4">
+    <div className="edge-rule m-3 border-t pt-4">
       <p className="text-sm font-medium">{t('inspector.todoTitle')}</p>
-      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-        {t('inspector.todoHint')}
-      </p>
+      <p className="mt-1 text-xs leading-relaxed text-ink-2">{t('inspector.todoHint')}</p>
       <dl className="mt-3 space-y-1 font-mono text-[11px]">
         {rows.map(([key, value]) => (
           <div key={key} className="flex gap-2">
-            <dt className="w-24 shrink-0 text-muted-foreground">{key}</dt>
+            <dt className="w-24 shrink-0 text-ink-2">{key}</dt>
             <dd className="min-w-0 break-all">{value ?? '—'}</dd>
           </div>
         ))}
@@ -325,7 +297,7 @@ function PlaceholderCard({ rows }: { rows: [string, string | null][] }) {
 function Stat({ label, value }: { label: string; value: string | number | null }) {
   return (
     <div className="min-w-0">
-      <div className="text-[10px] tracking-wide text-muted-foreground uppercase">{label}</div>
+      <div className="text-[10px] tracking-wide text-ink-2 uppercase">{label}</div>
       <div className="text-xs tabular-nums">
         {value === null ? '—' : typeof value === 'number' ? value.toLocaleString() : value}
       </div>

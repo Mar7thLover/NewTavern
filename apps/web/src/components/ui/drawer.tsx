@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 
 import { IconButton } from './icon-button';
 import { cn } from '../../lib/utils';
+import { slotSeconds } from '../../themes/apply';
 
 export interface DrawerProps {
   open: boolean;
@@ -38,6 +39,9 @@ export function Drawer({ open, onClose, side, title, children, className }: Draw
     };
   }, [open]);
 
+  // 时长来自主题的 --dur-panel；只做透明度，滑入之类的位移交给主题自己加
+  const duration = slotSeconds('--dur-panel');
+
   return createPortal(
     <AnimatePresence>
       {open && (
@@ -46,31 +50,32 @@ export function Drawer({ open, onClose, side, title, children, className }: Draw
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.15 }}
+          transition={{ duration }}
         >
           <button
             type="button"
             tabIndex={-1}
             aria-hidden
-            className="absolute inset-0 cursor-default bg-black/50 backdrop-blur-[2px]"
+            data-part="drawer-overlay"
+            className="surface-overlay absolute inset-0 cursor-default"
             onClick={onClose}
           />
           <motion.aside
             role="dialog"
+            data-part="drawer"
+            data-side={side}
             aria-modal="true"
-            initial={{ x: side === 'left' ? '-100%' : '100%' }}
-            animate={{ x: 0 }}
-            exit={{ x: side === 'left' ? '-100%' : '100%' }}
-            transition={{ duration: 0.2, ease: 'easeOut' }}
             className={cn(
-              'relative flex h-dvh w-[86vw] max-w-sm flex-col border-border bg-card text-card-foreground shadow-xl',
+              'surface-raised edge-rule relative flex h-dvh w-[86vw] max-w-sm flex-col',
               side === 'left' ? 'mr-auto border-r' : 'ml-auto border-l',
               className,
             )}
           >
             {/* title 省略时由内容自己提供关闭入口（如会话列表的头部） */}
             {title !== undefined && <DrawerHeader title={title} onClose={onClose} />}
-            <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
+            <div data-part="drawer-body" className="min-h-0 flex-1 overflow-hidden">
+              {children}
+            </div>
           </motion.aside>
         </motion.div>
       )}
@@ -82,8 +87,13 @@ export function Drawer({ open, onClose, side, title, children, className }: Draw
 function DrawerHeader({ title, onClose }: { title?: ReactNode; onClose: () => void }) {
   const { t } = useTranslation();
   return (
-    <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-2.5">
-      <div className="min-w-0 truncate text-sm font-semibold">{title}</div>
+    <div
+      data-part="drawer-header"
+      className="edge-rule flex items-center justify-between gap-2 border-b px-4 py-2.5"
+    >
+      <div data-part="drawer-title" className="min-w-0 truncate text-sm font-semibold">
+        {title}
+      </div>
       <IconButton label={t('common.close')} size="md" onClick={onClose}>
         <span aria-hidden className="text-lg leading-none">
           ×

@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, type ReactNode } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -33,7 +33,7 @@ function splitQuoted(value: string): HastNode[] | null {
     out.push({
       type: 'element',
       tagName: 'span',
-      properties: { className: ['text-primary'] },
+      properties: { className: ['text-ink-quote'] },
       children: [{ type: 'text', value: match[0] }],
     });
     last = match.index + match[0].length;
@@ -64,7 +64,7 @@ function highlightQuotes(node: HastNode): void {
   if (changed) node.children = next;
 }
 
-/** 把引号内的文本包进 `<span class="text-primary">`；代码块内跳过 */
+/** 把引号内的文本包进 `<span class="text-ink-quote">`；代码块内跳过 */
 function rehypeQuoteHighlight() {
   return (tree: HastNode) => {
     highlightQuotes(tree);
@@ -77,21 +77,24 @@ function rehypeQuoteHighlight() {
 
 const BLOCK_SPACING = 'my-[0.75em] first:mt-0 last:mb-0';
 
+/**
+ * 段落不带工具类间距：段间距与段首缩进由 materials.css 的 `.nt-md p` 读排版槽位
+ * （--story-paragraph-gap / --story-indent），主题才能改成书斋的「缩进、段间不留空」。
+ */
+
 const components: Components = {
-  p: ({ node: _node, className, ...props }) => (
-    <p className={cn(BLOCK_SPACING, className)} {...props} />
-  ),
+  p: ({ node: _node, className, ...props }) => <p className={className} {...props} />,
   em: ({ node: _node, className, ...props }) => (
-    <em className={cn('text-muted-foreground italic', className)} {...props} />
+    <em className={cn('text-ink-action [font-style:var(--action-style)]', className)} {...props} />
   ),
   strong: ({ node: _node, className, ...props }) => (
-    <strong className={cn('font-semibold', className)} {...props} />
+    <strong className={cn('font-semibold text-ink', className)} {...props} />
   ),
   a: ({ node: _node, className, ...props }) => (
     <a
       target="_blank"
       rel="noreferrer noopener"
-      className={cn('text-primary underline underline-offset-2', className)}
+      className={cn('text-ink-link underline underline-offset-2', className)}
       {...props}
     />
   ),
@@ -103,11 +106,7 @@ const components: Components = {
   ),
   blockquote: ({ node: _node, className, ...props }) => (
     <blockquote
-      className={cn(
-        BLOCK_SPACING,
-        'border-s-2 border-border ps-3 text-muted-foreground',
-        className,
-      )}
+      className={cn(BLOCK_SPACING, 'border-s-2 edge-rule-strong ps-3 text-ink-2', className)}
       {...props}
     />
   ),
@@ -130,26 +129,20 @@ const components: Components = {
     />
   ),
   hr: ({ node: _node, className, ...props }) => (
-    <hr className={cn('my-[1.2em] border-border', className)} {...props} />
+    <hr className={cn('my-[1.2em] edge-rule', className)} {...props} />
   ),
   pre: ({ node: _node, className, ...props }) => (
     <pre
       className={cn(
         BLOCK_SPACING,
-        'overflow-x-auto rounded-lg border border-border bg-muted/60 p-3 text-[13px] leading-[1.6] [&_code]:bg-transparent [&_code]:p-0 [&_code]:text-inherit',
+        'rounded-card edge-rule overflow-x-auto border p-3 text-[13px] leading-[1.6] [&_code]:p-0 [&_code]:text-inherit',
         className,
       )}
       {...props}
     />
   ),
   code: ({ node: _node, className, ...props }) => (
-    <code
-      className={cn(
-        'rounded bg-muted px-1 py-0.5 font-mono text-[0.9em] text-foreground',
-        className,
-      )}
-      {...props}
-    />
+    <code className={cn('font-mono text-[0.9em] text-ink', className)} {...props} />
   ),
   table: ({ node: _node, className, ...props }) => (
     <div className={cn(BLOCK_SPACING, 'overflow-x-auto')}>
@@ -158,17 +151,17 @@ const components: Components = {
   ),
   th: ({ node: _node, className, ...props }) => (
     <th
-      className={cn('border border-border bg-muted/50 px-2 py-1 text-start font-medium', className)}
+      className={cn('edge-rule border px-2 py-1 text-start font-medium text-ink', className)}
       {...props}
     />
   ),
   td: ({ node: _node, className, ...props }) => (
-    <td className={cn('border border-border px-2 py-1 align-top', className)} {...props} />
+    <td className={cn('border edge-rule px-2 py-1 align-top', className)} {...props} />
   ),
   img: ({ node: _node, className, ...props }) => (
     <img
       loading="lazy"
-      className={cn(BLOCK_SPACING, 'max-h-96 rounded-lg border border-border', className)}
+      className={cn(BLOCK_SPACING, 'max-h-96 rounded-panel border edge-rule', className)}
       {...props}
     />
   ),
@@ -180,15 +173,22 @@ const remarkPlugins = [remarkGfm];
 
 export interface MarkdownProps {
   children: string;
+  /** 流式中的光标（主题的 StreamingCursor）；跟在最后一段文字后面 */
+  cursor?: ReactNode;
   /** 流式中：在最后一个块级元素末尾显示光标 */
   streaming?: boolean;
   className?: string;
 }
 
 /** 消息正文渲染。原生 HTML 默认被 react-markdown 转义（前端卡在 M5 另行开放）。 */
-export const Markdown = memo(function Markdown({ children, streaming, className }: MarkdownProps) {
+export const Markdown = memo(function Markdown({
+  children,
+  streaming,
+  cursor,
+  className,
+}: MarkdownProps) {
   return (
-    <div className={cn('break-words', streaming && 'md-streaming', className)}>
+    <div className={cn('nt-md break-words', streaming && cursor && 'md-streaming', className)}>
       <ReactMarkdown
         remarkPlugins={remarkPlugins}
         rehypePlugins={rehypePlugins}
@@ -196,6 +196,8 @@ export const Markdown = memo(function Markdown({ children, streaming, className 
       >
         {children}
       </ReactMarkdown>
+      {/* nt-caret：index.css 把上一个段落改成 inline，光标才停在文字末尾 */}
+      {streaming && cursor && <span className="nt-caret">{cursor}</span>}
     </div>
   );
 });

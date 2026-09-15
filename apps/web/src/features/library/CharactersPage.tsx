@@ -91,6 +91,7 @@ export function CharactersPage() {
       {characters.data &&
         (list.length === 0 ? (
           <EmptyState
+            kind="characters"
             title={t('library.characters.emptyTitle')}
             hint={t('library.characters.emptyHint')}
             action={importButton('lg', 'center')}
@@ -121,13 +122,15 @@ function CharacterCard({ character, onOpen }: { character: CharacterSummary; onO
   return (
     <button
       type="button"
+      data-part="library-item"
+      data-kind="character"
       onClick={onOpen}
-      className="flex w-full cursor-pointer items-center gap-3 overflow-hidden rounded-lg border border-border bg-card p-3 text-left text-card-foreground transition-colors hover:border-primary/60 hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:flex-col sm:items-stretch sm:gap-0 sm:p-0"
+      className="rounded-card edge-rule focus-ring flex w-full cursor-pointer items-center gap-3 overflow-hidden border p-3 text-left text-ink transition-colors hover:border-edge-strong sm:flex-col sm:items-stretch sm:gap-0 sm:p-0"
     >
       <Avatar
         name={character.name}
         assetId={character.avatarAssetId}
-        className="h-16 w-16 rounded-md sm:aspect-[3/4] sm:h-auto sm:w-full sm:rounded-none"
+        className="h-16 w-16 sm:aspect-[3/4] sm:h-auto sm:w-full"
         textClassName="text-2xl sm:text-5xl"
       />
       <div className="min-w-0 flex-1 sm:p-3">
@@ -188,7 +191,7 @@ function CharacterDetailModal({
             <Avatar
               name={name}
               assetId={avatarAssetId}
-              className="size-10 rounded-full"
+              className="size-10"
               textClassName="text-base"
             />
             <span className="min-w-0 truncate">{name}</span>
@@ -204,7 +207,7 @@ function CharacterDetailModal({
             <Button
               variant="ghost"
               size="sm"
-              className="mr-auto text-destructive hover:bg-destructive/10 hover:text-destructive"
+              className="mr-auto text-danger hover:bg-danger-soft hover:text-danger"
               onClick={() => {
                 deleteCharacter.reset();
                 setConfirming(true);
@@ -243,14 +246,14 @@ function CharacterDetailModal({
 
         {detail.data &&
           (fields.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">
+            <p className="py-6 text-center text-sm text-ink-2">
               {t('library.characters.noDetails')}
             </p>
           ) : (
             <div className="space-y-5">
               {fields.map(({ field, value }) => (
                 <section key={field}>
-                  <h3 className="mb-1.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                  <h3 className="mb-1.5 text-xs font-semibold tracking-wide text-ink-2 uppercase">
                     {t(`library.characters.fields.${field}`)}
                   </h3>
                   <p className="text-sm leading-relaxed break-words whitespace-pre-wrap">{value}</p>

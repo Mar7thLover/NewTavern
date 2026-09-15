@@ -72,22 +72,17 @@ export function RegexSettings() {
 
       {scripts.data &&
         (list.length === 0 ? (
-          <EmptyState title={t('regex.emptyTitle')} hint={t('regex.emptyHint')} />
+          <EmptyState kind="regex" title={t('regex.emptyTitle')} hint={t('regex.emptyHint')} />
         ) : (
           <>
-            <p className="text-xs text-muted-foreground">
-              {t('regex.count', { total: list.length })}
-            </p>
-            <ul className="space-y-2">
+            <p className="text-xs text-ink-2">{t('regex.count', { total: list.length })}</p>
+            <ul className="edge-rule border-t">
               {list.map((script, index) => (
                 <li
                   key={script.id}
-                  className={cn(
-                    'rounded-lg border border-border bg-card/60',
-                    script.disabled && 'opacity-60',
-                  )}
+                  className={cn('edge-rule border-b', script.disabled && 'opacity-60')}
                 >
-                  <div className="flex items-center gap-2 px-3 py-2.5">
+                  <div className="flex items-center gap-2 py-2.5">
                     <div className="flex flex-col">
                       <IconButton
                         label={t('regex.moveUp')}
@@ -111,7 +106,7 @@ export function RegexSettings() {
                       type="button"
                       onClick={() => setExpanded(expanded === script.id ? null : script.id)}
                       aria-expanded={expanded === script.id}
-                      className="min-w-0 flex-1 cursor-pointer text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+                      className="min-w-0 flex-1 cursor-pointer text-left focus-ring-inset"
                     >
                       <div className="truncate text-sm font-medium">{script.name}</div>
                       <div className="mt-1 flex flex-wrap items-center gap-1">
@@ -158,20 +153,20 @@ export function RegexSettings() {
                   </div>
 
                   {expanded === script.id && (
-                    <dl className="space-y-2 border-t border-border px-3 py-2.5 text-xs">
+                    <dl className="space-y-2 pb-2.5 ps-8 text-xs">
                       <div>
-                        <dt className="text-muted-foreground">{t('regex.find')}</dt>
+                        <dt className="text-ink-2">{t('regex.find')}</dt>
                         <dd className="mt-0.5 font-mono break-all">{script.findRegex}</dd>
                       </div>
                       <div>
-                        <dt className="text-muted-foreground">{t('regex.replace')}</dt>
+                        <dt className="text-ink-2">{t('regex.replace')}</dt>
                         <dd className="mt-0.5 font-mono break-all whitespace-pre-wrap">
                           {script.replaceString || '—'}
                         </dd>
                       </div>
                       {script.trimStrings.length > 0 && (
                         <div>
-                          <dt className="text-muted-foreground">{t('regex.trimStrings')}</dt>
+                          <dt className="text-ink-2">{t('regex.trimStrings')}</dt>
                           <dd className="mt-0.5 font-mono break-all">
                             {script.trimStrings.join(' · ')}
                           </dd>

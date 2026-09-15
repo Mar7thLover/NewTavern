@@ -1,0 +1,1161 @@
+/**
+ * 书斋 · Shuzhai —— 一间旧书房（docs/DESIGN.md §3.2）。
+ *
+ * 宣纸、墨、朱砂印、竹尺。文字是主角，装饰只有细细的双线与一枚印。慢、静、有分寸。
+ *
+ * 铁律：
+ *  - 没有阴影、玻璃、模糊、发光、彩色渐变；圆角 0–3px（圆形墨戳是形状，不是圆角）。
+ *  - 层级靠纸的叠放：下层纸略暗（侧栏）、上层纸略白（阅读面、弹层），边缘一条暗线。
+ *  - 阅读面与宣纸几乎同色，靠「四周双边」的版框（外粗内细）与留白分隔。
+ *  - 朱砂只用于：印章（发送键、主按钮、角色印、书名旁的小印）、当前项、对白。
+ *  - 故事是宋体 17px / 2.0，段首缩进两字，段间不留空；动作用楷；数字用旧式数字。
+ *  - 动画几乎没有：纸展开只做透明度 240ms；笔尖光标不闪；唯一的位移是盖章那 1px。
+ */
+
+/* 旧式数字：只替换 0–9 这十个字形（Georgia 系的数字天生是旧式），其余字仍走宋体 */
+@font-face {
+  font-family: 'Shuzhai Figures';
+  src: local('Georgia'), local('Iowan Old Style'), local('Palatino Linotype'), local('Palatino');
+  unicode-range: U+0030-0039;
+  font-display: swap;
+}
+
+/* ------------------------------------------------------------------ */
+/* 宣纸（白天）                                                         */
+/* ------------------------------------------------------------------ */
+
+[data-theme='shuzhai'][data-mode='light'] {
+  /* 纸纤维：一层细密的浅褐斑点（单层、单倍频：多层滤镜在大面积上栅格化太重） */
+  --sz-fiber: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='a' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='1' seed='11' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .36 0 0 0 0 .28 0 0 0 0 .18 0 0 0 2.6 -1.4'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23a)' opacity='.3'/%3E%3C/svg%3E");
+  /* 印泥没盖匀的地方露出的纸色斑点 */
+  --sz-fleck: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='72' height='72'%3E%3Cfilter id='s' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.42' numOctaves='2' seed='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .98 0 0 0 0 .96 0 0 0 0 .92 0 0 0 12 -8.2'/%3E%3C/filter%3E%3Crect width='72' height='72' filter='url(%23s)'/%3E%3C/svg%3E");
+  /* 线装书的订线（右侧一道竖线 + 四道横线） */
+  --sz-stitch: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='100' viewBox='0 0 20 100' preserveAspectRatio='none'%3E%3Cg stroke='rgba(84,64,42,.42)' fill='none'%3E%3Cpath vector-effect='non-scaling-stroke' d='M7 0v100'/%3E%3Cpath vector-effect='non-scaling-stroke' d='M7 16h13M7 39h13M7 61h13M7 84h13'/%3E%3C/g%3E%3C/svg%3E");
+
+  --canvas: oklch(0.965 0.012 85);
+  --reading: oklch(0.971 0.01 86);
+  --panel: oklch(0.945 0.015 82);
+  --control: oklch(0.977 0.008 86);
+  --raised: oklch(0.978 0.008 86);
+  /* 遮罩是纸上压的一层暖墨，不是灰罩 */
+  --overlay: oklch(0.3 0.05 52 / 0.24);
+
+  --edge: oklch(0.855 0.018 78);
+  /* 墨线：版框、印边、强分隔 */
+  --edge-strong: oklch(0.45 0.03 70);
+  --edge-focus: oklch(0.45 0.03 70);
+  --edge-highlight: transparent;
+  /* 纸叠放时边缘那条暗线 */
+  --sz-sheet-edge: oklch(0.76 0.024 74);
+
+  --ink: oklch(0.25 0.02 60);
+  --ink-story: oklch(0.27 0.02 60);
+  --ink-2: oklch(0.45 0.022 66);
+  --ink-3: oklch(0.54 0.02 70);
+  --ink-on-primary: oklch(0.975 0.01 85);
+  --ink-link: oklch(0.36 0.03 62);
+  /* 对白：朱砂压深一档，保证 17px 正文的对比度 */
+  --ink-quote: oklch(0.48 0.12 31);
+  --ink-action: oklch(0.42 0.022 64);
+
+  --accent: oklch(0.55 0.17 30);
+  --accent-soft: oklch(0.935 0.016 80);
+  --primary: oklch(0.55 0.17 30);
+  --primary-2: oklch(0.51 0.17 29);
+  --primary-edge: oklch(0.46 0.16 28);
+  --primary-glow: transparent;
+  --primary-soft: oklch(0.935 0.018 70);
+
+  /* 语义色都取矿物颜料：赭石、藤黄、石绿；不再多一种红 */
+  --danger: oklch(0.46 0.12 45);
+  --danger-soft: oklch(0.94 0.022 60);
+  --warning: oklch(0.52 0.09 78);
+  --warning-soft: oklch(0.945 0.03 88);
+  --success: oklch(0.45 0.05 155);
+  --success-soft: oklch(0.945 0.014 140);
+  --info: oklch(0.45 0.022 66);
+  --info-soft: oklch(0.935 0.016 80);
+
+  --sz-seal: oklch(0.55 0.17 30);
+  --sz-seal-deep: oklch(0.44 0.155 28);
+  --sz-seal-ink: oklch(0.975 0.01 85);
+  --sz-stamp: oklch(0.3 0.02 60);
+  --sz-stamp-ink: oklch(0.955 0.012 85);
+  --sz-bamboo: oklch(0.86 0.052 90);
+  --sz-bamboo-edge: oklch(0.66 0.066 82);
+  --sz-bamboo-ink: oklch(0.3 0.03 70);
+
+  --origin-l0: 0.32;
+  --origin-step: 0.05;
+  --origin-c: 0.02;
+  --origin-h: 62;
+}
+
+/* ------------------------------------------------------------------ */
+/* 烛夜（夜晚）：暖褐黑的纸，墨色反成淡金的字；不是反色                  */
+/* ------------------------------------------------------------------ */
+
+[data-theme='shuzhai'][data-mode='dark'] {
+  --sz-fiber: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='a' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='1' seed='11' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .86 0 0 0 0 .78 0 0 0 0 .62 0 0 0 2.6 -1.4'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23a)' opacity='.14'/%3E%3C/svg%3E");
+  --sz-fleck: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='72' height='72'%3E%3Cfilter id='s' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.42' numOctaves='2' seed='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .2 0 0 0 0 .15 0 0 0 0 .1 0 0 0 12 -8.2'/%3E%3C/filter%3E%3Crect width='72' height='72' filter='url(%23s)'/%3E%3C/svg%3E");
+  --sz-stitch: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='100' viewBox='0 0 20 100' preserveAspectRatio='none'%3E%3Cg stroke='rgba(222,204,170,.3)' fill='none'%3E%3Cpath vector-effect='non-scaling-stroke' d='M7 0v100'/%3E%3Cpath vector-effect='non-scaling-stroke' d='M7 16h13M7 39h13M7 61h13M7 84h13'/%3E%3C/g%3E%3C/svg%3E");
+
+  --canvas: oklch(0.24 0.02 60);
+  --reading: oklch(0.252 0.02 60);
+  --panel: oklch(0.212 0.018 58);
+  --control: oklch(0.268 0.02 62);
+  --raised: oklch(0.275 0.021 62);
+  --overlay: oklch(0.13 0.025 52 / 0.58);
+
+  --edge: oklch(0.355 0.02 64);
+  --edge-strong: oklch(0.63 0.035 76);
+  --edge-focus: oklch(0.63 0.035 76);
+  --edge-highlight: transparent;
+  --sz-sheet-edge: oklch(0.17 0.015 58);
+
+  --ink: oklch(0.9 0.022 84);
+  --ink-story: oklch(0.86 0.02 82);
+  --ink-2: oklch(0.72 0.024 78);
+  --ink-3: oklch(0.6 0.022 74);
+  --ink-on-primary: oklch(0.955 0.014 85);
+  --ink-link: oklch(0.82 0.03 80);
+  --ink-quote: oklch(0.72 0.095 38);
+  --ink-action: oklch(0.74 0.024 78);
+
+  --accent: oklch(0.67 0.14 34);
+  --accent-soft: oklch(0.3 0.022 62);
+  --primary: oklch(0.52 0.155 30);
+  --primary-2: oklch(0.48 0.15 29);
+  --primary-edge: oklch(0.42 0.14 28);
+  --primary-glow: transparent;
+  --primary-soft: oklch(0.3 0.03 45);
+
+  --danger: oklch(0.7 0.11 48);
+  --danger-soft: oklch(0.29 0.03 45);
+  --warning: oklch(0.74 0.09 82);
+  --warning-soft: oklch(0.29 0.03 80);
+  --success: oklch(0.72 0.06 150);
+  --success-soft: oklch(0.28 0.02 140);
+  --info: oklch(0.72 0.024 78);
+  --info-soft: oklch(0.3 0.022 62);
+
+  --sz-seal: oklch(0.52 0.155 30);
+  --sz-seal-deep: oklch(0.41 0.135 28);
+  --sz-seal-ink: oklch(0.95 0.016 85);
+  --sz-stamp: oklch(0.76 0.022 80);
+  --sz-stamp-ink: oklch(0.25 0.02 60);
+  --sz-bamboo: oklch(0.43 0.045 84);
+  --sz-bamboo-edge: oklch(0.56 0.055 84);
+  --sz-bamboo-ink: oklch(0.92 0.03 86);
+
+  --origin-l0: 0.5;
+  --origin-step: 0.045;
+  --origin-c: 0.025;
+  --origin-h: 70;
+}
+
+/* ------------------------------------------------------------------ */
+/* 两种模式共用：形、字、动                                              */
+/* ------------------------------------------------------------------ */
+
+[data-theme='shuzhai'] {
+  --r-panel: 3px;
+  --r-card: 2px;
+  --r-control: 2px;
+  --r-pill: 3px;
+  --shadow-panel: none;
+  --shadow-raised: none;
+  --shadow-control: none;
+
+  --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --dur-panel: 240ms;
+  --dur-hover: 180ms;
+  --dur-press: 70ms;
+  --motion-pulse: none;
+
+  --texture-canvas: var(--sz-fiber);
+  --texture-reading: var(--sz-fiber);
+
+  --font-story:
+    'Shuzhai Figures', 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', STSong, SimSun, serif;
+  --font-ui:
+    'Shuzhai Figures', 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', STSong, SimSun, serif;
+  --font-display:
+    'Shuzhai Figures', 'LXGW WenKai Screen', 'Kaiti SC', STKaiti, KaiTi, 'Noto Serif SC', serif;
+  --font-mono: ui-monospace, 'Cascadia Mono', Consolas, Menlo, 'Noto Serif SC', monospace;
+
+  --story-size: 17px;
+  --story-leading: 2;
+  --story-measure: 36em;
+  --story-indent: 2em;
+  --story-paragraph-gap: 0;
+  --story-weight: 400;
+  --story-tracking: 0.02em;
+
+  --gap-message: 1.75rem;
+  --icon-stroke: 1.5;
+
+  /* 预览卡根继承不到 <body> 的 var()，这里把字与数字写在作用域根上 */
+  font-family: var(--font-ui);
+  letter-spacing: 0.02em;
+  font-variant-numeric: oldstyle-nums;
+  font-synthesis-weight: none;
+  text-autospace: normal;
+}
+
+/* ------------------------------------------------------------------ */
+/* 元素规则（全部在 @scope 里，别的世界的预览卡不受影响）                */
+/* ------------------------------------------------------------------ */
+
+@scope ([data-theme='shuzhai']) to ([data-theme]) {
+  /* Tailwind 的 tabular-nums 等工具类会重写 font-variant-numeric；把「数字形」一律钉成旧式 */
+  * {
+    --tw-numeric-figure: oldstyle-nums;
+  }
+
+  ::selection {
+    background-color: oklch(from var(--accent) l c h / 0.22);
+    color: var(--ink);
+  }
+
+  /* ---------------- 纸 ---------------- */
+
+  .surface-panel,
+  .surface-raised,
+  [data-part='chat-aside'] {
+    background-image: var(--sz-fiber);
+  }
+
+  /* 纸纹按 200px 原尺寸平铺，任何宽度、任何缩放都不被拉成条纹 */
+  :scope,
+  .surface-canvas,
+  .surface-reading,
+  .surface-panel,
+  .surface-raised,
+  [data-part='chat-aside'] {
+    background-size: 200px 200px;
+  }
+
+  .surface-raised {
+    box-shadow: none;
+  }
+
+  /* 侧栏是下层纸：与上层之间一条暗线 */
+  [data-part='sidebar'],
+  [data-part='chat-aside'] {
+    border-color: var(--sz-sheet-edge);
+  }
+
+  [data-part='app-header'] {
+    border-color: var(--edge);
+  }
+
+  /* ---------------- 版框：四周双边，外粗内细 ---------------- */
+
+  [data-part='chat-page'] [data-part='chat-view'],
+  [data-part='chat-page'] [data-part='start-screen'],
+  [data-part='main']:not(:has(> [data-part='chat-page'])) {
+    border: 2px solid var(--edge-strong);
+    outline: 1px solid var(--edge-strong);
+    outline-offset: -5px;
+    border-radius: 0;
+    background-color: var(--reading);
+    background-image: var(--sz-fiber);
+  }
+
+  [data-part='chat-page'] [data-part='chat-view'],
+  [data-part='chat-page'] [data-part='start-screen'] {
+    height: auto;
+    min-height: 0;
+    flex: 1 1 0;
+    margin: 12px;
+  }
+
+  /* 版框里的阅读面就是这张纸本身，不再各自铺底 */
+  [data-part='chat-view'] [data-part='message-list'],
+  [data-part='chat-view'] [data-part='composer-dock'] {
+    background-color: transparent;
+    background-image: none;
+  }
+
+  [data-part='main']:not(:has(> [data-part='chat-page'])) {
+    margin: 14px;
+    padding: 2.5rem 2.75rem;
+  }
+
+  /* 会话顶栏下的界行：只画到内框为止，不穿过双边 */
+  [data-part='chat-page'] [data-part='chat-header'] {
+    border-bottom-color: transparent;
+    background: linear-gradient(var(--edge), var(--edge)) no-repeat center bottom / calc(100% - 6px)
+      1px;
+    padding-inline: 12px;
+  }
+
+  [data-part='chat-header'] .font-semibold {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: 15px;
+    letter-spacing: 0.1em;
+  }
+
+  /* ---------------- 书名与导航 ---------------- */
+
+  [data-part='brand'] > :first-child {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 21px;
+    letter-spacing: 0.14em;
+    font-weight: 400;
+  }
+
+  /* 书名旁一枚小印（朱砂白文「斋」） */
+  [data-part='brand'] > :first-child::after {
+    content: '斋';
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 17px;
+    height: 17px;
+    border-radius: 2px;
+    background-color: var(--sz-seal);
+    background-image: var(--sz-fleck);
+    background-size: 36px 36px;
+    box-shadow: inset 0 0 1.5px 0.5px var(--sz-seal-deep);
+    color: var(--sz-seal-ink);
+    font-family: var(--font-display);
+    font-size: 11px;
+    line-height: 1;
+    letter-spacing: 0;
+  }
+
+  [data-part='brand'] > :last-child {
+    margin-top: 6px;
+    letter-spacing: 0.06em;
+  }
+
+  [data-part='nav-item'] {
+    position: relative;
+    letter-spacing: 0.08em;
+  }
+
+  [data-part='nav'][data-variant='sidebar'] [data-part='nav-item'] {
+    padding-inline-start: 20px;
+  }
+
+  /* 当前项：朱砂字 + 一枚圈点 */
+  [data-part='nav'][data-variant='sidebar'] [data-part='nav-item'][data-active='true']::before,
+  [data-part='settings-nav-item'][data-active='true']::before {
+    content: '';
+    position: absolute;
+    inset-inline-start: 6px;
+    top: 50%;
+    width: 6px;
+    height: 6px;
+    margin-top: -3px;
+    border: 1.2px solid var(--accent);
+    border-radius: 50%;
+  }
+
+  [data-part='nav-item'][data-active='true'],
+  [data-part='settings-nav-item'][data-active='true'] {
+    font-weight: 400;
+  }
+
+  [data-part='settings-nav-item'] {
+    position: relative;
+    letter-spacing: 0.08em;
+    padding-inline-start: 20px;
+  }
+
+  [data-part='server-status'] > span {
+    border-radius: 50%;
+  }
+
+  /* ---------------- 标题：楷 ---------------- */
+
+  .font-display {
+    font-weight: 400;
+    letter-spacing: 0.08em;
+  }
+
+  [data-part='page-header'] h1 {
+    font-size: 30px;
+    letter-spacing: 0.12em;
+  }
+
+  /* 标题下一段细双线 */
+  [data-part='page-header'] h1::after {
+    content: '';
+    display: block;
+    width: 44px;
+    height: 4px;
+    margin-top: 12px;
+    border-block: 1px solid var(--edge-strong);
+  }
+
+  [data-part='settings-section'] h2,
+  [data-part='modal'] h2,
+  [data-part='chat-list-header'] > span,
+  [data-part='drawer'] .font-semibold {
+    font-family: var(--font-display);
+    font-weight: 400;
+    letter-spacing: 0.1em;
+  }
+
+  [data-part='settings-section'] h2 {
+    font-size: 17px;
+  }
+
+  [data-part='modal'] h2 {
+    font-size: 18px;
+  }
+
+  [data-part='chat-list-header'] > span {
+    font-size: 15px;
+  }
+
+  /* ---------------- 故事 ---------------- */
+
+  [data-part='message-header'] > span:first-child {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: 14px;
+    letter-spacing: 0.1em;
+  }
+
+  [data-part='message-header'] time {
+    letter-spacing: 0.04em;
+  }
+
+  [data-part='message-body'] .nt-md {
+    text-align: justify;
+    text-justify: inter-character;
+  }
+
+  /* 动作不歪斜（中文没有真正的斜体）：改用楷，淡墨 */
+  [data-part='message-body'] em {
+    font-style: normal;
+    font-family: var(--font-display);
+    letter-spacing: 0.04em;
+  }
+
+  [data-part='message-body'] strong {
+    font-weight: 500;
+  }
+
+  [data-part='message-body'] blockquote {
+    border-inline-start: 3px double var(--edge-strong);
+  }
+
+  /* 用户的话是另一只手写上去的：略小、淡墨，同样缩进 */
+
+  /* 推理：夹注。左侧一道细双线，楷体小题 */
+  [data-part='reasoning'] {
+    border: 0;
+    border-inline-start: 3px double var(--edge);
+    border-radius: 0;
+  }
+
+  [data-part='reasoning'] > button {
+    font-family: var(--font-display);
+    font-size: 13px;
+    letter-spacing: 0.12em;
+  }
+
+  [data-part='generation-error'] {
+    border-radius: 0;
+    border-width: 0;
+    border-inline-start: 3px double var(--danger);
+    background-color: var(--danger-soft);
+  }
+
+  /* ---------------- 回目 ---------------- */
+
+  .sz-chapter {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    color: var(--ink-3);
+    font-family: var(--font-display);
+    font-size: 13px;
+    line-height: 1;
+    letter-spacing: 0.4em;
+    user-select: none;
+  }
+
+  .sz-chapter-rule {
+    width: 36px;
+    height: 4px;
+    border-block: 1px solid var(--edge);
+  }
+
+  .sz-chapter-text {
+    /* 字距的最后一格补到左边，视觉居中 */
+    padding-inline-start: 0.4em;
+  }
+
+  /* ---------------- 印：头像 ---------------- */
+
+  .avatar-frame {
+    position: relative;
+    border-radius: 2px;
+    background-color: transparent;
+    border: 1.5px solid var(--sz-seal);
+    color: var(--sz-seal);
+  }
+
+  .avatar-frame > span {
+    font-family: var(--font-display);
+    font-weight: 400;
+    letter-spacing: 0;
+  }
+
+  /* 朱文方印：内侧再一道极细的印边，边角有磨损 */
+  .avatar-frame[data-role='character']::after,
+  .avatar-frame[data-role='user']::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image: var(--sz-fleck);
+    background-size: 54px 54px;
+  }
+
+  .avatar-frame[data-role='character']::before {
+    content: '';
+    position: absolute;
+    inset: 2px;
+    border: 0.75px solid currentColor;
+    opacity: 0.55;
+    pointer-events: none;
+  }
+
+  /* 圆形墨戳 */
+  .avatar-frame[data-role='user'] {
+    border-radius: 50%;
+    border-color: transparent;
+    background-color: var(--sz-stamp);
+    color: var(--sz-stamp-ink);
+  }
+
+  .avatar-frame[data-role='system'] {
+    border: 1px solid var(--ink-3);
+    color: var(--ink-2);
+  }
+
+  .avatar-frame:has(img) {
+    border: 1px solid var(--sz-sheet-edge);
+    background-color: transparent;
+  }
+
+  .avatar-frame:has(img)::before,
+  .avatar-frame:has(img)::after {
+    content: none;
+  }
+
+  /* 会话列表里的印不上朱砂，只有当前那一项盖成红的 */
+  [data-part='chat-list-item'] .avatar-frame[data-role='character'] {
+    border-color: var(--ink-3);
+    color: var(--ink-2);
+  }
+
+  [data-part='chat-list-item'][data-active='true'] .avatar-frame[data-role='character'] {
+    border-color: var(--sz-seal);
+    color: var(--sz-seal);
+  }
+
+  [data-part='chat-list-item'] .avatar-frame::after {
+    content: none;
+  }
+
+  [data-part='chat-list-item'][data-active='true'] {
+    background-color: var(--reading);
+  }
+
+  /* ---------------- 线装书：库里的角色卡、开始页的角色卡 ---------------- */
+
+  [data-part='library-item'][data-kind='character'] .avatar-frame {
+    border: 0;
+    border-radius: 0;
+    color: var(--ink-3);
+    background-color: var(--panel);
+    background-image: var(--sz-stitch), var(--sz-fiber);
+    background-repeat: no-repeat, repeat;
+    background-position:
+      right top,
+      0 0;
+    background-size:
+      20px 100%,
+      auto;
+  }
+
+  [data-part='library-item'][data-kind='character'] .avatar-frame::before,
+  [data-part='library-item'][data-kind='character'] .avatar-frame::after {
+    content: none;
+  }
+
+  [data-part='character-card'] {
+    position: relative;
+    border-color: var(--sz-sheet-edge);
+    border-radius: 1px;
+    background-color: var(--panel);
+    background-image: var(--sz-stitch), var(--sz-fiber);
+    background-repeat: no-repeat, repeat;
+    background-position:
+      right top,
+      0 0;
+    background-size:
+      20px 100%,
+      auto;
+  }
+
+  [data-part='character-card']:hover:not(:disabled) {
+    border-color: var(--edge-strong);
+  }
+
+  /* 封面中间不写首字，只留纸 */
+  [data-part='character-card'] > span:first-child > span {
+    visibility: hidden;
+  }
+
+  /* 题签：左上角一条竖写的白签，细双边 */
+  [data-part='character-card'] > span:last-child {
+    position: absolute;
+    /* 竖排元素里 inline-start 指的是上方，这里必须用物理方向 */
+    top: 14px;
+    left: 14px;
+    max-height: calc(100% - 28px);
+    padding: 12px 5px;
+    writing-mode: vertical-rl;
+    background-color: var(--raised);
+    border: 1px solid var(--edge-strong);
+    outline: 0.75px solid var(--edge-strong);
+    outline-offset: -3.5px;
+    font-family: var(--font-display);
+    font-size: 16px;
+    font-weight: 400;
+    line-height: 1;
+    letter-spacing: 0.22em;
+    color: var(--ink);
+  }
+
+  /* 叠放的纸：卡片是上层纸 + 边缘暗线 */
+  [data-part='connection-card'],
+  [data-part='library-item'] {
+    border-color: var(--sz-sheet-edge);
+    background-color: var(--raised);
+  }
+
+  [data-part='library-item']:hover {
+    border-color: var(--edge-strong);
+  }
+
+  /* ---------------- 动作 ---------------- */
+
+  /* 主动作是一枚长方的朱砂印：楷字、印泥不匀、按下像盖章 */
+  .action-primary {
+    position: relative;
+    background-color: var(--sz-seal);
+    background-image: var(--sz-fleck);
+    background-size: 64px 64px;
+    color: var(--sz-seal-ink);
+    border: 0;
+    border-radius: 3px;
+    box-shadow:
+      inset 0 0 0 1px var(--sz-seal-deep),
+      inset 0 0 3px 1px oklch(from var(--sz-seal-deep) l c h / 0.7);
+    font-family: var(--font-display);
+    font-weight: 400;
+    letter-spacing: 0.14em;
+    transition-property: background-color, transform, opacity;
+    transition-duration: var(--dur-hover), var(--dur-press), var(--dur-hover);
+  }
+
+  .action-primary:hover:not(:disabled) {
+    background-color: var(--primary-2);
+  }
+
+  .action-primary:active:not(:disabled) {
+    background-color: var(--sz-seal-deep);
+    transform: translateY(1px);
+  }
+
+  .action-quiet {
+    border-color: var(--edge);
+    border-radius: 2px;
+    color: var(--ink);
+  }
+
+  .action-quiet:hover:not(:disabled) {
+    background-color: var(--accent-soft);
+    border-color: var(--edge-strong);
+  }
+
+  .action-ghost:hover:not(:disabled) {
+    background-color: var(--accent-soft);
+  }
+
+  .action-danger-solid {
+    border-radius: 2px;
+    letter-spacing: 0.1em;
+  }
+
+  .chip,
+  .chip-outline,
+  .chip-accent {
+    border-radius: 1px;
+    letter-spacing: 0.04em;
+  }
+
+  .chip {
+    background-color: transparent;
+    border-color: var(--edge);
+  }
+
+  /* ---------------- 纸上的格子：输入 ---------------- */
+
+  .field {
+    border-radius: 2px;
+    border-color: var(--edge);
+    background-color: var(--control);
+  }
+
+  .field:hover:not(:disabled):not(:focus-within) {
+    border-color: var(--sz-sheet-edge);
+  }
+
+  .field:focus-visible,
+  .field:focus-within {
+    border-color: var(--edge-strong);
+  }
+
+  .focus-ring:focus-visible {
+    outline: 1px solid var(--edge-focus);
+    outline-offset: 2px;
+  }
+
+  .focus-ring-inset:focus-visible {
+    outline: 1px solid var(--edge-focus);
+    outline-offset: -3px;
+  }
+
+  /* 输入框：一张小笺，也是双边 */
+  [data-part='composer'] {
+    border: 1.5px solid var(--edge-strong);
+    outline: 0.75px solid var(--edge-strong);
+    outline-offset: -4.5px;
+    border-radius: 2px;
+    background-color: var(--raised);
+    padding: 7px;
+  }
+
+  [data-part='composer']:focus-within {
+    outline: 0.75px solid var(--edge-strong);
+    outline-offset: -4.5px;
+  }
+
+  [data-part='composer-input'] {
+    font-family: var(--font-story);
+    padding-inline: 10px;
+  }
+
+  [data-part='composer-hint'] {
+    letter-spacing: 0.08em;
+  }
+
+  /* ---------------- 页签、开关 ---------------- */
+
+  [data-part='tab'] {
+    letter-spacing: 0.1em;
+  }
+
+  [data-part='tab'][data-active='true'] {
+    font-weight: 400;
+  }
+
+  .switch-track {
+    border-radius: 2px;
+    border-color: var(--edge-strong);
+  }
+
+  .switch-thumb {
+    border-radius: 1px;
+  }
+
+  .switch-track[aria-checked='true'] {
+    border-color: var(--ink);
+  }
+
+  .motion-transform {
+    transition-property: none;
+  }
+
+  /* ---------------- 浮层：最上面的一张纸 ---------------- */
+
+  [data-part='modal'] {
+    position: relative;
+    border: 2px solid var(--edge-strong);
+    outline: 1px solid var(--edge-strong);
+    outline-offset: -5px;
+    border-radius: 0;
+  }
+
+  [data-part='modal'] > .border-b {
+    border-bottom-color: transparent;
+    background: linear-gradient(var(--edge), var(--edge)) no-repeat center bottom / calc(100% - 6px)
+      1px;
+  }
+
+  [data-part='modal'] > .border-t {
+    border-top-color: transparent;
+    background: linear-gradient(var(--edge), var(--edge)) no-repeat center top / calc(100% - 6px)
+      1px;
+  }
+
+  [data-part='drawer'] {
+    border-color: var(--edge-strong);
+  }
+
+  [data-part='drawer'] [data-part='chat-list-item'][data-active='true'] {
+    background-color: var(--canvas);
+  }
+
+  /* ---------------- 空状态 ---------------- */
+
+  [data-part='empty-state'] .font-display {
+    font-size: 24px;
+    color: var(--ink-2);
+    letter-spacing: 0.14em;
+  }
+
+  /* ---------------- 设置：外观预览卡 ---------------- */
+
+  [data-part='theme-card'] {
+    border-radius: 0;
+  }
+
+  /* 预览卡里的缩影：同样是一页有版框的纸 */
+  :scope[data-part='theme-preview'] > [data-part='chat-view'] {
+    margin: 9px;
+    border: 1.5px solid var(--edge-strong);
+    outline: 0.75px solid var(--edge-strong);
+    outline-offset: -4.5px;
+    background-color: var(--reading);
+    background-image: var(--sz-fiber);
+  }
+
+  :scope[data-part='theme-preview'] [data-part='message-list'] {
+    padding-top: 18px;
+  }
+
+  :scope[data-part='theme-preview'] [data-part='message-body'] {
+    font-size: 13px;
+    line-height: 1.9;
+  }
+
+  /* ---------------- 竹签 ---------------- */
+
+  [data-part='message-actions'] {
+    opacity: 1;
+  }
+
+  /* 操作条的其余按钮照旧悬停才出现；竹签（多于一枚时）一直在 */
+  [data-part='message-actions'] > :not([data-part='swipe'], .sz-slip),
+  [data-part='swipe'] > :not(.sz-slip),
+  .sz-slip[data-single='true'] {
+    opacity: 0;
+    transition: opacity var(--dur-hover) var(--ease);
+  }
+
+  [data-part='message']:hover [data-part='message-actions'] > :not([data-part='swipe'], .sz-slip),
+  [data-part='message']:hover [data-part='swipe'] > :not(.sz-slip),
+  [data-part='message']:hover .sz-slip[data-single='true'],
+  [data-part='message-actions']:focus-within > :not([data-part='swipe'], .sz-slip),
+  [data-part='message-actions']:focus-within [data-part='swipe'] > :not(.sz-slip),
+  [data-part='message-actions']:focus-within .sz-slip[data-single='true'],
+  [data-part='message-actions'].opacity-100 > :not([data-part='swipe'], .sz-slip),
+  [data-part='message-actions'].opacity-100 [data-part='swipe'] > :not(.sz-slip),
+  [data-part='message-actions'].opacity-100 .sz-slip[data-single='true'] {
+    opacity: 1;
+  }
+
+  /* 平放（窄屏）：一截横着的竹签，右端削尖 */
+  .sz-slip {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    height: 22px;
+    padding-inline: 4px 12px;
+    background-color: var(--sz-bamboo);
+    color: var(--sz-bamboo-ink);
+    box-shadow: inset 0 0 0 1px var(--sz-bamboo-edge);
+    clip-path: polygon(0 0, calc(100% - 7px) 0, 100% 50%, calc(100% - 7px) 100%, 0 100%);
+    font-family: var(--font-display);
+    letter-spacing: 0;
+  }
+
+  .sz-slip-count {
+    display: inline-flex;
+    align-items: center;
+    padding-inline: 3px;
+    font-size: 12px;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  .sz-slip-sep {
+    margin-inline: 1px;
+    opacity: 0.55;
+  }
+
+  .sz-slip-arrow {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 18px;
+    cursor: pointer;
+    color: inherit;
+    border-radius: 1px;
+  }
+
+  .sz-slip-arrow:disabled {
+    cursor: default;
+    opacity: 0.3;
+  }
+
+  .sz-slip-arrow:hover:not(:disabled) {
+    background-color: oklch(from var(--sz-bamboo-edge) l c h / 0.28);
+  }
+
+  .sz-slip-chevron {
+    display: block;
+    width: 8px;
+    height: 5px;
+    flex: none;
+  }
+
+  .sz-slip-arrow[data-dir='prev'] .sz-slip-chevron {
+    rotate: -90deg;
+  }
+
+  .sz-slip-arrow[data-dir='next'] .sz-slip-chevron {
+    rotate: 90deg;
+  }
+
+  /* ---------------- 朱砂印发送键 ---------------- */
+
+  .sz-seal {
+    border-radius: 3px;
+    background-color: var(--sz-seal);
+    background-image: var(--sz-fleck);
+    background-size: 48px 48px;
+    color: var(--sz-seal-ink);
+    box-shadow:
+      inset 0 0 0 1px var(--sz-seal-deep),
+      inset 0 0 3px 1.5px oklch(from var(--sz-seal-deep) l c h / 0.75);
+    transition-property: background-color, color, box-shadow, transform;
+    transition-duration: var(--dur-hover), var(--dur-hover), var(--dur-hover), var(--dur-press);
+    transition-timing-function: var(--ease);
+  }
+
+  /* 印面内侧一道残缺的细边 */
+  .sz-seal::after {
+    content: '';
+    position: absolute;
+    inset: 3px;
+    border: 0.75px solid currentColor;
+    opacity: 0.6;
+    clip-path: polygon(0 0, 62% 0, 70% 6%, 100% 0, 100% 100%, 22% 100%, 12% 94%, 0 100%);
+    pointer-events: none;
+  }
+
+  /* 盖章后纸上洇开的一圈淡红 */
+  .sz-seal::before {
+    content: '';
+    position: absolute;
+    inset: -5px;
+    border-radius: 4px;
+    border: 5px solid oklch(from var(--sz-seal) l c h / 0.14);
+    opacity: 0;
+    transition: opacity 520ms var(--ease);
+    pointer-events: none;
+  }
+
+  .sz-seal:hover:not(:disabled) {
+    background-color: var(--primary-2);
+  }
+
+  .sz-seal:active:not(:disabled) {
+    transform: translateY(1px) scale(0.97);
+  }
+
+  .sz-seal:active:not(:disabled)::before {
+    opacity: 1;
+    transition-duration: 0s;
+  }
+
+  /* 空输入：印还没蘸泥，只在纸上留一个淡淡的印形 */
+  .sz-seal[data-state='idle'] {
+    background-color: transparent;
+    background-image: none;
+    color: oklch(from var(--sz-seal) l c h / 0.45);
+    box-shadow: inset 0 0 0 1px oklch(from var(--sz-seal) l c h / 0.4);
+  }
+
+  /*
+   * 记忆物件的尺寸一律写在这里，不依赖 signature.tsx 里的 Tailwind 任意值类
+   * （开发服务运行中新增的文件，工具类未必被扫描生成）。
+   */
+  .sz-seal {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 36px;
+    height: 36px;
+    position: relative;
+    cursor: pointer;
+  }
+
+  .sz-seal:disabled {
+    cursor: not-allowed;
+  }
+
+  .sz-seal-glyph {
+    position: relative;
+    display: block;
+    width: 21px;
+    height: 21px;
+  }
+
+  .sz-stamp {
+    flex: none;
+  }
+
+  .sz-empty {
+    display: block;
+    width: 10rem;
+    max-width: 60%;
+    height: auto;
+    color: var(--ink-3);
+  }
+
+  /* ---------------- 笔尖光标 ---------------- */
+
+  .sz-nib {
+    display: inline-block;
+    width: 5px;
+    height: 1.15em;
+    margin-inline-start: 0.18em;
+    vertical-align: -0.2em;
+    color: var(--ink);
+  }
+
+  .sz-nib > svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  .sz-nib[data-kind='reasoning'] {
+    color: var(--ink-2);
+  }
+}
+
+/* 宽屏：竹签立在消息右侧，竖写「二／三」，顶上一个穿绳的孔 */
+@media (min-width: 640px) {
+  @scope ([data-theme='shuzhai']) to ([data-theme]) {
+    [data-part='message']:has(.sz-slip) div:has(> [data-part='message-body']) {
+      padding-inline-end: 38px;
+    }
+
+    .sz-slip {
+      position: absolute;
+      top: 2px;
+      inset-inline-end: 0;
+      z-index: 1;
+      flex-direction: column;
+      height: auto;
+      width: 22px;
+      gap: 3px;
+      padding: 13px 0 12px;
+      clip-path: polygon(0 0, 100% 0, 100% calc(100% - 7px), 50% 100%, 0 calc(100% - 7px));
+    }
+
+    .sz-slip::before {
+      content: '';
+      position: absolute;
+      top: 4px;
+      left: 50%;
+      width: 5px;
+      height: 5px;
+      margin-left: -2.5px;
+      border-radius: 50%;
+      background-color: var(--reading);
+      box-shadow: inset 0 0 0 1px var(--sz-bamboo-edge);
+    }
+
+    .sz-slip-count {
+      writing-mode: vertical-rl;
+      padding: 2px 0;
+      font-size: 12.5px;
+    }
+
+    .sz-slip-sep {
+      margin: 2px 0;
+    }
+
+    .sz-slip-arrow {
+      width: 18px;
+      height: 14px;
+    }
+
+    .sz-slip-arrow[data-dir='prev'] .sz-slip-chevron {
+      rotate: 0deg;
+    }
+
+    .sz-slip-arrow[data-dir='next'] .sz-slip-chevron {
+      rotate: 180deg;
+    }
+  }
+}
+
+/* 窄屏：版框留白收窄 */
+@media (max-width: 639px) {
+  @scope ([data-theme='shuzhai']) to ([data-theme]) {
+    /* 窄屏每行只有十几个字，两端对齐会把个别行拉散：改为左对齐 */
+    [data-part='message-body'] .nt-md {
+      text-align: start;
+    }
+
+    [data-part='chat-page'] [data-part='chat-view'],
+    [data-part='chat-page'] [data-part='start-screen'] {
+      margin: 6px;
+    }
+
+    [data-part='main']:not(:has(> [data-part='chat-page'])) {
+      margin: 8px;
+      padding: 1.75rem 1.25rem;
+    }
+
+    [data-part='page-header'] h1 {
+      font-size: 26px;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  @scope ([data-theme='shuzhai']) to ([data-theme]) {
+    .sz-seal:active:not(:disabled),
+    .action-primary:active:not(:disabled) {
+      transform: none;
+    }
+
+    .sz-seal::before {
+      transition: none;
+    }
+  }
+}

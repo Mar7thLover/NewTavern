@@ -10,23 +10,23 @@ export function WorldInfoView({ wi }: { wi: InspectWorldInfo }) {
 
   return (
     <div className="space-y-4 p-3">
-      <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-2 text-[11px] text-ink-2">
         <span>{t('inspector.wi.budget', { used: wi.budgetUsed.toLocaleString() })}</span>
         {wi.overflowed && (
-          <span className="rounded-full border border-destructive/50 bg-destructive/10 px-2 py-0.5 text-destructive">
+          <span className="rounded-pill border-danger border px-2 py-0.5 text-danger">
             {t('inspector.wi.overflowed')}
           </span>
         )}
       </div>
 
       <section>
-        <h3 className="mb-1.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+        <h3 className="mb-1.5 text-xs font-medium tracking-wide text-ink-2 uppercase">
           {t('inspector.wi.activated')} · {wi.activations.length}
         </h3>
         {wi.activations.length === 0 ? (
-          <p className="text-xs text-muted-foreground">{t('inspector.wi.none')}</p>
+          <p className="text-xs text-ink-2">{t('inspector.wi.none')}</p>
         ) : (
-          <ul className="space-y-1.5">
+          <ul>
             {wi.activations.map((activation, index) => (
               <ActivationRow key={`${activation.entry.id}-${index}`} activation={activation} />
             ))}
@@ -35,19 +35,19 @@ export function WorldInfoView({ wi }: { wi: InspectWorldInfo }) {
       </section>
 
       <section>
-        <h3 className="mb-1.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+        <h3 className="mb-1.5 text-xs font-medium tracking-wide text-ink-2 uppercase">
           {t('inspector.wi.rejected')} · {wi.rejected.length}
         </h3>
         {wi.rejected.length === 0 ? (
-          <p className="text-xs text-muted-foreground">{t('inspector.wi.noneRejected')}</p>
+          <p className="text-xs text-ink-2">{t('inspector.wi.noneRejected')}</p>
         ) : (
-          <ul className="space-y-1">
+          <ul>
             {wi.rejected.map((item, index) => (
               <li
                 key={`${item.entryId}-${index}`}
-                className="flex items-center justify-between gap-2 rounded-md border border-border bg-card/40 px-2.5 py-1.5 text-xs"
+                className="edge-rule flex items-center justify-between gap-2 border-b px-0.5 py-2 text-xs"
               >
-                <span className="min-w-0 truncate text-muted-foreground">{item.entryId}</span>
+                <span className="min-w-0 truncate text-ink-2">{item.entryId}</span>
                 <Badge variant="outline">
                   {t([`inspector.wi.rejects.${item.reason}`, item.reason])}
                 </Badge>
@@ -66,14 +66,14 @@ function ActivationRow({ activation }: { activation: WIActivation }) {
   const title = entry.comment?.trim() || t('inspector.wi.untitled');
 
   return (
-    <li className="rounded-md border border-border bg-card/60 px-2.5 py-2">
+    <li className="edge-rule border-b px-0.5 py-2.5">
       <div className="flex flex-wrap items-center gap-1.5">
         <span className="min-w-0 flex-1 truncate text-xs font-medium">{title}</span>
         <Badge variant="default">
           {t([`inspector.wi.reasons.${activation.reason}`, activation.reason])}
         </Badge>
       </div>
-      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-ink-2">
         {entry.source?.bookName && <span className="truncate">{entry.source.bookName}</span>}
         <span>
           {t(

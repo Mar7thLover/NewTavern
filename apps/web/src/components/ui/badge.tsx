@@ -4,13 +4,13 @@ import type { HTMLAttributes } from 'react';
 import { cn } from '../../lib/utils';
 
 const badgeVariants = cva(
-  'inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[11px] font-medium leading-none whitespace-nowrap',
+  'inline-flex shrink-0 items-center px-2 py-0.5 text-[11px] font-medium leading-none whitespace-nowrap',
   {
     variants: {
       variant: {
-        default: 'border-transparent bg-primary/15 text-primary',
-        muted: 'border-transparent bg-muted text-muted-foreground',
-        outline: 'border-border text-muted-foreground',
+        default: 'chip-accent',
+        muted: 'chip',
+        outline: 'chip-outline',
       },
     },
     defaultVariants: { variant: 'default' },

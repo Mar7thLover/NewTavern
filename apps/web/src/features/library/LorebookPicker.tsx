@@ -31,9 +31,9 @@ export function LorebookPicker({ selected, onChange, disabled, className }: Lore
   const list = books.data ?? [];
   if (list.length === 0) {
     return (
-      <p className="text-xs text-muted-foreground">
+      <p className="text-xs text-ink-2">
         {t('worldInfo.noBooks')}{' '}
-        <Link to="/lorebooks" className="text-primary underline underline-offset-2">
+        <Link to="/lorebooks" className="text-accent underline underline-offset-2">
           {t('nav.lorebooks')}
         </Link>
       </p>
@@ -47,7 +47,7 @@ export function LorebookPicker({ selected, onChange, disabled, className }: Lore
   return (
     <ul
       className={cn(
-        'max-h-56 divide-y divide-border overflow-y-auto rounded-md border border-border bg-background',
+        'rounded-card edge-rule max-h-56 divide-y divide-edge overflow-y-auto border',
         className,
       )}
     >
@@ -57,7 +57,7 @@ export function LorebookPicker({ selected, onChange, disabled, className }: Lore
           <li key={book.id}>
             <label
               className={cn(
-                'flex cursor-pointer items-center gap-2.5 px-2.5 py-2 text-sm transition-colors hover:bg-accent/50',
+                'flex cursor-pointer items-center gap-2.5 px-2.5 py-2 text-sm transition-colors hover:text-accent',
                 disabled && 'pointer-events-none opacity-50',
               )}
             >
@@ -70,7 +70,7 @@ export function LorebookPicker({ selected, onChange, disabled, className }: Lore
               />
               <span className="min-w-0 flex-1 truncate">{book.name}</span>
               <Badge variant="outline">{t(`library.lorebooks.scopes.${book.scope}`)}</Badge>
-              <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">
+              <span className="shrink-0 text-[11px] text-ink-2 tabular-nums">
                 {book.entryCount}
               </span>
             </label>

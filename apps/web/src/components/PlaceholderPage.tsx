@@ -5,8 +5,10 @@ export function PlaceholderPage({ titleKey }: { titleKey: string }) {
   const { t } = useTranslation();
   return (
     <div className="mx-auto max-w-3xl">
-      <h1 className="text-2xl font-bold">{t(titleKey)}</h1>
-      <p className="mt-4 rounded-lg border border-dashed border-border p-8 text-center text-muted-foreground">
+      <h1 className="font-display text-[28px] leading-tight font-light tracking-tight">
+        {t(titleKey)}
+      </h1>
+      <p className="rounded-panel edge-rule mt-4 border p-8 text-center text-ink-2">
         {t('common.comingSoon')}
       </p>
     </div>

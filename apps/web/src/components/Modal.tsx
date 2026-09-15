@@ -79,7 +79,8 @@ export function Modal({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-[2px] sm:items-center sm:p-4"
+      data-part="modal-overlay"
+      className="surface-overlay fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget && dismissible) onClose();
       }}
@@ -87,18 +88,26 @@ export function Modal({
       <div
         ref={panelRef}
         role="dialog"
+        data-part="modal"
         aria-modal="true"
         aria-labelledby={title ? titleId : undefined}
         tabIndex={-1}
         className={cn(
-          'flex max-h-[92dvh] w-full flex-col rounded-t-lg border border-border bg-card text-card-foreground shadow-xl outline-none sm:max-h-[85dvh] sm:rounded-lg',
+          'surface-raised edge-rule rounded-panel flex max-h-[92dvh] w-full flex-col border outline-none sm:max-h-[85dvh]',
           SIZE_CLASS[size],
           className,
         )}
       >
         {title !== undefined && (
-          <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-3">
-            <h2 id={titleId} className="min-w-0 flex-1 text-base font-semibold">
+          <div
+            data-part="modal-header"
+            className="edge-rule flex items-start justify-between gap-3 border-b px-5 py-3"
+          >
+            <h2
+              data-part="modal-title"
+              id={titleId}
+              className="min-w-0 flex-1 text-base font-semibold"
+            >
               {title}
             </h2>
             {dismissible && (
@@ -106,16 +115,21 @@ export function Modal({
                 type="button"
                 onClick={onClose}
                 aria-label={t('common.close')}
-                className="-mr-2 inline-flex size-8 cursor-pointer items-center justify-center rounded-md text-lg leading-none text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                className="action-ghost focus-ring -mr-2 inline-flex size-8 cursor-pointer items-center justify-center text-lg leading-none"
               >
                 ×
               </button>
             )}
           </div>
         )}
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
+        <div data-part="modal-body" className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+          {children}
+        </div>
         {footer !== undefined && (
-          <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border px-5 py-3">
+          <div
+            data-part="modal-footer"
+            className="edge-rule flex flex-wrap items-center justify-end gap-2 border-t px-5 py-3"
+          >
             {footer}
           </div>
         )}

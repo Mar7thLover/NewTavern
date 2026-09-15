@@ -1,0 +1,222 @@
+/**
+ * 语义槽位（docs/DESIGN.md §2.2）——组件唯一可用的变量。
+ *
+ * 这里只「声明」全部槽位，并给出一套回退值（= 「素 · Su」的明亮模式）。
+ * 具体主题在 `themes/<id>/theme.css` 里按
+ * `[data-theme='<id>'][data-mode='light'|'dark']` 重新赋值，
+ * 未赋的槽位自动落回这里。
+ *
+ * 组件里禁止出现具体颜色 / 阴影 / 圆角字面量：
+ * 只能用这些槽位（Tailwind 工具类 `bg-canvas`、`text-ink` …）或 materials.css 的材质类。
+ */
+
+/*
+ * 明暗不是用 class 切，而是 <html data-mode="dark">（见 themes/apply.ts）。
+ * 外观页的预览卡会在局部写 data-mode="light"，所以最近的那个 data-mode 说了算。
+ */
+@custom-variant dark (&:where([data-mode='dark'], [data-mode='dark'] *:not([data-mode='light'], [data-mode='light'] *)));
+
+/**
+ * 回退值同时挂在 `:root` 与每一个 `[data-theme]` 作用域根上（`:where` 不加特异性）：
+ * 预览卡是嵌在当前主题里的另一个世界，如果只挂 :root，某个主题没赋的槽位会从外层主题继承过来。
+ */
+:root,
+:where([data-theme]) {
+  /* ---------------- 表面 ---------------- */
+  --canvas: oklch(0.99 0 0);
+  --reading: oklch(0.99 0 0);
+  --panel: oklch(0.99 0 0);
+  --control: oklch(0.965 0 0);
+  --raised: oklch(1 0 0);
+  --overlay: oklch(0.15 0 0 / 0.32);
+
+  /* ---------------- 边 ---------------- */
+  --edge: oklch(0.88 0 0);
+  --edge-strong: oklch(0.74 0 0);
+  --edge-focus: oklch(0.68 0.2 40);
+  --edge-highlight: transparent;
+
+  /* ---------------- 文字 ---------------- */
+  --ink: oklch(0.15 0 0);
+  --ink-2: oklch(0.5 0 0);
+  --ink-3: oklch(0.62 0 0);
+  --ink-on-primary: oklch(0.99 0 0);
+  --ink-link: oklch(0.68 0.2 40);
+  --ink-quote: oklch(0.15 0 0);
+  --ink-action: oklch(0.5 0 0);
+  /* 动作（*斜体*）的字形：中文没有真斜体，浏览器合成的倾斜很廉价，默认正体；主题可设 italic */
+  --action-style: normal;
+  /* 叙述正文（比 --ink 浅一档，与对白靠明度区分）；默认与 --ink 同色 */
+  --ink-story: oklch(0.38 0 0);
+
+  /* ---------------- 强调 ---------------- */
+  --accent: oklch(0.68 0.2 40);
+  --accent-soft: oklch(0.955 0 0);
+  --primary: oklch(0.15 0 0);
+  --primary-2: oklch(0.15 0 0);
+  --primary-edge: transparent;
+  --primary-glow: transparent;
+  /* 主动作的软底（当前项高亮、选中行）——引擎扩展槽位 */
+  --primary-soft: oklch(0.955 0 0);
+
+  /* ---------------- 语义 ---------------- */
+  --danger: oklch(0.68 0.2 40);
+  --success: oklch(0.45 0 0);
+  --warning: oklch(0.68 0.2 40);
+  --info: oklch(0.5 0 0);
+  /* 语义软底：告警条、错误卡的背景（引擎扩展槽位） */
+  --danger-soft: oklch(0.962 0.018 40);
+  --success-soft: oklch(0.955 0 0);
+  --warning-soft: oklch(0.962 0.018 40);
+  --info-soft: oklch(0.955 0 0);
+
+  /* ---------------- 形 ---------------- */
+  --r-panel: 6px;
+  --r-card: 6px;
+  --r-control: 4px;
+  --r-pill: 999px;
+
+  /* ---------------- 动 ---------------- */
+  --ease: cubic-bezier(0, 0, 0.2, 1);
+  --dur-panel: 120ms;
+  --dur-hover: 120ms;
+  --dur-press: 120ms;
+  /* 生成中的心跳动画名；`none` = 不做 */
+  --motion-pulse: none;
+
+  /* ---------------- 纹理 ---------------- */
+  --texture-canvas: none;
+  --texture-reading: none;
+
+  /* ---------------- 排版尺度（引擎扩展槽位） ---------------- */
+  /* 消息之间的留白；检查器色条的明度阶梯 */
+  --gap-message: 2rem;
+  --origin-l0: 0.3;
+  --origin-step: 0.045;
+  --origin-c: 0;
+  --origin-h: 0;
+
+  /* ---------------- 故事排版（引擎扩展槽位，作用于 [data-part='message-body']） ---------------- */
+  /* 段首缩进（书斋 2em）；段间距（书斋 0）；故事字重（琉璃 300）；故事字距 */
+  --story-indent: 0;
+  --story-paragraph-gap: 0.75em;
+  --story-weight: 400;
+  --story-tracking: normal;
+
+  /* ---------------- 图标（引擎扩展槽位，作用于 lucide 的 svg.lucide） ---------------- */
+  --icon-stroke: 2;
+}
+
+/**
+ * 与 Tailwind 命名空间同名的槽位（--font-* / --shadow-*）直接声明在 @theme 里：
+ * Tailwind 会生成 `font-story` / `shadow-panel` 之类的工具类并引用同名变量，
+ * 主题只要在 `[data-theme=…]` 下重新赋同名变量就能整体换掉。
+ */
+@theme {
+  --font-ui:
+    'Inter Variable', Inter, 'Noto Sans SC', 'Source Han Sans SC', 'PingFang SC', 'Microsoft YaHei',
+    system-ui, sans-serif;
+  --font-story:
+    'Inter Variable', Inter, 'Noto Sans SC', 'Source Han Sans SC', 'PingFang SC', 'Microsoft YaHei',
+    system-ui, sans-serif;
+  --font-display:
+    'Inter Variable', Inter, 'Noto Sans SC', 'Source Han Sans SC', 'PingFang SC', 'Microsoft YaHei',
+    system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+
+  --shadow-panel: none;
+  --shadow-raised: none;
+  --shadow-control: none;
+}
+
+/** 槽位 → Tailwind 工具类。`inline` 让工具类直接引用槽位变量，主题覆盖立刻生效。 */
+@theme inline {
+  /* 表面 */
+  --color-canvas: var(--canvas);
+  --color-reading: var(--reading);
+  --color-panel: var(--panel);
+  --color-control: var(--control);
+  --color-raised: var(--raised);
+  --color-overlay: var(--overlay);
+
+  /* 边 */
+  --color-edge: var(--edge);
+  --color-edge-strong: var(--edge-strong);
+  --color-edge-focus: var(--edge-focus);
+  --color-edge-highlight: var(--edge-highlight);
+
+  /* 文字 */
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-ink-on-primary: var(--ink-on-primary);
+  --color-ink-link: var(--ink-link);
+  --color-ink-quote: var(--ink-quote);
+  --color-ink-action: var(--ink-action);
+  --color-ink-story: var(--ink-story);
+
+  /* 强调 */
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-primary: var(--primary);
+  --color-primary-2: var(--primary-2);
+  --color-primary-edge: var(--primary-edge);
+  --color-primary-soft: var(--primary-soft);
+
+  /* 语义 */
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+
+  /* 形 */
+  --radius-panel: var(--r-panel);
+  --radius-card: var(--r-card);
+  --radius-control: var(--r-control);
+  --radius-pill: var(--r-pill);
+
+  /* 字 */
+  --text-story: var(--story-size);
+  --leading-story: var(--story-leading);
+  --default-font-family: var(--font-ui);
+  --default-mono-font-family: var(--font-mono);
+
+  /* 动 */
+  --default-transition-duration: var(--dur-hover);
+  --default-transition-timing-function: var(--ease);
+
+  /* 间距 */
+  --spacing-message: var(--gap-message);
+}
+
+/**
+ * 与 @theme 同名的槽位也要在每个作用域根上复位（理由同上：预览卡不能继承外层主题的字体与阴影）。
+ * 值必须与上面的 @theme 保持一致。
+ */
+:where([data-theme]) {
+  --font-ui:
+    'Inter Variable', Inter, 'Noto Sans SC', 'Source Han Sans SC', 'PingFang SC', 'Microsoft YaHei',
+    system-ui, sans-serif;
+  --font-story:
+    'Inter Variable', Inter, 'Noto Sans SC', 'Source Han Sans SC', 'PingFang SC', 'Microsoft YaHei',
+    system-ui, sans-serif;
+  --font-display:
+    'Inter Variable', Inter, 'Noto Sans SC', 'Source Han Sans SC', 'PingFang SC', 'Microsoft YaHei',
+    system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+  --shadow-panel: none;
+  --shadow-raised: none;
+  --shadow-control: none;
+}
+
+/* 故事排版的三个槽位：@theme inline 只负责把它们暴露成工具类 */
+:root,
+:where([data-theme]) {
+  --story-size: 16px;
+  --story-leading: 1.8;
+  --story-measure: 36em;
+}

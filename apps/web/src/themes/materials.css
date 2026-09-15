@@ -1,0 +1,370 @@
+/**
+ * 材质配方（docs/DESIGN.md §2.2 末）。
+ *
+ * 每个类只用 slots.css 的槽位实现一种「默认形态」；主题可以用
+ * `[data-theme='<id>'] .action-primary { … }` 换掉**形态**（浮雕、玻璃、扁平……），
+ * 组件完全不知道差别。
+ *
+ * 全部放在 `@layer components`：排在 Tailwind 的 utilities 之前，
+ * 所以组件仍能用工具类做个别覆盖。
+ */
+
+@layer components {
+  /* ------------------------------------------------------------------ */
+  /* 表面                                                                */
+  /* ------------------------------------------------------------------ */
+
+  .surface-canvas {
+    background-color: var(--canvas);
+    background-image: var(--texture-canvas);
+    color: var(--ink);
+  }
+
+  /* 阅读面：消息正文所在的那一层 */
+  .surface-reading {
+    background-color: var(--reading);
+    background-image: var(--texture-reading);
+    color: var(--ink);
+  }
+
+  .surface-panel {
+    background-color: var(--panel);
+    color: var(--ink);
+  }
+
+  /* 输入框 / 次要按钮的底 */
+  .surface-control {
+    background-color: var(--control);
+    color: var(--ink);
+  }
+
+  /* 弹层、抽屉、下拉 */
+  .surface-raised {
+    background-color: var(--raised);
+    color: var(--ink);
+    box-shadow: var(--shadow-raised);
+  }
+
+  .surface-overlay {
+    background-color: var(--overlay);
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* 边                                                                  */
+  /* ------------------------------------------------------------------ */
+
+  /* 结构性分隔：配 border / border-t / border-b … 使用 */
+  .edge-rule {
+    border-color: var(--edge);
+  }
+
+  .edge-rule-strong {
+    border-color: var(--edge-strong);
+  }
+
+  /* 键盘焦点。主题可整体换掉（发光、双线、印泥……） */
+  .focus-ring:focus-visible {
+    outline: 2px solid var(--edge-focus);
+    outline-offset: 2px;
+  }
+
+  .focus-ring-inset:focus-visible {
+    outline: 2px solid var(--edge-focus);
+    outline-offset: -2px;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* 动作                                                                */
+  /* ------------------------------------------------------------------ */
+
+  .action-primary {
+    background-color: var(--primary);
+    color: var(--ink-on-primary);
+    border: 1px solid var(--primary-edge);
+    border-radius: var(--r-control);
+    box-shadow: var(--shadow-control);
+    transition-property: color, background-color, border-color, box-shadow, opacity, transform;
+    transition-duration: var(--dur-hover);
+    transition-timing-function: var(--ease);
+  }
+
+  .action-primary:hover:not(:disabled) {
+    background-color: var(--accent);
+  }
+
+  .action-primary:active:not(:disabled) {
+    background-color: var(--accent);
+  }
+
+  .action-primary:disabled {
+    opacity: 0.4;
+  }
+
+  /* 次要按钮：描线，不抢视线 */
+  .action-quiet {
+    background-color: transparent;
+    color: var(--ink);
+    border: 1px solid var(--edge);
+    border-radius: var(--r-control);
+    transition-property: color, background-color, border-color, box-shadow, opacity;
+    transition-duration: var(--dur-hover);
+    transition-timing-function: var(--ease);
+  }
+
+  .action-quiet:hover:not(:disabled) {
+    background-color: var(--accent-soft);
+    border-color: var(--edge-strong);
+  }
+
+  .action-quiet:disabled {
+    opacity: 0.4;
+  }
+
+  /* 第三级：连边都没有 */
+  .action-ghost {
+    background-color: transparent;
+    color: var(--ink-2);
+    border: 1px solid transparent;
+    border-radius: var(--r-control);
+    transition-property: color, background-color, border-color, opacity;
+    transition-duration: var(--dur-hover);
+    transition-timing-function: var(--ease);
+  }
+
+  .action-ghost:hover:not(:disabled) {
+    background-color: var(--accent-soft);
+    color: var(--ink);
+  }
+
+  .action-ghost:disabled {
+    opacity: 0.4;
+  }
+
+  /* 破坏性操作 */
+  .action-danger {
+    background-color: transparent;
+    color: var(--ink-2);
+    border: 1px solid transparent;
+    border-radius: var(--r-control);
+    transition-property: color, background-color, border-color, opacity;
+    transition-duration: var(--dur-hover);
+    transition-timing-function: var(--ease);
+  }
+
+  .action-danger:hover:not(:disabled) {
+    background-color: var(--danger-soft);
+    color: var(--danger);
+  }
+
+  .action-danger:disabled {
+    opacity: 0.4;
+  }
+
+  /* 破坏性主动作（确认删除） */
+  .action-danger-solid {
+    background-color: var(--danger);
+    color: var(--ink-on-primary);
+    border: 1px solid transparent;
+    border-radius: var(--r-control);
+    transition-property: color, background-color, border-color, opacity;
+    transition-duration: var(--dur-hover);
+    transition-timing-function: var(--ease);
+  }
+
+  .action-danger-solid:hover:not(:disabled) {
+    opacity: 0.85;
+  }
+
+  .action-danger-solid:disabled {
+    opacity: 0.4;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* 小件                                                                */
+  /* ------------------------------------------------------------------ */
+
+  /* 徽标 / 标签 */
+  .chip {
+    background-color: var(--accent-soft);
+    color: var(--ink-2);
+    border: 1px solid transparent;
+    border-radius: var(--r-pill);
+  }
+
+  .chip-outline {
+    background-color: transparent;
+    color: var(--ink-2);
+    border: 1px solid var(--edge);
+    border-radius: var(--r-pill);
+  }
+
+  /* 当前项 / 强调徽标 */
+  .chip-accent {
+    background-color: transparent;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: var(--r-pill);
+  }
+
+  /* 表单控件 */
+  .field {
+    background-color: var(--control);
+    color: var(--ink);
+    border: 1px solid var(--edge);
+    border-radius: var(--r-control);
+    transition-property: color, background-color, border-color, box-shadow;
+    transition-duration: var(--dur-hover);
+    transition-timing-function: var(--ease);
+  }
+
+  .field::placeholder {
+    color: var(--ink-3);
+  }
+
+  .field:focus-visible,
+  .field:focus-within {
+    outline: none;
+    border-color: var(--edge-focus);
+  }
+
+  .field[aria-invalid='true'] {
+    border-color: var(--danger);
+  }
+
+  .field:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* 头像框：形状、底与描边由主题决定；有图片时底与线都该让位 */
+  .avatar-frame {
+    overflow: hidden;
+    border: 1px solid transparent;
+    border-radius: var(--r-control);
+    background-color: var(--control);
+    color: var(--ink-2);
+  }
+
+  .avatar-frame[data-role='user'] {
+    border-radius: var(--r-pill);
+  }
+
+  .avatar-frame:has(img) {
+    background-color: transparent;
+  }
+
+  /* 开关：轨道只有一根线，滑块是唯一的实心小件；要填色的主题覆盖 background-color */
+  .switch-track {
+    border: 1px solid var(--edge);
+    border-radius: var(--r-pill);
+    background-color: var(--control);
+    transition-property: color, background-color, border-color;
+    transition-duration: var(--dur-hover);
+    transition-timing-function: var(--ease);
+  }
+
+  .switch-track[aria-checked='true'] {
+    border-color: var(--ink);
+  }
+
+  .switch-thumb {
+    border-radius: var(--r-pill);
+    background-color: var(--ink-3);
+  }
+
+  .switch-track[aria-checked='true'] .switch-thumb {
+    background-color: var(--ink);
+  }
+
+  /* 检查器的来源色条：同一色的明度阶梯（DESIGN §3） */
+  .origin-bar {
+    background-color: oklch(
+      calc(var(--origin-l0) + var(--origin-step) * var(--origin-i, 0)) var(--origin-c)
+        var(--origin-h)
+    );
+  }
+
+  .origin-preset {
+    --origin-i: 0;
+  }
+  .origin-character {
+    --origin-i: 1;
+  }
+  .origin-persona {
+    --origin-i: 2;
+  }
+  .origin-worldinfo {
+    --origin-i: 3;
+  }
+  .origin-authors_note {
+    --origin-i: 4;
+  }
+  .origin-history {
+    --origin-i: 5;
+  }
+  .origin-injection {
+    --origin-i: 6;
+  }
+  .origin-user_input {
+    --origin-i: 7;
+  }
+  .origin-variables {
+    --origin-i: 8;
+  }
+  .origin-global_system {
+    --origin-i: 9;
+  }
+
+  /**
+   * 形变过渡（开合箭头的旋转、开关滑块的位移）。
+   * 只做透明度的世界（如「素」）把它整块关掉，状态就变成瞬时切换。
+   */
+  .motion-transform {
+    transition-property: transform;
+    transition-duration: var(--dur-hover);
+    transition-timing-function: var(--ease);
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* 结构挂点的默认形态（themes/README.md「data-part 清单」）             */
+  /* ------------------------------------------------------------------ */
+
+  /* 故事正文：字重、字距来自排版槽位 */
+  [data-part='message-body'] {
+    font-weight: var(--story-weight);
+    letter-spacing: var(--story-tracking);
+  }
+
+  /* Markdown 段落：段间距与段首缩进来自排版槽位（书斋：2em 缩进、段间不留空） */
+  .nt-md p {
+    margin-block: var(--story-paragraph-gap);
+    text-indent: var(--story-indent);
+  }
+
+  .nt-md > :first-child {
+    margin-top: 0;
+  }
+
+  .nt-md > :last-child {
+    margin-bottom: 0;
+  }
+
+  /* 图标线宽：lucide 的 stroke-width 属性优先级最低，这里统一改读槽位（暖房 2 圆头） */
+  svg.lucide {
+    stroke-width: var(--icon-stroke);
+  }
+
+  /* 生成中的心跳：`--motion-pulse: none` 的主题什么也不发生 */
+  .pulse-live {
+    animation-name: var(--motion-pulse);
+    animation-duration: 1.6s;
+    animation-iteration-count: infinite;
+    animation-timing-function: var(--ease);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pulse-live {
+    animation-name: none;
+  }
+}

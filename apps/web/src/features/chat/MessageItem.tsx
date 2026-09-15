@@ -14,6 +14,8 @@ import { Button } from '../../components/ui/button';
 import { IconButton } from '../../components/ui/icon-button';
 import { nodeText, useDeleteNode, usePatchNode, type MessageNode } from '../../lib/api';
 import { cn, copyText } from '../../lib/utils';
+import { slotSeconds } from '../../themes/apply';
+import { MessageOrnamentLayer, useSignature } from '../../themes/signature';
 import { Avatar, errorMessage } from '../library/shared';
 
 const LONG_PRESS_MS = 450;
@@ -21,6 +23,8 @@ const LONG_PRESS_MS = 450;
 export interface MessageItemProps {
   chatId: string;
   node: MessageNode;
+  /** 在 root→head 路径里的下标（从 0 起） */
+  index: number;
   /** 该聊天的全部节点，用于算兄弟与分叉 */
   nodes: readonly MessageNode[];
   displayName: string;
@@ -40,6 +44,7 @@ export interface MessageItemProps {
 export function MessageItem({
   chatId,
   node,
+  index: pathIndex,
   nodes,
   displayName,
   avatarAssetId,
@@ -51,6 +56,7 @@ export function MessageItem({
   onRegenerate,
 }: MessageItemProps) {
   const { t, i18n } = useTranslation();
+  const { StreamingCursor } = useSignature();
   const patchNode = usePatchNode();
   const deleteNode = useDeleteNode();
   const [editing, setEditing] = useState(false);
@@ -99,10 +105,16 @@ export function MessageItem({
   return (
     <motion.article
       layout="position"
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.2, ease: 'easeOut' }}
-      className={cn('group/msg', node.isHidden && 'opacity-50')}
+      // 出现只做透明度：位移由主题自己在 CSS 里加（素：无滑入）
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: slotSeconds('--dur-panel') }}
+      data-part="message"
+      data-role={node.role}
+      data-index={pathIndex}
+      data-streaming={streaming}
+      // relative：装饰层（MessageOrnament）以消息为定位参照
+      className={cn('group/msg relative', node.isHidden && 'opacity-50')}
       onTouchStart={() => {
         clearPress();
         pressTimer.current = window.setTimeout(() => setTouchOpen(true), LONG_PRESS_MS);
@@ -111,59 +123,71 @@ export function MessageItem({
       onTouchMove={clearPress}
       onTouchCancel={clearPress}
     >
-      <div className={cn('flex min-w-0 gap-3', isUser && 'rounded-xl bg-card px-4 py-3')}>
+      <MessageOrnamentLayer role={node.role} id={node.id} index={pathIndex} />
+
+      <div data-part="message-row" className="flex min-w-0 gap-3">
         <Avatar
           name={displayName}
           assetId={avatarAssetId}
-          className="size-9 rounded-full"
+          role={isUser ? 'user' : node.role === 'system' ? 'system' : 'character'}
+          className="size-9"
           textClassName="text-sm"
         />
-        <div className="min-w-0 flex-1">
-          <div className="flex items-baseline gap-2">
-            <span className="truncate text-sm font-medium">{displayName}</span>
+        <div data-part="message-main" className="min-w-0 flex-1">
+          {/* 名字 13px 墨色 + 时间戳 11px tabular 灰，中间 8px，左对齐 */}
+          <div data-part="message-header" className="flex items-baseline gap-2">
+            <span className="truncate text-[13px] font-medium text-ink">{displayName}</span>
             <time
               dateTime={node.createdAt}
-              className="shrink-0 text-xs text-muted-foreground tabular-nums"
+              className="shrink-0 text-[11px] text-ink-3 tabular-nums"
             >
               {formatClock(node.createdAt, i18n.language)}
             </time>
           </div>
 
-          <div className="mt-1.5 max-w-[72ch] min-w-0 text-[15px] leading-[1.75] break-words">
+          <div className="mt-1.5 max-w-[var(--story-measure)] min-w-0">
             {reasoning !== '' && (
               <ReasoningBlock reasoning={reasoning} streaming={streaming} hasText={text !== ''} />
             )}
 
-            {editing ? (
-              <EditBox
-                value={draft}
-                pending={patchNode.isPending}
-                error={errorMessage(patchNode.error)}
-                onChange={setDraft}
-                onSave={saveEdit}
-                onCancel={() => {
-                  patchNode.reset();
-                  setEditing(false);
-                }}
-              />
-            ) : text === '' && !streaming ? (
-              // 生成被中止 / 未产出文本：弱提示 + 就地重新生成
-              <p className="flex flex-wrap items-center gap-2 text-[13px] text-muted-foreground/70">
-                <span className="italic">{t('chat.message.empty')}</span>
-                {!isUser && (
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => onRegenerate(node)}
-                    className="cursor-pointer text-primary underline-offset-2 hover:underline disabled:pointer-events-none disabled:opacity-50"
-                  >
-                    {t('chat.message.regenerate')}
-                  </button>
-                )}
-              </p>
-            ) : (
-              <Markdown streaming={streaming}>{displayText === '' ? ' ' : displayText}</Markdown>
-            )}
+            {/* 故事正文容器：叙述用 --ink-story，对白由 Markdown 着成 --ink-quote，靠明度区分 */}
+            <div
+              data-part="message-body"
+              className="font-story text-story leading-story min-w-0 break-words text-ink-story"
+            >
+              {editing ? (
+                <EditBox
+                  value={draft}
+                  pending={patchNode.isPending}
+                  error={errorMessage(patchNode.error)}
+                  onChange={setDraft}
+                  onSave={saveEdit}
+                  onCancel={() => {
+                    patchNode.reset();
+                    setEditing(false);
+                  }}
+                />
+              ) : text === '' && !streaming ? (
+                // 生成被中止 / 未产出文本：弱提示 + 就地重新生成
+                <p className="flex flex-wrap items-center gap-2 text-[13px] text-ink-3">
+                  <span className="italic">{t('chat.message.empty')}</span>
+                  {!isUser && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => onRegenerate(node)}
+                      className="cursor-pointer text-accent underline-offset-2 hover:underline disabled:pointer-events-none disabled:opacity-50"
+                    >
+                      {t('chat.message.regenerate')}
+                    </button>
+                  )}
+                </p>
+              ) : (
+                <Markdown streaming={streaming} cursor={<StreamingCursor kind="text" />}>
+                  {displayText === '' ? ' ' : displayText}
+                </Markdown>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -171,8 +195,10 @@ export function MessageItem({
       {/* 操作条放在卡片外，用左内边距对齐正文列，避免撑高用户消息卡 */}
       {!editing && (
         <div
+          data-part="message-actions"
+          data-visible={actionsVisible}
           className={cn(
-            'mt-0.5 flex h-7 min-w-0 items-center gap-0.5 transition-opacity duration-150',
+            'mt-0.5 flex h-7 min-w-0 items-center gap-0.5 transition-opacity',
             'group-hover/msg:opacity-100 focus-within:opacity-100',
             isUser ? 'ps-16' : 'ps-12',
             actionsVisible ? 'opacity-100' : 'opacity-0',
@@ -196,7 +222,7 @@ export function MessageItem({
             />
           )}
           {!isUser && siblings.length > 0 && (
-            <span className="mx-1 h-4 w-px bg-border/70" aria-hidden />
+            <span className="edge-rule mx-1.5 h-4 border-s" aria-hidden />
           )}
           <IconButton
             label={copied ? t('chat.message.copied') : t('chat.message.copy')}
@@ -283,7 +309,7 @@ function EditBox({
             onSave();
           }
         }}
-        className="w-full resize-none rounded-lg border border-input bg-background px-3 py-2 text-[15px] leading-[1.75] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+        className="field font-story text-story leading-story w-full resize-none px-3 py-2"
       />
       <div className="flex items-center gap-2">
         <Button size="sm" onClick={onSave} disabled={pending}>
@@ -292,10 +318,10 @@ function EditBox({
         <Button size="sm" variant="ghost" onClick={onCancel} disabled={pending}>
           {t('common.cancel')}
         </Button>
-        <span className="text-xs text-muted-foreground">{t('chat.message.editHint')}</span>
+        <span className="text-xs text-ink-2">{t('chat.message.editHint')}</span>
       </div>
       {error && (
-        <p role="alert" className="text-sm text-destructive">
+        <p role="alert" className="text-sm text-danger">
           {error}
         </p>
       )}

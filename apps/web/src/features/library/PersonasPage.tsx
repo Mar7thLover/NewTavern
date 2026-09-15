@@ -16,8 +16,7 @@ import { Avatar, EmptyState, LibraryHeader, QueryStatus, errorMessage, formatDat
 /** 表单目标：null 关闭，'new' 新建，否则编辑该档案 */
 type FormTarget = null | 'new' | Persona;
 
-const FIELD_CLASS =
-  'w-full rounded-md border border-input bg-background px-3 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50';
+const FIELD_CLASS = 'field w-full px-3 text-sm';
 
 export function PersonasPage() {
   const { t } = useTranslation();
@@ -51,6 +50,7 @@ export function PersonasPage() {
       {personas.data &&
         (list.length === 0 ? (
           <EmptyState
+            kind="personas"
             title={t('library.personas.emptyTitle')}
             hint={t('library.personas.emptyHint', { macro: '{{user}}' })}
             action={
@@ -64,18 +64,21 @@ export function PersonasPage() {
             {list.map((persona) => (
               <li
                 key={persona.id}
-                className="flex flex-col rounded-lg border border-border bg-card p-4 text-card-foreground"
+                data-part="library-item"
+                data-kind="persona"
+                className="rounded-card edge-rule flex flex-col border p-4 text-ink"
               >
                 <div className="flex items-center gap-3">
                   <Avatar
                     name={persona.name}
                     assetId={persona.avatarAssetId}
-                    className="size-11 rounded-full"
+                    role="user"
+                    className="size-11"
                     textClassName="text-lg"
                   />
                   <div className="min-w-0 flex-1">
                     <div className="truncate font-medium">{persona.name}</div>
-                    <div className="text-xs text-muted-foreground">
+                    <div className="text-xs text-ink-2">
                       {t('common.updated')}: {formatDate(persona.updatedAt)}
                     </div>
                   </div>
@@ -83,8 +86,8 @@ export function PersonasPage() {
                 <p
                   className={
                     persona.description.trim()
-                      ? 'mt-3 line-clamp-4 flex-1 text-sm break-words whitespace-pre-line text-muted-foreground'
-                      : 'mt-3 flex-1 text-sm text-muted-foreground/70 italic'
+                      ? 'mt-3 line-clamp-4 flex-1 text-sm break-words whitespace-pre-line text-ink-2'
+                      : 'mt-3 flex-1 text-sm text-ink-3 italic'
                   }
                 >
                   {persona.description.trim() || t('library.personas.noDescription')}
@@ -96,7 +99,7 @@ export function PersonasPage() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    className="text-danger hover:bg-danger-soft hover:text-danger"
                     onClick={() => {
                       deletePersona.reset();
                       setPendingDelete(persona);
@@ -199,11 +202,9 @@ function PersonaFormModal({ persona, onClose }: { persona: Persona | null; onClo
               setName(event.target.value);
               if (nameError) setNameError(false);
             }}
-            className={`${FIELD_CLASS} h-9 ${nameError ? 'border-destructive' : ''}`}
+            className={`${FIELD_CLASS} h-9 ${nameError ? 'border-danger' : ''}`}
           />
-          {nameError && (
-            <p className="text-xs text-destructive">{t('library.personas.nameRequired')}</p>
-          )}
+          {nameError && <p className="text-xs text-danger">{t('library.personas.nameRequired')}</p>}
         </div>
         <div className="space-y-1.5">
           <label htmlFor={`${formId}-description`} className="text-sm font-medium">
@@ -220,7 +221,7 @@ function PersonaFormModal({ persona, onClose }: { persona: Persona | null; onClo
           />
         </div>
         {serverError && (
-          <p role="alert" className="text-sm text-destructive">
+          <p role="alert" className="text-sm text-danger">
             {serverError}
           </p>
         )}

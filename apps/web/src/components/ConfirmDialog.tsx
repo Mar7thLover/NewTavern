@@ -55,9 +55,9 @@ export function ConfirmDialog({
         </>
       }
     >
-      {description && <div className="text-sm text-muted-foreground">{description}</div>}
+      {description && <div className="text-sm text-ink-2">{description}</div>}
       {error && (
-        <p role="alert" className="mt-3 text-sm text-destructive">
+        <p role="alert" className="mt-3 text-sm text-danger">
           {error}
         </p>
       )}

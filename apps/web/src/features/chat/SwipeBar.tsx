@@ -1,7 +1,8 @@
-import { ChevronLeft, ChevronRight, GitBranch, RefreshCw } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { IconButton } from '../../components/ui/icon-button';
+import { useSignature } from '../../themes/signature';
 
 export interface SwipeBarProps {
   /** 当前兄弟的下标（从 0 起） */
@@ -16,7 +17,7 @@ export interface SwipeBarProps {
   onRegenerate: () => void;
 }
 
-/** 助手消息的 swipe 条：‹ i/n ›、重生成、分叉提示 */
+/** 助手消息的 swipe 条：指示器（记忆物件）+ 重生成 + 分叉提示 */
 export function SwipeBar({
   index,
   total,
@@ -27,29 +28,24 @@ export function SwipeBar({
   onRegenerate,
 }: SwipeBarProps) {
   const { t } = useTranslation();
+  const { SwipeIndicator } = useSignature();
   const atEnd = index >= total - 1;
 
   return (
-    <div className="flex items-center gap-0.5">
-      <IconButton
-        label={t('chat.swipe.prev')}
-        size="xs"
-        disabled={index <= 0 || busy}
-        onClick={onPrev}
-      >
-        <ChevronLeft aria-hidden />
-      </IconButton>
-      <span className="min-w-10 text-center text-[11px] tabular-nums text-muted-foreground">
-        {index + 1}/{total}
-      </span>
-      <IconButton
-        label={atEnd ? t('chat.swipe.new') : t('chat.swipe.next')}
-        size="xs"
-        disabled={busy}
-        onClick={atEnd ? onRegenerate : onNext}
-      >
-        <ChevronRight aria-hidden />
-      </IconButton>
+    <div data-part="swipe" className="flex items-center gap-1.5">
+      {/* 记忆物件：swipe 指示的形态由主题决定（素 = 「2 / 3」纯文字 + 两个箭头） */}
+      <SwipeIndicator
+        index={index}
+        total={total}
+        busy={busy}
+        labels={{
+          prev: t('chat.swipe.prev'),
+          next: t('chat.swipe.next'),
+          new: t('chat.swipe.new'),
+        }}
+        onPrev={onPrev}
+        onNext={atEnd ? onRegenerate : onNext}
+      />
       <IconButton
         label={t('chat.message.regenerate')}
         size="xs"
@@ -61,9 +57,8 @@ export function SwipeBar({
       {branched && (
         <span
           title={t('chat.swipe.branchedHint')}
-          className="ms-1 inline-flex items-center gap-1 rounded-full bg-primary/12 px-1.5 py-0.5 text-[10px] font-medium text-primary"
+          className="chip-accent ms-1 inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium"
         >
-          <GitBranch aria-hidden className="size-3" />
           {t('chat.swipe.branched')}
         </span>
       )}

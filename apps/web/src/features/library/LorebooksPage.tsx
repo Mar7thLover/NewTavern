@@ -29,10 +29,11 @@ const AT_DEPTH_POSITION = 4;
 
 type EntryStatus = 'constant' | 'active' | 'disabled';
 
+/** 状态点只是一圈 1px 线（不填色块），颜色区分状态 */
 const STATUS_DOT: Record<EntryStatus, string> = {
-  constant: 'bg-primary',
-  active: 'bg-green-500',
-  disabled: 'bg-muted-foreground/40',
+  constant: 'border border-accent',
+  active: 'border border-ink-2',
+  disabled: 'border border-edge-strong',
 };
 
 function entryStatus(entry: LorebookEntry): EntryStatus {
@@ -82,21 +83,27 @@ export function LorebooksPage() {
       {lorebooks.data &&
         (list.length === 0 ? (
           <EmptyState
+            kind="lorebooks"
             title={t('library.lorebooks.emptyTitle')}
             hint={t('library.lorebooks.emptyHint')}
             action={importButton('lg', 'center')}
           />
         ) : (
-          <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">
+          <ul className="edge-rule divide-y divide-edge border-y">
             {list.map((book) => (
-              <li key={book.id} className="flex flex-col sm:flex-row sm:items-center">
+              <li
+                key={book.id}
+                data-part="library-item"
+                data-kind="lorebook"
+                className="flex flex-col sm:flex-row sm:items-center"
+              >
                 <button
                   type="button"
                   onClick={() => setSelected(book)}
-                  className="min-w-0 flex-1 cursor-pointer px-4 pt-3 text-left transition-colors hover:bg-accent/40 focus-visible:bg-accent/40 focus-visible:outline-none sm:py-3"
+                  className="focus-ring-inset min-w-0 flex-1 cursor-pointer px-1 pt-3 text-left transition-colors hover:text-accent sm:py-3"
                 >
                   <div className="truncate font-medium">{book.name}</div>
-                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-2">
                     <Badge>{t(`library.lorebooks.scopes.${book.scope}`)}</Badge>
                     <span>{t('library.lorebooks.entryCount', { total: book.entryCount })}</span>
                     <span>
@@ -104,7 +111,7 @@ export function LorebooksPage() {
                     </span>
                   </div>
                 </button>
-                <div className="flex shrink-0 gap-2 px-4 py-3 sm:pl-0">
+                <div className="flex shrink-0 gap-2 px-1 py-3 sm:pl-0">
                   <a
                     href={apiUrls.exportLorebook(book.id)}
                     download
@@ -115,7 +122,7 @@ export function LorebooksPage() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    className="text-danger hover:bg-danger-soft hover:text-danger"
                     onClick={() => {
                       deleteLorebook.reset();
                       setPendingDelete(book);
@@ -168,7 +175,7 @@ function LorebookDetailModal({ book, onClose }: { book: LorebookSummary; onClose
         <span className="flex flex-wrap items-center gap-2">
           <span className="min-w-0 truncate">{detail.data?.name ?? book.name}</span>
           <Badge>{t(`library.lorebooks.scopes.${detail.data?.scope ?? book.scope}`)}</Badge>
-          <span className="text-xs font-normal text-muted-foreground">
+          <span className="text-xs font-normal text-ink-2">
             {t('library.lorebooks.entryCount', {
               total: detail.data?.entries.length ?? book.entryCount,
             })}
@@ -184,22 +191,20 @@ function LorebookDetailModal({ book, onClose }: { book: LorebookSummary; onClose
 
       {detail.data &&
         (entries.length === 0 ? (
-          <p className="py-6 text-center text-sm text-muted-foreground">
-            {t('library.lorebooks.noEntries')}
-          </p>
+          <p className="py-6 text-center text-sm text-ink-2">{t('library.lorebooks.noEntries')}</p>
         ) : (
           <>
-            <div className="mb-3 flex flex-wrap gap-4 text-xs text-muted-foreground">
+            <div className="mb-3 flex flex-wrap gap-4 text-xs text-ink-2">
               {(Object.keys(STATUS_DOT) as EntryStatus[]).map((status) => (
                 <span key={status} className="inline-flex items-center gap-1.5">
-                  <span className={cn('size-2 rounded-full', STATUS_DOT[status])} />
+                  <span className={cn('size-2 rounded-pill', STATUS_DOT[status])} />
                   {t(`library.lorebooks.status.${status}`)}
                 </span>
               ))}
             </div>
-            <div className="overflow-x-auto rounded-md border border-border">
+            <div className="overflow-x-auto rounded-control border edge-rule">
               <table className="w-full min-w-[720px] text-left text-sm">
-                <thead className="bg-muted/50 text-xs text-muted-foreground">
+                <thead className="edge-rule border-b text-xs text-ink-2">
                   <tr>
                     <th className="w-10 px-3 py-2 font-medium">
                       <span className="sr-only">{t('library.lorebooks.columns.status')}</span>
@@ -221,7 +226,7 @@ function LorebookDetailModal({ book, onClose }: { book: LorebookSummary; onClose
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-border">
+                <tbody className="divide-y divide-edge">
                   {entries.map((entry) => {
                     const status = entryStatus(entry);
                     const keys = entry.keys.join(', ');
@@ -229,30 +234,28 @@ function LorebookDetailModal({ book, onClose }: { book: LorebookSummary; onClose
                     return (
                       <tr
                         key={entry.id}
-                        className={cn('align-top', entry.disabled && 'text-muted-foreground')}
+                        className={cn('align-top', entry.disabled && 'text-ink-2')}
                       >
                         <td className="px-3 py-2.5">
                           <span
                             title={t(`library.lorebooks.status.${status}`)}
-                            className={cn('mt-1.5 block size-2 rounded-full', STATUS_DOT[status])}
+                            className={cn('mt-1.5 block size-2 rounded-pill', STATUS_DOT[status])}
                           />
                           <span className="sr-only">{t(`library.lorebooks.status.${status}`)}</span>
                         </td>
                         <td className="px-3 py-2.5">
                           <div className="font-medium break-words">
                             {title || (
-                              <span className="text-muted-foreground italic">
+                              <span className="text-ink-2 italic">
                                 {t('library.lorebooks.untitled')}
                               </span>
                             )}
                           </div>
                           {entry.comment?.trim() && keys && (
-                            <div className="mt-0.5 text-xs break-words text-muted-foreground">
-                              {keys}
-                            </div>
+                            <div className="mt-0.5 text-xs break-words text-ink-2">{keys}</div>
                           )}
                         </td>
-                        <td className="px-3 py-2.5 text-muted-foreground">
+                        <td className="px-3 py-2.5 text-ink-2">
                           <span className="line-clamp-3 break-words">{preview(entry.content)}</span>
                         </td>
                         <td className="px-3 py-2.5 whitespace-nowrap">
@@ -261,7 +264,7 @@ function LorebookDetailModal({ book, onClose }: { book: LorebookSummary; onClose
                         <td
                           className={cn(
                             'px-3 py-2.5 text-right tabular-nums',
-                            entry.position !== AT_DEPTH_POSITION && 'text-muted-foreground/60',
+                            entry.position !== AT_DEPTH_POSITION && 'text-ink-3',
                           )}
                         >
                           {entry.depth ?? '—'}

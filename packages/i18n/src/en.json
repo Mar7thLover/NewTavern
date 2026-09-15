@@ -51,19 +51,32 @@
   },
   "settings": {
     "title": "Settings",
-    "general": "General",
-    "appearance": "Appearance",
-    "theme": "Theme",
-    "themeLight": "Light",
-    "themeDark": "Dark",
-    "themeSystem": "System",
     "languageDescription": "Language of the UI and built-in prompts.",
     "sections": {
       "general": "General",
+      "appearance": "Appearance",
       "worldInfo": "World info",
       "globalSystemPrompt": "Global system prompt",
       "regex": "Regex scripts"
     }
+  },
+  "appearance": {
+    "world": "World",
+    "worldHint": "Every world brings its own material, light, type and keepsakes. Switching themes changes the world, never your habits.",
+    "select": "Move into this world",
+    "mode": "Day and night",
+    "modeHint": "Two moments of the same world, each coloured on its own. Hidden when a world offers only one.",
+    "modes": {
+      "light": "Day",
+      "dark": "Night",
+      "system": "Follow system"
+    },
+    "options": "Details of this world",
+    "optionsHint": "Switches that belong to the current world only; each world keeps its own.",
+    "previewLine": "The door creaks; the wind carries snow. ",
+    "previewQuote": "“Sit down.”",
+    "previewUser": "I hang my cloak by the door.",
+    "previewUserName": "Traveller"
   },
   "library": {
     "characters": {

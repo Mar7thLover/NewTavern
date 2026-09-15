@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/ui/button';
 import { copyText } from '../../lib/utils';
 
-/** JSON 词法：字符串 / 数字 / 字面量 / 键名，各自一种颜色 */
+/** JSON 词法：键名用墨色、字符串用次要墨色、数字与字面量用强调色（不引入第二种色） */
 const TOKEN_RE = /("(?:\\.|[^"\\])*"\s*:?)|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)|(true|false|null)/g;
 
 function highlight(json: string): ReactNode[] {
@@ -22,19 +22,19 @@ function highlight(json: string): ReactNode[] {
     if (asString !== undefined) {
       const isKey = asString.trimEnd().endsWith(':');
       nodes.push(
-        <span key={key++} className={isKey ? 'text-primary' : 'text-inspector-worldinfo'}>
+        <span key={key++} className={isKey ? 'font-medium text-ink' : 'text-ink-2'}>
           {raw}
         </span>,
       );
     } else if (asNumber !== undefined) {
       nodes.push(
-        <span key={key++} className="text-inspector-injection">
+        <span key={key++} className="text-accent tabular-nums">
           {raw}
         </span>,
       );
     } else if (asLiteral !== undefined) {
       nodes.push(
-        <span key={key++} className="text-inspector-persona">
+        <span key={key++} className="text-accent">
           {raw}
         </span>,
       );
@@ -64,7 +64,7 @@ export function RequestView({ request }: { request: unknown }) {
   }, [copied]);
 
   if (request === undefined || request === null) {
-    return <p className="p-4 text-sm text-muted-foreground">{t('inspector.request.empty')}</p>;
+    return <p className="p-4 text-sm text-ink-2">{t('inspector.request.empty')}</p>;
   }
 
   return (
@@ -79,7 +79,7 @@ export function RequestView({ request }: { request: unknown }) {
           {copied ? t('common.copied') : t('inspector.request.copy')}
         </Button>
       </div>
-      <pre className="overflow-x-auto rounded-md border border-border bg-card/60 p-3 font-mono text-[11px] leading-relaxed">
+      <pre className="rounded-card edge-rule bg-control overflow-x-auto border p-3 font-mono text-[11px] leading-relaxed">
         <code>{highlight(json)}</code>
       </pre>
     </div>

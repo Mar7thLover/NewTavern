@@ -46,20 +46,23 @@ export function PresetsPage() {
       {presets.data &&
         (list.length === 0 ? (
           <EmptyState
+            kind="presets"
             title={t('library.presets.emptyTitle')}
             hint={t('library.presets.emptyHint')}
             action={importButton('lg', 'center')}
           />
         ) : (
-          <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">
+          <ul className="edge-rule divide-y divide-edge border-y">
             {list.map((preset) => (
               <li
                 key={preset.id}
-                className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:gap-4"
+                data-part="library-item"
+                data-kind="preset"
+                className="flex flex-col gap-2 px-1 py-3 sm:flex-row sm:items-center sm:gap-4"
               >
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-medium">{preset.name}</div>
-                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-2">
                     <Badge>{t(`library.presets.formats.${preset.format}`)}</Badge>
                     <span>
                       {t('library.presets.apiFamily')}:{' '}
@@ -81,7 +84,7 @@ export function PresetsPage() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    className="text-danger hover:bg-danger-soft hover:text-danger"
                     onClick={() => {
                       deletePreset.reset();
                       setPendingDelete(preset);

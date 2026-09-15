@@ -1,0 +1,1611 @@
+/**
+ * 暖房 · Nuanfang —— 一间午后的温室（docs/DESIGN.md §3.6）。
+ *
+ * 奶油色的墙、圆滚滚的家具、软软的布，桌上一只马克杯，窗台一小盆绿。
+ * 一切都是圆的、软的、暖的。
+ *
+ * 铁律：
+ *  - 只有白天。没有黑色、没有冷灰、没有锐角、**没有线**——形状全靠色块与软影。
+ *    （本作用域里所有边框颜色一律透明；分隔靠留白、色块、豆子点点。）
+ *  - 圆角 20 / 14 / 999（唯一允许大圆角的世界）；软影 0 6px 20px oklch(0.6 0.08 60 / 0.18)。
+ *  - 动：cubic-bezier(.34,1.3,.64,1) 260ms 的小幅弹性；主动作按下 scaleY(.94)；
+ *    生成中软糖键像小动物一样呼吸。所有常驻动画都包在 prefers-reduced-motion: no-preference 里。
+ *  - 甜但不腻：强调只有草莓，第二色只有薄荷；对白用草莓（字色加深一档保证 400 字也读得动）。
+ *
+ * 面板用途 ↔ 颜色（固定，不随机）：
+ *  - 主导航侧栏 sidebar ............ 不是面板，是奶油墙本身（窗台画在它脚下）
+ *  - 会话列表 chat-aside[start] / 左抽屉 drawer[left] ...... 薄荷奶昔
+ *  - 会话面板 · 检查器 chat-aside[end] / 右抽屉 drawer[right] ... 杏子
+ *  - 对话托盘 chat-view ............. 更深一点的奶油（桌布），便签放在上面
+ *  - 便签：角色 = 白奶油 + 贴纸；用户 = 草莓牛奶 + 一截薄荷胶带；系统 = 薄荷
+ *  - 卡片（库、连接、设置分区、Modal）= 白奶油 + 软影
+ */
+
+/* ------------------------------------------------------------------ */
+/* 槽位                                                                */
+/* ------------------------------------------------------------------ */
+
+[data-theme='nuanfang'] {
+  /* 主题自己的调色盘（插画、贴纸、面板用；组件只读槽位） */
+  --nf-cream: oklch(0.97 0.02 85);
+  --nf-cream-deep: oklch(0.94 0.028 80);
+  --nf-tray: oklch(0.955 0.024 82);
+  --nf-milk: oklch(0.99 0.01 90);
+  --nf-cushion: oklch(0.93 0.032 75);
+  --nf-mint: oklch(0.7 0.1 165);
+  --nf-mint-panel: oklch(0.95 0.03 165);
+  --nf-mint-soft: oklch(0.93 0.042 165);
+  --nf-mint-text: oklch(0.48 0.075 165);
+  --nf-apricot: oklch(0.95 0.04 55);
+  --nf-apricot-soft: oklch(0.915 0.055 58);
+  --nf-apricot-jelly: oklch(0.82 0.1 58);
+  --nf-berry: oklch(0.72 0.14 15);
+  --nf-berry-deep: oklch(0.6 0.15 15);
+  --nf-berry-milk: oklch(0.955 0.03 15);
+  --nf-butter: oklch(0.955 0.05 95);
+  --nf-caramel: oklch(0.55 0.07 60);
+  --nf-line: oklch(0.38 0.045 50);
+  --nf-pot: oklch(0.8 0.085 50);
+  --nf-sill: oklch(0.88 0.06 62);
+  --nf-sticker-bg: oklch(0.995 0.008 90);
+  --nf-shadow-tint: oklch(0.6 0.08 60 / 0.18);
+  --nf-soft: 0 6px 20px oklch(0.6 0.08 60 / 0.18);
+  --nf-soft-sm: 0 2px 8px oklch(0.6 0.08 60 / 0.16);
+  --nf-soft-lift: 0 12px 28px oklch(0.6 0.08 60 / 0.24);
+  --nf-ring: 0 0 0 3px oklch(0.72 0.14 15 / 0.3);
+
+  /* 表面 */
+  --canvas: oklch(0.97 0.02 85);
+  --reading: oklch(0.99 0.01 90);
+  --panel: oklch(0.95 0.03 165);
+  --control: oklch(0.945 0.026 78);
+  --raised: oklch(0.99 0.01 90);
+  --overlay: oklch(0.45 0.05 50 / 0.28);
+
+  /* 边：只作为色块的深浅用，本世界不画线 */
+  --edge: oklch(0.91 0.03 75);
+  --edge-strong: oklch(0.85 0.045 65);
+  --edge-focus: oklch(0.72 0.14 15);
+  --edge-highlight: oklch(1 0 0 / 0.6);
+
+  /* 文字：软褐 */
+  --ink: oklch(0.35 0.04 50);
+  --ink-2: oklch(0.5 0.045 55);
+  --ink-3: oklch(0.6 0.04 60);
+  --ink-on-primary: oklch(0.995 0.008 90);
+  --ink-link: oklch(0.6 0.15 15);
+  --ink-quote: oklch(0.6 0.15 15);
+  --ink-story: oklch(0.38 0.04 50);
+  --ink-action: oklch(0.53 0.065 62);
+
+  /* 强调：草莓；第二色：薄荷 */
+  --accent: oklch(0.72 0.14 15);
+  --accent-soft: oklch(0.945 0.035 15);
+  --primary: oklch(0.72 0.14 15);
+  --primary-2: oklch(0.82 0.1 58);
+  --primary-edge: transparent;
+  --primary-glow: oklch(0.72 0.14 15 / 0.35);
+  --primary-soft: oklch(0.945 0.035 15);
+
+  --danger: oklch(0.58 0.16 22);
+  --danger-soft: oklch(0.95 0.035 22);
+  --success: oklch(0.5 0.08 165);
+  --success-soft: oklch(0.95 0.03 165);
+  --warning: oklch(0.58 0.1 62);
+  --warning-soft: oklch(0.95 0.04 55);
+  --info: oklch(0.5 0.07 175);
+  --info-soft: oklch(0.95 0.03 170);
+
+  /* 形 */
+  --r-panel: 20px;
+  --r-card: 20px;
+  --r-control: 14px;
+  --r-pill: 999px;
+  --shadow-panel: 0 6px 20px oklch(0.6 0.08 60 / 0.18);
+  --shadow-raised: 0 18px 44px oklch(0.55 0.08 55 / 0.22), 0 4px 12px oklch(0.6 0.08 60 / 0.12);
+  --shadow-control: 0 2px 8px oklch(0.6 0.08 60 / 0.16);
+
+  /* 动：唯一允许弹性的世界，但幅度小 */
+  --ease: cubic-bezier(0.34, 1.3, 0.64, 1);
+  --dur-panel: 260ms;
+  --dur-hover: 260ms;
+  --dur-press: 180ms;
+  --motion-pulse: nuanfang-breathe;
+
+  /* 纹理：奶油墙上一道一道很淡的宽条纹（像小屋的墙纸）；便签是干净的 */
+  --texture-canvas: repeating-linear-gradient(
+    90deg,
+    oklch(0.955 0.026 82 / 0.7) 0 18px,
+    transparent 18px 54px
+  );
+  --texture-reading: none;
+
+  /* 字：故事霞鹜文楷；界面圆体（无则思源黑体）；标题楷意带字距 */
+  --font-ui:
+    'Yuanti SC', 'YouYuan', 'Noto Sans SC', 'Source Han Sans SC', 'PingFang SC', 'Microsoft YaHei',
+    system-ui, sans-serif;
+  --font-story:
+    'LXGW WenKai Screen', 'LXGW WenKai', 'Kaiti SC', 'STKaiti', 'KaiTi', 'Noto Serif SC', serif;
+  --font-display:
+    'LXGW WenKai Screen', 'LXGW WenKai', 'Kaiti SC', 'STKaiti', 'KaiTi', 'Noto Serif SC', serif;
+  --font-mono: ui-monospace, 'Cascadia Mono', Consolas, 'Noto Sans SC', monospace;
+  --story-size: 16.5px;
+  --story-leading: 1.95;
+  --story-measure: 36em;
+  --story-paragraph-gap: 0.7em;
+  --story-tracking: 0.01em;
+
+  --gap-message: 1.5rem;
+
+  /* 检查器色条：草莓到杏子之间的明度阶梯 */
+  --origin-l0: 0.7;
+  --origin-step: 0.024;
+  --origin-c: 0.1;
+  --origin-h: 25;
+
+  --icon-stroke: 2;
+
+  color-scheme: light;
+}
+
+/* ------------------------------------------------------------------ */
+/* 形态                                                                */
+/* ------------------------------------------------------------------ */
+
+@scope ([data-theme='nuanfang']) to ([data-theme]) {
+  /* 线不用：作用域里一切边框都透明（布局里的 1px 宽度保留，只是看不见） */
+  *,
+  ::before,
+  ::after {
+    border-color: transparent;
+    scrollbar-color: oklch(0.86 0.05 62) transparent;
+  }
+
+  ::selection {
+    background-color: oklch(0.9 0.06 15);
+    color: var(--ink);
+  }
+
+  /* 界面字略大一点：14 起步，小字不小于 11 */
+  .text-xs {
+    font-size: 13px;
+  }
+  .text-\[11px\] {
+    font-size: 12px;
+  }
+  .text-\[10px\] {
+    font-size: 11px;
+  }
+
+  .font-display,
+  h1.font-display {
+    font-weight: 400;
+    letter-spacing: 0.08em;
+  }
+
+  /* ---------------- 焦点：一圈软软的草莓光，不是细线 ---------------- */
+  .focus-ring:focus-visible {
+    outline: 3px solid oklch(0.72 0.14 15 / 0.45);
+    outline-offset: 2px;
+  }
+  .focus-ring-inset:focus-visible {
+    outline: 3px solid oklch(0.72 0.14 15 / 0.45);
+    outline-offset: -3px;
+  }
+
+  /* ================================================================ */
+  /* 外壳                                                              */
+  /* ================================================================ */
+
+  [data-part='sidebar'] {
+    background-color: transparent;
+    padding: 26px 16px;
+  }
+
+  [data-part='brand'] > div:first-child {
+    font-family: var(--font-display);
+    font-size: 22px;
+    letter-spacing: 0.16em;
+    color: var(--ink);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  /* 店名旁边的小芽 */
+  [data-part='brand'] > div:first-child::after {
+    content: '';
+    width: 22px;
+    height: 22px;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' fill='none' stroke='%235cb28f' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M16 27 V15'/%3E%3Cpath d='M16 17 C12 17 8.5 14.5 8.5 9.5 C13 9.5 16 12 16 17' fill='%23ddf5e9'/%3E%3Cpath d='M16 14.5 C16 9.5 19 6 24 6 C24 11 21 14.5 16 14.5' fill='%23ddf5e9'/%3E%3C/svg%3E")
+      center / contain no-repeat;
+  }
+
+  [data-part='brand'] > div:last-child {
+    margin-top: 4px;
+    color: var(--ink-3);
+    letter-spacing: 0.04em;
+  }
+
+  [data-part='nav-item'] {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-radius: var(--r-pill);
+    padding: 8px 14px;
+    color: var(--ink-2);
+    transition:
+      background-color var(--dur-hover) var(--ease),
+      color var(--dur-hover) var(--ease),
+      box-shadow var(--dur-hover) var(--ease);
+  }
+
+  [data-part='nav-item']::before {
+    content: '';
+    width: 7px;
+    height: 7px;
+    flex: none;
+    border-radius: 999px;
+    background-color: var(--nf-cushion);
+    transition:
+      background-color var(--dur-hover) var(--ease),
+      transform var(--dur-hover) var(--ease);
+  }
+
+  [data-part='nav-item']:hover {
+    background-color: oklch(0.935 0.03 78 / 0.8);
+    color: var(--ink);
+  }
+
+  [data-part='nav-item'][data-active='true'] {
+    background-color: var(--reading);
+    color: var(--ink);
+    font-weight: 500;
+    box-shadow: var(--nf-soft-sm);
+  }
+
+  [data-part='nav-item'][data-active='true']::before {
+    background-color: var(--nf-berry);
+    transform: scale(1.25);
+  }
+
+  [data-part='nav'][data-variant='sidebar'] {
+    gap: 4px;
+  }
+
+  [data-part='nav'][data-variant='compact'] {
+    gap: 6px;
+    padding-block: 2px;
+    scrollbar-width: none;
+  }
+
+  [data-part='nav'][data-variant='compact'] [data-part='nav-item'] {
+    padding: 6px 12px;
+    gap: 7px;
+  }
+
+  [data-part='nav'][data-variant='compact'] [data-part='nav-item']::before {
+    width: 6px;
+    height: 6px;
+  }
+
+  /* 手机横滚导航：只有当前项带圆点，避免截断处孤零零露出一个点 */
+  [data-part='nav'][data-variant='compact']
+    [data-part='nav-item']:not([data-active='true'])::before {
+    display: none;
+  }
+
+  [data-part='app-header'] {
+    background-color: transparent;
+    padding-block: 10px;
+  }
+
+  [data-part='server-status'] {
+    gap: 7px;
+    padding: 4px 10px;
+    border-radius: var(--r-pill);
+    background-color: oklch(1 0 0 / 0.5);
+  }
+
+  [data-part='server-status'][data-online='true'] {
+    color: var(--nf-mint-text);
+  }
+
+  [data-part='server-status'] > span {
+    width: 7px;
+    height: 7px;
+    background-color: currentColor;
+  }
+
+  [data-part='server-status'][data-online='true'] > span {
+    background-color: var(--nf-mint);
+  }
+
+  /* 背景层：午后从右上方斜照进来的暖光（一整片柔光，不是光斑） */
+  [data-nf='sunlight'] {
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(
+        118deg,
+        transparent 42%,
+        oklch(0.995 0.03 92 / 0.5) 58%,
+        oklch(0.995 0.03 92 / 0.28) 66%,
+        transparent 80%
+      ),
+      radial-gradient(90% 70% at 100% 0%, oklch(0.99 0.035 90 / 0.7), transparent 70%);
+  }
+
+  /* 窗台：马克杯与小盆栽，蹲在侧栏脚下 */
+  .nf-sill {
+    position: absolute;
+    left: 18px;
+    bottom: 14px;
+    width: 172px;
+    height: auto;
+    filter: drop-shadow(0 6px 10px oklch(0.6 0.08 60 / 0.16));
+  }
+
+  .nf-sill-mini {
+    display: none;
+  }
+
+  @media (max-width: 767px) {
+    [data-part='backdrop'][data-scope='app'] .nf-sill {
+      display: none;
+    }
+  }
+
+  /* ================================================================ */
+  /* 动作：软糖、软垫、软底                                            */
+  /* ================================================================ */
+
+  .action-primary,
+  [data-nf='jelly'] [data-nf='jelly-body'] {
+    color: var(--ink-on-primary);
+    border-radius: var(--r-pill);
+    background-color: var(--nf-berry);
+    background-image:
+      linear-gradient(180deg, oklch(1 0 0 / 0.3), oklch(1 0 0 / 0) 55%),
+      linear-gradient(120deg, var(--nf-apricot-jelly) 0%, var(--nf-berry) 78%);
+    box-shadow:
+      inset 0 2px 0 oklch(1 0 0 / 0.55),
+      inset 0 -3px 0 oklch(0.55 0.13 20 / 0.22),
+      0 5px 14px oklch(0.72 0.14 15 / 0.32);
+    text-shadow: 0 1px 1px oklch(0.5 0.12 20 / 0.35);
+    font-weight: 500;
+    transform-origin: 50% 100%;
+    transition:
+      transform var(--dur-press) var(--ease),
+      box-shadow var(--dur-hover) var(--ease),
+      filter var(--dur-hover) var(--ease),
+      opacity var(--dur-hover) var(--ease);
+  }
+
+  .action-primary:hover:not(:disabled) {
+    background-color: var(--nf-berry);
+    filter: brightness(1.04) saturate(1.05);
+    box-shadow:
+      inset 0 2px 0 oklch(1 0 0 / 0.6),
+      inset 0 -3px 0 oklch(0.55 0.13 20 / 0.22),
+      0 8px 18px oklch(0.72 0.14 15 / 0.38);
+  }
+
+  /* 唯一允许的形变：按下时软糖轻轻压扁 */
+  .action-primary:active:not(:disabled) {
+    background-color: var(--nf-berry);
+    transform: scaleY(0.94);
+  }
+
+  .action-primary:disabled {
+    opacity: 0.5;
+    filter: saturate(0.6);
+  }
+
+  .action-quiet {
+    color: var(--ink);
+    border-radius: var(--r-pill);
+    background-color: var(--nf-cushion);
+    box-shadow: inset 0 -2px 0 oklch(0.6 0.08 60 / 0.1);
+    transition:
+      background-color var(--dur-hover) var(--ease),
+      color var(--dur-hover) var(--ease),
+      box-shadow var(--dur-hover) var(--ease);
+  }
+
+  .action-quiet:hover:not(:disabled) {
+    background-color: var(--nf-berry-milk);
+    color: var(--nf-berry-deep);
+  }
+
+  .action-quiet[aria-pressed='true'] {
+    background-color: var(--reading);
+    color: var(--nf-berry-deep);
+    box-shadow: var(--nf-soft-sm);
+  }
+
+  .action-ghost {
+    border-radius: var(--r-pill);
+    color: var(--ink-2);
+  }
+
+  .action-ghost:hover:not(:disabled) {
+    background-color: oklch(0.6 0.08 60 / 0.1);
+    color: var(--ink);
+  }
+
+  .action-danger {
+    border-radius: var(--r-pill);
+  }
+
+  .action-danger-solid {
+    color: var(--ink-on-primary);
+    border-radius: var(--r-pill);
+    background-color: var(--danger);
+    background-image:
+      linear-gradient(180deg, oklch(1 0 0 / 0.28), oklch(1 0 0 / 0) 55%),
+      linear-gradient(120deg, var(--nf-berry) 0%, var(--danger) 80%);
+    box-shadow:
+      inset 0 2px 0 oklch(1 0 0 / 0.45),
+      0 5px 14px oklch(0.58 0.16 22 / 0.3);
+    text-shadow: 0 1px 1px oklch(0.45 0.12 20 / 0.35);
+  }
+
+  /* 小徽标：软糖豆 */
+  .chip,
+  .chip-outline,
+  .chip-accent {
+    border-radius: var(--r-pill);
+    padding-block: 4px;
+    padding-inline: 9px;
+  }
+  .chip {
+    background-color: var(--nf-mint-soft);
+    color: var(--nf-mint-text);
+  }
+  .chip-outline {
+    background-color: var(--nf-apricot-soft);
+    color: var(--nf-caramel);
+  }
+  .chip-accent {
+    background-color: var(--nf-berry-milk);
+    color: var(--nf-berry-deep);
+  }
+
+  /* 链接色的强调字加深一档，草莓 0.72 在奶油上太浅 */
+  .text-accent {
+    color: var(--nf-berry-deep);
+  }
+  .bg-accent {
+    background-color: var(--nf-berry);
+  }
+
+  /* ================================================================ */
+  /* 表单：软垫                                                        */
+  /* ================================================================ */
+
+  .field {
+    background-color: var(--control);
+    border-radius: var(--r-control);
+    box-shadow: inset 0 2px 4px oklch(0.6 0.08 60 / 0.1);
+    transition:
+      background-color var(--dur-hover) var(--ease),
+      box-shadow var(--dur-hover) var(--ease);
+  }
+
+  .field:focus-visible,
+  .field:focus-within {
+    background-color: var(--reading);
+    box-shadow:
+      inset 0 1px 2px oklch(0.6 0.08 60 / 0.06),
+      var(--nf-ring);
+  }
+
+  .field[aria-invalid='true'] {
+    box-shadow: 0 0 0 3px oklch(0.58 0.16 22 / 0.3);
+  }
+
+  .switch-track {
+    background-color: var(--nf-cushion);
+    box-shadow: inset 0 1px 3px oklch(0.6 0.08 60 / 0.18);
+    transition: background-color var(--dur-hover) var(--ease);
+  }
+
+  .switch-track[aria-checked='true'] {
+    background-color: var(--nf-mint);
+  }
+
+  .switch-thumb,
+  .switch-track[aria-checked='true'] .switch-thumb {
+    background-color: var(--nf-milk);
+    box-shadow: 0 1px 3px oklch(0.5 0.07 55 / 0.3);
+  }
+
+  .motion-transform {
+    transition-duration: var(--dur-hover);
+    transition-timing-function: var(--ease);
+  }
+
+  /* 头像：圆形贴纸，3px 奶油描边 */
+  .avatar-frame {
+    border: 3px solid var(--nf-sticker-bg);
+    border-radius: var(--r-pill);
+    background-color: var(--nf-apricot-soft);
+    color: var(--nf-caramel);
+    box-shadow: var(--nf-soft-sm);
+  }
+
+  .avatar-frame[data-role='user'] {
+    background-color: var(--nf-mint-soft);
+    color: var(--nf-mint-text);
+  }
+
+  .avatar-frame[data-role='system'] {
+    background-color: var(--nf-butter);
+  }
+
+  .avatar-frame:has(img) {
+    border-color: var(--nf-sticker-bg);
+  }
+
+  /* 页签：一条软槽里滚着一颗白软垫 */
+  [data-part='tabs'] {
+    gap: 4px;
+    padding: 4px;
+    border-radius: var(--r-pill);
+    background-color: oklch(0.6 0.08 60 / 0.09);
+  }
+
+  [data-part='tab'] {
+    margin: 0;
+    padding: 6px 12px;
+    border-radius: var(--r-pill);
+    color: var(--ink-2);
+    transition:
+      background-color var(--dur-hover) var(--ease),
+      box-shadow var(--dur-hover) var(--ease),
+      color var(--dur-hover) var(--ease);
+  }
+
+  [data-part='tab'][data-active='true'] {
+    background-color: var(--reading);
+    color: var(--ink);
+    box-shadow: var(--nf-soft-sm);
+  }
+
+  /* ================================================================ */
+  /* 对话页                                                            */
+  /* ================================================================ */
+
+  [data-part='chat-page'] {
+    gap: 12px;
+    padding: 12px;
+  }
+
+  [data-part='chat-aside'] {
+    border-radius: var(--r-panel);
+    box-shadow: var(--shadow-panel);
+    overflow: hidden;
+  }
+
+  [data-part='chat-aside'][data-side='start'] {
+    background-color: var(--nf-mint-panel);
+  }
+
+  [data-part='chat-aside'][data-side='end'] {
+    background-color: var(--nf-apricot);
+  }
+
+  [data-part='chat-aside-body'] > [data-part='tabs'] {
+    margin: 12px 12px 4px;
+  }
+
+  /* 对话托盘：比墙深一点的奶油桌布，便签放在上面 */
+  [data-part='chat-view'] {
+    border-radius: var(--r-panel);
+    background-color: var(--nf-tray);
+    box-shadow: inset 0 2px 12px oklch(0.6 0.08 60 / 0.08);
+  }
+
+  [data-part='chat-header'] {
+    padding: 10px 14px;
+  }
+
+  [data-part='chat-header'] > div > div {
+    font-family: var(--font-display);
+    font-size: 17px;
+    font-weight: 400;
+    letter-spacing: 0.1em;
+  }
+
+  [data-part='message-list'] {
+    background-color: transparent;
+    background-image: none;
+    /* 便签滑到顶栏下面时软软地淡出，不要一刀切 */
+    mask-image: linear-gradient(
+      to bottom,
+      transparent 0,
+      #000 18px,
+      #000 calc(100% - 10px),
+      transparent
+    );
+  }
+
+  [data-part='start-screen'] {
+    background-color: transparent;
+    background-image: none;
+  }
+
+  /* ---------------- 便签 ---------------- */
+  [data-part='message'] {
+    border-radius: var(--r-card);
+    background-color: var(--reading);
+    box-shadow: var(--shadow-panel);
+    padding: 18px 20px;
+  }
+
+  /* 动作：文楷没有真斜体，合成的倾斜很廉价——只用焦糖色区分 */
+  [data-part='message-body'] em {
+    font-style: normal;
+  }
+
+  /* 草莓牛奶底上的对白再深一档：0.60 只有 3.66:1，0.54 为 4.71:1 */
+  [data-part='message'][data-role='user'] .text-ink-quote {
+    color: oklch(0.54 0.15 15);
+  }
+
+  [data-part='message'][data-role='user'] {
+    background-color: var(--nf-berry-milk);
+  }
+
+  [data-part='message'][data-role='system'] {
+    background-color: var(--nf-mint-panel);
+  }
+
+  /* 用户便签：左上角一截薄荷色的胶带 */
+  [data-part='message'][data-role='user']::before {
+    content: '';
+    position: absolute;
+    top: -7px;
+    left: 26px;
+    width: 46px;
+    height: 16px;
+    border-radius: 5px;
+    background-color: oklch(0.84 0.07 165 / 0.62);
+    transform: rotate(-5deg);
+    pointer-events: none;
+  }
+
+  [data-part='message-header'] > span {
+    color: var(--ink);
+    letter-spacing: 0.02em;
+  }
+
+  /*
+   * 操作条不占便签高度：一块浮在便签内侧右下角的小软垫，悬停 / 聚焦 / 长按才出现。
+   * （预览卡里的豆荚仍在文档流里，不走这套。）
+   */
+  :scope:not([data-part='theme-preview']) [data-part='message-actions'] {
+    position: absolute;
+    inset-block-end: 8px;
+    inset-inline-end: 12px;
+    z-index: 1;
+    gap: 2px;
+    height: 30px;
+    margin: 0;
+    padding: 0 4px;
+    border-radius: var(--r-pill);
+    background-color: var(--reading);
+    box-shadow: var(--nf-soft-sm);
+  }
+
+  /* 有两颗以上豆子的便签：底部留出一条放豆子的地方，豆子永远看得见、不压正文（只有一颗时不占地方，跟普通操作条一样悬停才出现） */
+  :scope:not([data-part='theme-preview'])
+    [data-part='message']:has([data-nf='bean'] + [data-nf='bean']) {
+    padding-bottom: 50px;
+  }
+
+  :scope:not([data-part='theme-preview'])
+    [data-part='message-actions']:has([data-nf='bean'] + [data-nf='bean']) {
+    opacity: 1;
+    background-color: transparent;
+    box-shadow: none;
+  }
+
+  /* 平时只露豆荚；复制 / 编辑 / 删除等悬停、聚焦或长按时才长出来 */
+  :scope:not([data-part='theme-preview'])
+    [data-part='message-actions']:has([data-nf='bean'] + [data-nf='bean'])
+    > :not([data-part='swipe']) {
+    display: none;
+  }
+
+  :scope:not([data-part='theme-preview'])
+    [data-part='message']:is(:hover, :focus-within)
+    [data-part='message-actions']:has([data-nf='bean'] + [data-nf='bean']),
+  :scope:not([data-part='theme-preview'])
+    [data-part='message-actions'].opacity-100:has([data-nf='bean'] + [data-nf='bean']) {
+    background-color: var(--reading);
+    box-shadow: var(--nf-soft-sm);
+  }
+
+  :scope:not([data-part='theme-preview'])
+    [data-part='message']:is(:hover, :focus-within)
+    [data-part='message-actions']:has([data-nf='bean'] + [data-nf='bean'])
+    > :not([data-part='swipe']),
+  :scope:not([data-part='theme-preview'])
+    [data-part='message-actions'].opacity-100:has([data-nf='bean'] + [data-nf='bean'])
+    > :not([data-part='swipe']) {
+    display: inline-flex;
+  }
+
+  /* 贴纸：角色便签的右上角，稍稍探出便签边缘 */
+  [data-nf='sticker'] {
+    position: absolute;
+    top: -12px;
+    right: 16px;
+    width: 40px;
+    height: 40px;
+    filter: drop-shadow(0 3px 4px oklch(0.6 0.08 60 / 0.24));
+  }
+
+  [data-nf='sticker'][data-tone='berry'] {
+    color: var(--nf-berry);
+  }
+  [data-nf='sticker'][data-tone='mint'] {
+    color: var(--nf-mint);
+  }
+  [data-nf='sticker'][data-tone='caramel'] {
+    color: oklch(0.66 0.08 60);
+  }
+
+  [data-part='reasoning'] {
+    border-radius: var(--r-control);
+    background-color: var(--nf-mint-panel);
+  }
+
+  [data-part='reasoning'] > button {
+    color: var(--nf-mint-text);
+  }
+
+  [data-part='generation-error'] {
+    border-radius: var(--r-card);
+    box-shadow: var(--nf-soft-sm);
+  }
+
+  /* Markdown 里的零件也不画线 */
+  .nt-md blockquote {
+    padding: 10px 16px;
+    border-radius: var(--r-control);
+    background-color: var(--nf-mint-panel);
+    color: var(--ink-2);
+  }
+
+  .nt-md hr {
+    height: 8px;
+    border: 0;
+    margin-inline: auto;
+    width: 64px;
+    background: radial-gradient(circle, var(--nf-apricot-jelly) 3px, transparent 3.5px) 0 50% / 16px
+      8px repeat-x;
+  }
+
+  .nt-md pre {
+    border-radius: var(--r-control);
+    background-color: var(--control);
+  }
+
+  .nt-md :not(pre) > code {
+    padding: 1px 6px;
+    border-radius: 8px;
+    background-color: var(--nf-apricot);
+  }
+
+  .nt-md table {
+    border-collapse: separate;
+    border-spacing: 0;
+    border-radius: var(--r-control);
+    overflow: hidden;
+  }
+
+  .nt-md th {
+    background-color: var(--nf-apricot);
+  }
+
+  .nt-md tr:nth-child(even) td {
+    background-color: oklch(0.6 0.08 60 / 0.06);
+  }
+
+  .nt-md img {
+    border-radius: var(--r-card);
+    box-shadow: var(--nf-soft-sm);
+  }
+
+  /* ---------------- 输入：一块白软垫 + 软糖键 ---------------- */
+  [data-part='composer-dock'] {
+    background-color: transparent;
+    background-image: none;
+  }
+
+  [data-part='composer'] {
+    align-items: center;
+    padding: 8px 8px 8px 12px;
+    border-radius: 26px;
+    background-color: var(--reading);
+    box-shadow: var(--shadow-panel);
+  }
+
+  [data-part='composer']:focus-within {
+    background-color: var(--reading);
+    box-shadow: var(--shadow-panel), var(--nf-ring);
+  }
+
+  [data-part='composer-input'] {
+    color: var(--ink);
+  }
+
+  /* 软糖发送键 */
+  [data-nf='jelly'] {
+    display: inline-flex;
+    padding: 0;
+    border: 0;
+    border-radius: var(--r-pill);
+    background: none;
+  }
+
+  [data-nf='jelly'] [data-nf='jelly-body'] {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 56px;
+    height: 40px;
+    overflow: hidden;
+  }
+
+  /* 糖衣：顶上一条圆圆的高光 */
+  [data-nf='jelly'] [data-nf='jelly-body']::before {
+    content: '';
+    position: absolute;
+    top: 4px;
+    left: 12px;
+    right: 18px;
+    height: 7px;
+    border-radius: 999px;
+    background: linear-gradient(180deg, oklch(1 0 0 / 0.85), oklch(1 0 0 / 0.25));
+  }
+
+  [data-nf='jelly-icon'] {
+    position: relative;
+    width: 22px;
+    height: 22px;
+    filter: drop-shadow(0 1px 1px oklch(0.5 0.12 20 / 0.35));
+  }
+
+  [data-nf='jelly']:hover:not(:disabled) [data-nf='jelly-body'] {
+    filter: brightness(1.04) saturate(1.05);
+  }
+
+  [data-nf='jelly']:active:not(:disabled) [data-nf='jelly-body'] {
+    transform: scaleY(0.94);
+  }
+
+  /* 空输入：还没化开的软糖——淡杏色、没有草莓 */
+  [data-nf='jelly'][data-state='idle'] [data-nf='jelly-body'] {
+    color: oklch(0.99 0.01 90 / 0.95);
+    background-image:
+      linear-gradient(180deg, oklch(1 0 0 / 0.35), oklch(1 0 0 / 0) 55%),
+      linear-gradient(120deg, oklch(0.9 0.05 62) 0%, oklch(0.88 0.06 30) 90%);
+    box-shadow:
+      inset 0 2px 0 oklch(1 0 0 / 0.55),
+      inset 0 -3px 0 oklch(0.6 0.08 40 / 0.12),
+      0 3px 8px oklch(0.6 0.08 60 / 0.16);
+    text-shadow: none;
+  }
+
+  [data-nf='jelly'][data-state='idle'] [data-nf='jelly-icon'] {
+    filter: none;
+  }
+
+  [data-part='composer-hint'] {
+    color: var(--ink-3);
+  }
+
+  /* ---------------- 一串小豆子 ---------------- */
+  [data-nf='pod'] {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 18px;
+    padding-inline: 7px;
+    border-radius: var(--r-pill);
+    background-color: var(--nf-mint-soft);
+    box-shadow: inset 0 1px 2px oklch(0.5 0.07 165 / 0.14);
+  }
+
+  [data-nf='bean'] {
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    background-color: oklch(0.8 0.07 165);
+    transition:
+      width var(--dur-hover) var(--ease),
+      background-color var(--dur-hover) var(--ease);
+  }
+
+  [data-nf='bean'][data-current='true'] {
+    width: 14px;
+    height: 9px;
+    background-color: var(--nf-berry);
+    background-image: linear-gradient(180deg, oklch(1 0 0 / 0.45), oklch(1 0 0 / 0) 60%);
+    box-shadow: 0 1px 2px oklch(0.6 0.14 15 / 0.35);
+  }
+
+  [data-nf='pod'][data-busy='true'] {
+    opacity: 0.6;
+  }
+
+  [data-nf='bean-count'] {
+    font-size: 12px;
+    color: var(--nf-mint-text);
+  }
+
+  [data-nf='bean-arrow'] {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border-radius: 999px;
+    color: var(--nf-mint-text);
+    background-color: transparent;
+    transition:
+      background-color var(--dur-hover) var(--ease),
+      transform var(--dur-press) var(--ease);
+  }
+
+  [data-nf='bean-arrow'] svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  [data-nf='bean-arrow']:hover {
+    background-color: var(--nf-mint-soft);
+  }
+
+  [data-nf='bean-arrow']:disabled {
+    opacity: 0.35;
+  }
+
+  /* 流式光标：草莓色小圆豆 */
+  [data-nf='caret'] {
+    display: inline-block;
+    width: 0.5em;
+    height: 0.5em;
+    margin-inline-start: 0.25em;
+    border-radius: 999px;
+    vertical-align: 0.05em;
+    background-color: var(--nf-berry);
+    box-shadow: 0 1px 3px oklch(0.6 0.14 15 / 0.35);
+  }
+
+  [data-nf='caret'][data-kind='reasoning'] {
+    background-color: var(--nf-mint);
+    box-shadow: none;
+  }
+
+  /* ---------------- 空状态 ---------------- */
+  [data-nf='empty-illustration'] {
+    display: block;
+    width: 168px;
+    max-width: 60vw;
+    height: auto;
+    filter: drop-shadow(0 8px 14px oklch(0.6 0.08 60 / 0.14));
+  }
+
+  [data-nf='sticker'] > svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  [data-part='empty-state'] > p:first-of-type {
+    font-family: var(--font-display);
+    font-weight: 400;
+    letter-spacing: 0.08em;
+    color: var(--ink);
+  }
+
+  /* ---------------- 会话列表（薄荷） ---------------- */
+  [data-part='chat-list-header'] {
+    padding: 14px 12px 8px 18px;
+  }
+
+  [data-part='chat-list-header'] > span {
+    font-family: var(--font-display);
+    font-size: 17px;
+    font-weight: 400;
+    letter-spacing: 0.12em;
+  }
+
+  [data-part='chat-list'] ul {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 4px 10px 14px;
+  }
+
+  [data-part='chat-list-item'] {
+    border-radius: 16px;
+    transition:
+      background-color var(--dur-hover) var(--ease),
+      box-shadow var(--dur-hover) var(--ease);
+  }
+
+  [data-part='chat-list-item']:hover {
+    background-color: oklch(1 0 0 / 0.42);
+  }
+
+  [data-part='chat-list-item'][data-active='true'] {
+    background-color: var(--reading);
+    box-shadow: var(--nf-soft-sm);
+  }
+
+  /* 当前项不用左侧色条：换成名字前的一颗草莓豆 */
+  [data-part='chat-list-item'] > span[aria-hidden] {
+    display: none;
+  }
+
+  [data-part='chat-list-item'] > button {
+    border-radius: 16px;
+  }
+
+  [data-part='chat-list'] > div:first-child .action-quiet {
+    background-color: var(--nf-milk);
+    color: var(--nf-mint-text);
+    box-shadow: var(--nf-soft-sm);
+  }
+
+  /* ---------------- 会话面板（杏子） ---------------- */
+  [data-part='session-panel'] {
+    gap: 18px;
+  }
+
+  [data-part='session-panel'] > section:first-child > div:last-child > div {
+    font-family: var(--font-display);
+    font-size: 17px;
+    letter-spacing: 0.08em;
+  }
+
+  [data-part='panel-section'] {
+    margin-top: 8px;
+    padding-inline: 12px;
+    border-radius: var(--r-control);
+    background-color: oklch(1 0 0 / 0.45);
+  }
+
+  [data-part='usage-card'] {
+    padding: 12px 14px;
+    border-radius: var(--r-control);
+    background-color: oklch(1 0 0 / 0.55);
+  }
+
+  /* 缓存命中：一根胖胖的薄荷进度条 */
+  [data-part='usage-card'] .relative.border-t {
+    height: 8px;
+    border: 0;
+    border-radius: 999px;
+    background-color: var(--nf-apricot-soft);
+    overflow: hidden;
+  }
+
+  [data-part='usage-card'] .relative.border-t > .absolute {
+    top: 0;
+    height: 8px;
+    border: 0;
+    border-radius: 999px;
+    background-color: var(--nf-mint);
+  }
+
+  /* ---------------- 检查器 ---------------- */
+  [data-part='inspector'] > header {
+    padding: 10px 12px;
+  }
+
+  [data-part='inspector'] ol {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 4px 12px 16px;
+  }
+
+  [data-part='segment'] {
+    border-radius: var(--r-control);
+    background-color: oklch(1 0 0 / 0.58);
+    padding-inline-start: 16px;
+  }
+
+  [data-part='segment'] > span[aria-hidden]:first-child {
+    inset-block: 10px;
+    inset-inline-start: 6px;
+    width: 5px;
+    border-radius: 999px;
+  }
+
+  [data-part='inspector'] .bg-danger-soft {
+    margin: 8px 12px;
+    border-radius: var(--r-control);
+  }
+
+  /* 断点行：发丝线换成一串小点点 */
+  .h-px.bg-edge,
+  .h-px.bg-danger {
+    height: 6px;
+    background-color: transparent;
+    background-image: radial-gradient(circle, var(--edge-strong) 2px, transparent 2.5px);
+    background-size: 10px 6px;
+    background-repeat: repeat-x;
+    background-position: 0 50%;
+  }
+
+  .h-px.bg-danger {
+    background-image: radial-gradient(circle, var(--nf-berry) 2px, transparent 2.5px);
+  }
+
+  .bg-control {
+    border-radius: var(--r-control);
+  }
+
+  /* ================================================================ */
+  /* 其他页面                                                          */
+  /* ================================================================ */
+
+  [data-part='page-header'] h1 {
+    color: var(--ink);
+    letter-spacing: 0.1em;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  [data-part='page-header'] h1::after {
+    content: '';
+    flex: none;
+    width: 30px;
+    height: 30px;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' fill='none' stroke='%235cb28f' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10.5 19.5 H21.5 L20.2 26.5 H11.8 Z' fill='%23f5c9a8' stroke='%234c3428'/%3E%3Cpath d='M16 19.5 V13.5'/%3E%3Cpath d='M16 15 C12.5 15 9.8 13 9.8 9 C13.5 9 16 11 16 15' fill='%23ddf5e9'/%3E%3Cpath d='M16 13 C16 9 18.5 6.5 22.5 6.5 C22.5 10.5 20 13 16 13' fill='%23ddf5e9'/%3E%3C/svg%3E")
+      center / contain no-repeat;
+  }
+
+  /* 开始页的角色卡：软抱枕 */
+  [data-part='character-card'] {
+    padding: 10px;
+    gap: 10px;
+    border-radius: var(--r-card);
+    background-color: var(--reading);
+    box-shadow: var(--shadow-panel);
+    transition:
+      transform var(--dur-hover) var(--ease),
+      box-shadow var(--dur-hover) var(--ease);
+  }
+
+  [data-part='character-card']:hover:not(:disabled) {
+    transform: translateY(-3px);
+    box-shadow: var(--nf-soft-lift);
+  }
+
+  [data-part='character-card'] > span:first-child {
+    border-radius: 16px;
+    background-color: var(--nf-apricot);
+    overflow: hidden;
+  }
+
+  li:nth-child(4n + 2) > [data-part='character-card'] > span:first-child {
+    background-color: var(--nf-mint-panel);
+  }
+  li:nth-child(4n + 3) > [data-part='character-card'] > span:first-child {
+    background-color: var(--nf-berry-milk);
+  }
+  li:nth-child(4n + 4) > [data-part='character-card'] > span:first-child {
+    background-color: var(--nf-butter);
+  }
+
+  [data-part='character-card'] > span:first-child > span {
+    font-size: 44px;
+    color: var(--nf-caramel);
+  }
+
+  [data-part='character-card'] > span:last-child {
+    padding: 0 6px 4px;
+  }
+
+  /* 库页面 */
+  [data-part='library-item'] {
+    border-radius: var(--r-card);
+    background-color: var(--reading);
+    box-shadow: var(--shadow-panel);
+    transition:
+      transform var(--dur-hover) var(--ease),
+      box-shadow var(--dur-hover) var(--ease);
+  }
+
+  button[data-part='library-item']:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--nf-soft-lift);
+  }
+
+  ul:has(> li[data-part='library-item']) {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  li[data-part='library-item'][data-kind='preset'],
+  li[data-part='library-item'][data-kind='lorebook'] {
+    padding: 14px 18px;
+  }
+
+  [data-part='library-item'][data-kind='character'] .avatar-frame {
+    background-color: var(--nf-apricot);
+  }
+
+  li:nth-child(3n + 2) > [data-part='library-item'][data-kind='character'] .avatar-frame {
+    background-color: var(--nf-mint-panel);
+  }
+  li:nth-child(3n + 3) > [data-part='library-item'][data-kind='character'] .avatar-frame {
+    background-color: var(--nf-berry-milk);
+  }
+
+  @media (min-width: 640px) {
+    [data-part='library-item'][data-kind='character'] .avatar-frame {
+      width: calc(100% - 20px);
+      margin: 10px 10px 0;
+      border-radius: 16px;
+    }
+  }
+
+  [data-part='connection-card'] {
+    border-radius: var(--r-card);
+    background-color: var(--reading);
+    box-shadow: var(--shadow-panel);
+  }
+
+  [data-part='connection-card'] > .border-t {
+    margin: 0 12px 12px;
+    border-radius: var(--r-control);
+    background-color: var(--nf-cream-deep);
+  }
+
+  /* 设置页 */
+  [data-part='settings-nav'] {
+    gap: 4px;
+  }
+
+  [data-part='settings-nav-item'] {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-radius: var(--r-pill);
+    padding: 8px 14px;
+    color: var(--ink-2);
+    transition:
+      background-color var(--dur-hover) var(--ease),
+      box-shadow var(--dur-hover) var(--ease);
+  }
+
+  [data-part='settings-nav-item']::before {
+    content: '';
+    width: 7px;
+    height: 7px;
+    flex: none;
+    border-radius: 999px;
+    background-color: var(--nf-cushion);
+  }
+
+  [data-part='settings-nav-item']:hover {
+    background-color: oklch(0.935 0.03 78 / 0.8);
+    color: var(--ink);
+  }
+
+  [data-part='settings-nav-item'][data-active='true'] {
+    background-color: var(--nf-mint-panel);
+    color: var(--ink);
+    box-shadow: var(--nf-soft-sm);
+  }
+
+  [data-part='settings-nav-item'][data-active='true']::before {
+    background-color: var(--nf-mint);
+  }
+
+  [data-part='settings-section'] {
+    padding: 22px 24px;
+    border-radius: var(--r-panel);
+    background-color: var(--reading);
+    box-shadow: var(--shadow-panel);
+  }
+
+  [data-part='settings-section'] h2 {
+    font-family: var(--font-display);
+    font-size: 18px;
+    font-weight: 400;
+    letter-spacing: 0.08em;
+  }
+
+  @media (max-width: 639px) {
+    [data-part='settings-section'] {
+      padding: 18px 16px;
+    }
+  }
+
+  /* 外观页的主题卡（外层在我这个世界里，预览根是各自的世界） */
+  [data-part='theme-card'] {
+    border-radius: var(--r-card);
+    background-color: var(--nf-cream);
+    box-shadow: var(--nf-soft-sm);
+    transition:
+      transform var(--dur-hover) var(--ease),
+      box-shadow var(--dur-hover) var(--ease);
+  }
+
+  [data-part='theme-card']:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-panel);
+  }
+
+  [data-part='theme-card'][data-active='true'] {
+    box-shadow:
+      0 0 0 3px var(--nf-berry),
+      var(--shadow-panel);
+  }
+
+  [data-part='theme-card'] span.border-accent {
+    width: 8px;
+    height: 8px;
+    background-color: var(--nf-berry);
+  }
+
+  /* 其它圆角占位（PlaceholderPage 等） */
+  .rounded-panel.border.p-8 {
+    background-color: var(--reading);
+    box-shadow: var(--shadow-panel);
+  }
+
+  /* 下拉候选（模型选择） */
+  .surface-raised.absolute {
+    border-radius: var(--r-control);
+    padding: 6px;
+  }
+
+  /* ================================================================ */
+  /* 浮层                                                              */
+  /* ================================================================ */
+
+  [data-part='modal-overlay'] {
+    backdrop-filter: blur(3px) saturate(1.05);
+  }
+
+  [data-part='modal'] {
+    border-radius: 26px;
+    box-shadow: var(--shadow-raised);
+  }
+
+  [data-part='modal'] h2 {
+    font-family: var(--font-display);
+    font-size: 19px;
+    font-weight: 400;
+    letter-spacing: 0.08em;
+  }
+
+  [data-part='modal'] > div:first-child {
+    padding-top: 18px;
+  }
+
+  [data-part='modal'] > div:last-child {
+    padding-bottom: 18px;
+  }
+
+  @media (max-width: 639px) {
+    [data-part='modal'] {
+      border-end-start-radius: 0;
+      border-end-end-radius: 0;
+    }
+  }
+
+  [data-part='drawer'] {
+    box-shadow: var(--shadow-raised);
+  }
+
+  [data-part='drawer'][data-side='left'] {
+    background-color: var(--nf-mint-panel);
+    border-start-end-radius: 26px;
+    border-end-end-radius: 26px;
+  }
+
+  [data-part='drawer'][data-side='right'] {
+    background-color: var(--nf-apricot);
+    border-start-start-radius: 26px;
+    border-end-start-radius: 26px;
+  }
+
+  [data-part='drawer'] > div.border-b > div:first-child {
+    font-family: var(--font-display);
+    font-size: 17px;
+    font-weight: 400;
+    letter-spacing: 0.1em;
+  }
+
+  /* ================================================================ */
+  /* 手机                                                              */
+  /* ================================================================ */
+
+  @media (max-width: 639px) {
+    [data-part='chat-page'] {
+      padding: 6px 8px 8px;
+    }
+
+    [data-part='message'] {
+      padding: 16px 14px;
+    }
+
+    :scope:not([data-part='theme-preview']) [data-part='message-actions'] {
+      inset-block-end: 6px;
+      inset-inline-end: 8px;
+    }
+
+    [data-nf='sticker'] {
+      width: 34px;
+      height: 34px;
+      right: 10px;
+    }
+  }
+
+  /* ================================================================ */
+  /* 预览卡：同一个世界的缩影，尺寸收小                                  */
+  /* ================================================================ */
+
+  :scope[data-part='theme-preview'] [data-part='chat-view'] {
+    border-radius: 0;
+    background-color: transparent;
+    box-shadow: none;
+  }
+
+  :scope[data-part='theme-preview'] [data-part='message-list'] {
+    padding-top: 22px;
+  }
+
+  :scope[data-part='theme-preview'] [data-part='message'] {
+    padding: 12px 14px 8px;
+    border-radius: 16px;
+  }
+
+  :scope[data-part='theme-preview'] [data-part='message'][data-role='user']::before {
+    top: -6px;
+    left: 18px;
+    width: 34px;
+    height: 12px;
+  }
+
+  :scope[data-part='theme-preview'] [data-nf='sticker'] {
+    top: -10px;
+    right: 12px;
+    width: 30px;
+    height: 30px;
+  }
+
+  :scope[data-part='theme-preview'] [data-part='composer'] {
+    padding: 5px 5px 5px 10px;
+    border-radius: 20px;
+  }
+
+  :scope[data-part='theme-preview'] [data-nf='jelly'] [data-nf='jelly-body'] {
+    width: 44px;
+    height: 30px;
+  }
+
+  :scope[data-part='theme-preview'] [data-nf='jelly'] [data-nf='jelly-body']::before {
+    top: 3px;
+    left: 9px;
+    right: 14px;
+    height: 5px;
+  }
+
+  :scope[data-part='theme-preview'] [data-nf='jelly-icon'] {
+    width: 17px;
+    height: 17px;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* 动效                                                                */
+/* ------------------------------------------------------------------ */
+
+/* 生成中的心跳：像小动物在呼吸 */
+@keyframes nuanfang-breathe {
+  0%,
+  100% {
+    opacity: 0.7;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+
+@keyframes nuanfang-jelly-breathe {
+  0%,
+  100% {
+    transform: scale(1, 1);
+  }
+  45% {
+    transform: scale(1.04, 0.95);
+  }
+  70% {
+    transform: scale(0.98, 1.03);
+  }
+}
+
+@keyframes nuanfang-caret-hop {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+@keyframes nuanfang-note-in {
+  from {
+    transform: translateY(8px) scale(0.985);
+  }
+  to {
+    transform: none;
+  }
+}
+
+@keyframes nuanfang-steam {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @scope ([data-theme='nuanfang']) to ([data-theme]) {
+    [data-nf='jelly'][data-state='generating'] [data-nf='jelly-body'] {
+      animation: nuanfang-jelly-breathe 2.2s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+    }
+
+    [data-nf='caret'] {
+      animation: nuanfang-caret-hop 1.1s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+    }
+
+    [data-part='message'][data-streaming='true'],
+    [data-part='message-list'] [data-part='message']:last-child {
+      animation: nuanfang-note-in 260ms cubic-bezier(0.34, 1.3, 0.64, 1) both;
+    }
+
+    [data-part='empty-state'] [data-nf='steam'],
+    [data-part='backdrop'] [data-nf='steam'] {
+      animation: nuanfang-steam 3.2s ease-in-out infinite;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  @scope ([data-theme='nuanfang']) to ([data-theme]) {
+    .action-primary:active:not(:disabled),
+    [data-nf='jelly']:active:not(:disabled) [data-nf='jelly-body'],
+    [data-part='character-card']:hover:not(:disabled),
+    button[data-part='library-item']:hover,
+    [data-part='theme-card']:hover {
+      transform: none;
+    }
+  }
+}

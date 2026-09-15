@@ -1,0 +1,278 @@
+/**
+ * 素 · Su —— 一张白纸上的排版（docs/DESIGN.md §3.3）。
+ *
+ * 没有材质，没有光影，只有黑、白、一根线和一个色。
+ * 所有的美来自间距、对齐与字。
+ *
+ * 铁律：无阴影、无纹理、无模糊、无渐变、**没有任何灰色填充块**；圆角只有 6 / 4 / 999；
+ * 唯一的色是国际橙 oklch(0.68 0.20 40)，只用于主动作的悬停/按下、当前项、链接与危险态；
+ * 对白是全墨 0.15、叙述是 0.38，靠明度区分，不着色；动画只做透明度，120ms。
+ */
+
+[data-theme='su'][data-mode='light'] {
+  /* 表面：一律不填。面板、输入框、卡片、头像都与 canvas 同色，只靠 1px 线成形 */
+  --canvas: oklch(0.99 0 0);
+  --reading: oklch(0.99 0 0);
+  --panel: oklch(0.99 0 0);
+  --control: transparent;
+  --raised: oklch(0.99 0 0);
+  --overlay: oklch(0.15 0 0 / 0.28);
+
+  --edge: oklch(0.88 0 0);
+  --edge-strong: oklch(0.62 0 0);
+  /* 聚焦的线是墨色：橙留给当前项 */
+  --edge-focus: oklch(0.15 0 0);
+  --edge-highlight: transparent;
+
+  --ink: oklch(0.15 0 0);
+  --ink-2: oklch(0.5 0 0);
+  --ink-3: oklch(0.55 0 0);
+  --ink-on-primary: oklch(0.99 0 0);
+  --ink-link: oklch(0.68 0.2 40);
+  /* 对白不用色：全墨，靠明度与叙述区分 */
+  --ink-quote: oklch(0.15 0 0);
+  --ink-story: oklch(0.38 0 0);
+  --ink-action: oklch(0.5 0 0);
+
+  /* 当前项 / 危险态 / 链接 / 主动作悬停 —— 橙只出现在这四处 */
+  --accent: oklch(0.68 0.2 40);
+  --primary: oklch(0.15 0 0);
+  --primary-2: oklch(0.15 0 0);
+  --primary-edge: transparent;
+  --primary-glow: transparent;
+
+  /* 所有「软底」都是透明：素没有填充块，当前项用 2px 橙线或橙字标记 */
+  --accent-soft: transparent;
+  --primary-soft: transparent;
+  --danger-soft: transparent;
+  --warning-soft: transparent;
+  --success-soft: transparent;
+  --info-soft: transparent;
+
+  --danger: oklch(0.68 0.2 40);
+  --warning: oklch(0.68 0.2 40);
+  --success: oklch(0.45 0 0);
+  --info: oklch(0.5 0 0);
+
+  --origin-l0: 0.3;
+  --origin-step: 0.045;
+  --origin-c: 0;
+  --origin-h: 0;
+}
+
+[data-theme='su'][data-mode='dark'] {
+  /* 黑不是纯黑；同样不填任何块 */
+  --canvas: oklch(0.13 0 0);
+  --reading: oklch(0.13 0 0);
+  --panel: oklch(0.13 0 0);
+  --control: transparent;
+  --raised: oklch(0.13 0 0);
+  --overlay: oklch(0.05 0 0 / 0.6);
+
+  --edge: oklch(0.28 0 0);
+  --edge-strong: oklch(0.45 0 0);
+  --edge-focus: oklch(0.95 0 0);
+  --edge-highlight: transparent;
+
+  --ink: oklch(0.95 0 0);
+  --ink-2: oklch(0.65 0 0);
+  --ink-3: oklch(0.55 0 0);
+  --ink-on-primary: oklch(0.13 0 0);
+  --ink-link: oklch(0.68 0.2 40);
+  --ink-quote: oklch(0.95 0 0);
+  --ink-story: oklch(0.7 0 0);
+  --ink-action: oklch(0.65 0 0);
+
+  --accent: oklch(0.68 0.2 40);
+  /* 黑模式的圆点是白的 */
+  --primary: oklch(0.95 0 0);
+  --primary-2: oklch(0.95 0 0);
+  --primary-edge: transparent;
+  --primary-glow: transparent;
+
+  --accent-soft: transparent;
+  --primary-soft: transparent;
+  --danger-soft: transparent;
+  --warning-soft: transparent;
+  --success-soft: transparent;
+  --info-soft: transparent;
+
+  --danger: oklch(0.68 0.2 40);
+  --warning: oklch(0.68 0.2 40);
+  --success: oklch(0.7 0 0);
+  --info: oklch(0.65 0 0);
+
+  --origin-l0: 0.5;
+  --origin-step: 0.048;
+  --origin-c: 0;
+  --origin-h: 0;
+}
+
+[data-theme='su'] {
+  /* 形：6 / 4 / 999，一律 1px 线，阴影 none */
+  --r-panel: 6px;
+  --r-card: 6px;
+  --r-control: 4px;
+  --r-pill: 999px;
+  --shadow-panel: none;
+  --shadow-raised: none;
+  --shadow-control: none;
+
+  /* 动：120ms，只做透明度；无滑入、无呼吸 */
+  --ease: cubic-bezier(0, 0, 0.2, 1);
+  --dur-panel: 120ms;
+  --dur-hover: 120ms;
+  --dur-press: 120ms;
+  --motion-pulse: none;
+
+  --texture-canvas: none;
+  --texture-reading: none;
+
+  /* 字：Inter + 思源黑体；故事 16px / 1.8；字距紧 */
+  --font-ui:
+    'Inter Variable', Inter, 'Noto Sans SC', 'Source Han Sans SC', 'PingFang SC', 'Microsoft YaHei',
+    system-ui, sans-serif;
+  --font-story: var(--font-ui);
+  --font-display: var(--font-ui);
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+  --story-size: 16px;
+  --story-leading: 1.8;
+  --story-measure: 36em;
+  /* 故事字距与界面一致地紧（扩展槽位默认 normal，素显式写回 -0.01em） */
+  --story-tracking: -0.01em;
+
+  /* 消息之间只有 32px 的留白，没有分隔物 */
+  --gap-message: 2rem;
+
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------------ */
+/* 材质覆盖：素没有材质，只把「形态」压平                              */
+/* ------------------------------------------------------------------ */
+
+/*
+ * 元素规则一律写在 @scope 里，下界是任何嵌套的 [data-theme]：
+ * 外观页的别的世界的预览卡嵌在 <html data-theme="su"> 里，不能被素的规则染到（见 themes/README.md §1.2）。
+ */
+@scope ([data-theme='su']) to ([data-theme]) {
+  .surface-raised {
+    /* 弹层不靠阴影，靠 1px 线 */
+    box-shadow: none;
+  }
+
+  .chip {
+    /* 标签也是排版：不要胶囊底色，只要一根线 */
+    background-color: transparent;
+    border-color: var(--edge);
+  }
+
+  .action-primary,
+  .action-quiet,
+  .action-ghost,
+  .action-danger,
+  .action-danger-solid {
+    /* 只做颜色与透明度，不做位移、不做阴影 */
+    transition-property: color, background-color, border-color, opacity;
+    transition-duration: 120ms;
+    transition-timing-function: cubic-bezier(0, 0, 0.2, 1);
+  }
+
+  /*
+   * 一个视图里唯一的实心物件是黑圆点（发送键）。
+   * 其余用了主动作材质的矩形按钮（新建连接、导入……）改成 1px 墨线描边，悬停时线与字变国际橙。
+   */
+  .action-primary:not(.rounded-pill) {
+    background-color: transparent;
+    border-color: var(--ink);
+    color: var(--ink);
+  }
+
+  .action-primary:not(.rounded-pill):hover:not(:disabled),
+  .action-primary:not(.rounded-pill):active:not(:disabled) {
+    background-color: transparent;
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  /* 唯一允许的缩放：主动作按下缩 4%（DESIGN §3.3） */
+  .action-primary:active:not(:disabled) {
+    transform: scale(0.96);
+    transition-property: color, background-color, border-color, opacity, transform;
+  }
+
+  /* 动画只做透明度：旋转与滑动都是瞬时的 */
+  .motion-transform {
+    transition-property: none;
+  }
+
+  /* 头像不填灰：角色是 1px 墨线的方（圆角 4），用户是 1px 墨线的圆；有图片时线让位给图片 */
+  .avatar-frame {
+    background-color: transparent;
+    border: 1px solid var(--ink);
+    border-radius: var(--r-control);
+    color: var(--ink-2);
+  }
+
+  .avatar-frame[data-role='user'] {
+    border-radius: var(--r-pill);
+  }
+
+  .avatar-frame:has(img) {
+    border-color: transparent;
+  }
+  /* 动作不用斜体：中文没有真斜体，浏览器合成的倾斜很廉价；只靠 --ink-action 的明度与叙述区分 */
+  [data-part='message-body'] em {
+    font-style: normal;
+  }
+
+  /* 会话列表里一整列 36px 墨框太重：列表头像退一档用 --edge-strong，消息与面板里的头像仍是墨线 */
+  [data-part='chat-list-item'] .avatar-frame:not(:has(img)) {
+    border-color: var(--edge-strong);
+  }
+  /*
+   * 操作条不占高度：它原本在消息下方预留 28px，加上 --gap-message 让留白变成 60px。
+   * 素把它挪到名字行的右端，悬停出现；消息之间于是只剩 32px 的留白。
+   */
+  [data-part='message'] {
+    position: relative;
+  }
+
+  [data-part='message-actions'] {
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline-end: 0;
+    margin: 0;
+    padding-inline-start: 0;
+    height: 1.5rem;
+  }
+
+  /* 推理区不是一个框，是一行小字 + 箭头；展开后正文左侧一根发丝线 */
+  [data-part='reasoning'] {
+    border: 0;
+    border-radius: 0;
+  }
+
+  [data-part='reasoning'] > button {
+    width: auto;
+    padding-inline: 0;
+  }
+
+  [data-part='reasoning'] > button > svg {
+    margin-inline-start: 0.25rem;
+  }
+
+  [data-part='reasoning'] > div > div {
+    margin-block: 0.25rem 0.5rem;
+    padding-inline: 0.75rem 0;
+    padding-block: 0;
+    border-inline-start: 1px solid var(--edge);
+  }
+
+  /* 「分叉」不是当前项也不是危险态：墨线，不用橙 */
+  [data-part='swipe'] .chip-accent {
+    color: var(--ink-2);
+    border-color: var(--edge-strong);
+  }
+}

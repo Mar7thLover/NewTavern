@@ -10,9 +10,9 @@ import { pathToHead } from './shared';
 import { useIsGenerating } from '../../app/store/chat';
 import { Button } from '../../components/ui/button';
 import { Drawer } from '../../components/ui/drawer';
+import { Segmented } from '../../components/ui/segmented';
 import { useChat } from '../../lib/api';
 import { useMediaQuery } from '../../lib/hooks';
-import { cn } from '../../lib/utils';
 import { InspectorPanel } from '../inspector/InspectorPanel';
 import { QueryStatus } from '../library/shared';
 
@@ -71,24 +71,17 @@ export function ChatPage() {
   );
 
   const rightPane = detail ? (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="flex shrink-0 gap-1 border-b border-border px-2 py-1.5">
-        {(['session', 'inspector'] as const).map((tab) => (
-          <button
-            key={tab}
-            type="button"
-            onClick={() => setRightTab(tab)}
-            className={cn(
-              'flex-1 cursor-pointer rounded-md px-2 py-1 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-              rightTab === tab
-                ? 'bg-accent font-medium text-accent-foreground'
-                : 'text-muted-foreground hover:text-foreground',
-            )}
-          >
-            {t(tab === 'session' ? 'inspector.sessionTab' : 'inspector.tab')}
-          </button>
-        ))}
-      </div>
+    <div data-part="chat-aside-body" className="flex h-full min-h-0 flex-col">
+      <Segmented
+        className="shrink-0 px-3 pt-2"
+        stretch
+        value={rightTab}
+        onChange={setRightTab}
+        items={[
+          { value: 'session', label: t('inspector.sessionTab') },
+          { value: 'inspector', label: t('inspector.tab') },
+        ]}
+      />
       {rightTab === 'session' ? (
         <div className="min-h-0 flex-1 overflow-y-auto">
           <SessionPanel chat={detail} path={path} />
@@ -102,9 +95,15 @@ export function ChatPage() {
   ) : null;
 
   return (
-    <div className="flex h-full min-h-0 overflow-hidden">
+    <div data-part="chat-page" className="flex h-full min-h-0 overflow-hidden">
       {showList && !listCollapsed && (
-        <aside className="w-72 shrink-0 border-e border-border bg-card/30">{listPane()}</aside>
+        <aside
+          data-part="chat-aside"
+          data-side="start"
+          className="w-72 shrink-0 border-e edge-rule bg-panel"
+        >
+          {listPane()}
+        </aside>
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
@@ -140,7 +139,11 @@ export function ChatPage() {
       </div>
 
       {showPanel && !panelCollapsed && rightPane !== null && (
-        <aside className="w-80 shrink-0 border-s border-border bg-card/30 xl:w-96">
+        <aside
+          data-part="chat-aside"
+          data-side="end"
+          className="w-80 shrink-0 border-s edge-rule bg-panel xl:w-96"
+        >
           {rightPane}
         </aside>
       )}

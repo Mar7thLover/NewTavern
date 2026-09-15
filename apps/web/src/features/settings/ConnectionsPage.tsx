@@ -1,4 +1,4 @@
-import { Check, ChevronDown, Plug, Star, Trash2 } from 'lucide-react';
+import { Check, ChevronDown, Star, Trash2 } from 'lucide-react';
 import { useId, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -93,6 +93,7 @@ export function ConnectionsPage() {
       {connections.data &&
         (list.length === 0 ? (
           <EmptyState
+            kind="connections"
             title={t('connections.emptyTitle')}
             hint={t('connections.emptyHint')}
             action={
@@ -109,12 +110,10 @@ export function ConnectionsPage() {
               return (
                 <li
                   key={connection.id}
-                  className="rounded-xl border border-border bg-card text-card-foreground"
+                  data-part="connection-card"
+                  className="rounded-card edge-rule border text-ink"
                 >
                   <div className="flex flex-wrap items-start gap-3 p-4">
-                    <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/12 text-primary">
-                      <Plug aria-hidden className="size-4.5" />
-                    </span>
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="truncate font-medium">{connection.label}</span>
@@ -125,10 +124,10 @@ export function ConnectionsPage() {
                           <Badge>{t('connections.isDefault')}</Badge>
                         )}
                       </div>
-                      <div className="mt-1 truncate font-mono text-xs text-muted-foreground">
+                      <div className="mt-1 truncate font-mono text-xs text-ink-2">
                         {connection.baseUrl ?? DEFAULT_BASE_URLS[connection.provider]}
                       </div>
-                      <div className="mt-1 text-xs text-muted-foreground">
+                      <div className="mt-1 text-xs text-ink-2">
                         {connection.keyCount > 0
                           ? t('connections.keyCount', {
                               total: connection.keyCount,
@@ -164,7 +163,7 @@ export function ConnectionsPage() {
                         <ChevronDown
                           aria-hidden
                           className={cn(
-                            'size-3.5 transition-transform',
+                            'motion-transform size-3.5',
                             expandedId === connection.id && 'rotate-180',
                           )}
                         />
@@ -186,8 +185,8 @@ export function ConnectionsPage() {
                     <p
                       role="status"
                       className={cn(
-                        'border-t border-border px-4 py-2 text-xs',
-                        testResult.error ? 'text-destructive' : 'text-muted-foreground',
+                        'border-t edge-rule px-4 py-2 text-xs',
+                        testResult.error ? 'text-danger' : 'text-ink-2',
                       )}
                     >
                       {testResult.error
@@ -258,7 +257,7 @@ function ModelsSection({
   );
 
   return (
-    <div className="border-t border-border p-4">
+    <div className="border-t edge-rule p-4">
       <div className="flex flex-wrap items-center gap-2">
         <Input
           size="sm"
@@ -277,7 +276,7 @@ function ModelsSection({
           {refresh.isPending ? t('common.processing') : t('connections.refreshModels')}
         </Button>
         {models.data?.fetchedAt && (
-          <span className="text-xs text-muted-foreground">
+          <span className="text-xs text-ink-2">
             {t('connections.fetchedAt', { time: formatDate(models.data.fetchedAt) })}
           </span>
         )}
@@ -291,9 +290,7 @@ function ModelsSection({
 
       {models.data &&
         (list.length === 0 ? (
-          <p className="py-4 text-center text-sm text-muted-foreground">
-            {t('connections.noModels')}
-          </p>
+          <p className="py-4 text-center text-sm text-ink-2">{t('connections.noModels')}</p>
         ) : (
           <ul className="mt-3 max-h-72 space-y-0.5 overflow-y-auto">
             {list.map((model) => {
@@ -305,19 +302,19 @@ function ModelsSection({
                     disabled={setDefault.isPending}
                     onClick={() => setDefault.mutate({ connectionId, model: model.id })}
                     className={cn(
-                      'flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-50',
-                      isDefault && 'bg-primary/10',
+                      'flex w-full cursor-pointer items-center gap-2 rounded-control px-2 py-1.5 text-left text-sm transition-colors hover:text-ink disabled:opacity-50',
+                      isDefault ? 'text-ink' : 'text-ink-2',
                     )}
                     title={t('connections.setDefault')}
                   >
                     {isDefault ? (
-                      <Star aria-hidden className="size-3.5 shrink-0 fill-current text-primary" />
+                      <Star aria-hidden className="size-3.5 shrink-0 fill-current text-accent" />
                     ) : (
-                      <Star aria-hidden className="size-3.5 shrink-0 text-muted-foreground/40" />
+                      <Star aria-hidden className="size-3.5 shrink-0 text-ink-3" />
                     )}
                     <span className="min-w-0 flex-1 truncate font-mono text-xs">{model.id}</span>
                     {model.contextLength !== undefined && (
-                      <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">
+                      <span className="shrink-0 text-[11px] text-ink-2 tabular-nums">
                         {new Intl.NumberFormat(i18n.language, {
                           notation: 'compact',
                         }).format(model.contextLength)}
@@ -446,27 +443,27 @@ function ConnectionFormModal({
                 aria-pressed={provider === id}
                 onClick={() => setProvider(id)}
                 className={cn(
-                  'cursor-pointer rounded-md border px-3 py-2 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                  'cursor-pointer rounded-control border px-3 py-2 text-left text-sm transition-colors focus-ring',
                   provider === id
-                    ? 'border-primary bg-primary/10 font-medium text-foreground'
-                    : 'border-border text-muted-foreground hover:bg-accent/60',
+                    ? 'border-ink font-medium text-ink'
+                    : 'edge-rule text-ink-2 hover:text-ink',
                 )}
               >
                 <span className="flex items-center gap-1.5">
-                  {provider === id && <Check aria-hidden className="size-3.5 text-primary" />}
+                  {provider === id && <Check aria-hidden className="size-3.5 text-accent" />}
                   {t(`connections.providers.${id}`)}
                 </span>
               </button>
             ))}
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
-            <span className="text-xs text-muted-foreground">{t('connections.endpoints')}</span>
+            <span className="text-xs text-ink-2">{t('connections.endpoints')}</span>
             {ENDPOINT_PRESETS.map((preset) => (
               <button
                 key={preset.name}
                 type="button"
                 onClick={() => applyPreset(preset.baseUrl, preset.name)}
-                className="cursor-pointer rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                className="rounded-pill edge-rule cursor-pointer border px-2 py-0.5 text-[11px] text-ink-2 transition-colors hover:border-ink hover:text-ink"
               >
                 {preset.name}
               </button>
@@ -490,7 +487,7 @@ function ConnectionFormModal({
             }}
           />
           {labelError && (
-            <p className="mt-1 text-xs text-destructive">{t('connections.labelRequired')}</p>
+            <p className="mt-1 text-xs text-danger">{t('connections.labelRequired')}</p>
           )}
         </div>
 
@@ -519,13 +516,13 @@ function ConnectionFormModal({
             onChange={(event) => setKeysText(event.target.value)}
             className="font-mono text-xs"
           />
-          <p className="mt-1 text-xs text-muted-foreground">
+          <p className="mt-1 text-xs text-ink-2">
             {connection
               ? t('connections.apiKeysKeepHint', { total: connection.keyCount })
               : t('connections.apiKeysHint')}
           </p>
           {connection && connection.keyCount > 0 && (
-            <label className="mt-1.5 flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
+            <label className="mt-1.5 flex cursor-pointer items-center gap-2 text-xs text-ink-2">
               <input
                 type="checkbox"
                 checked={clearKeys}
@@ -542,17 +539,17 @@ function ConnectionFormModal({
           <button
             type="button"
             onClick={() => setAdvanced((value) => !value)}
-            className="flex cursor-pointer items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+            className="flex cursor-pointer items-center gap-1 text-xs font-medium text-ink-2 hover:text-ink"
           >
             <ChevronDown
               aria-hidden
-              className={cn('size-3.5 transition-transform', advanced && 'rotate-180')}
+              className={cn('size-3.5 motion-transform', advanced && 'rotate-180')}
             />
             {t('connections.advanced')}
           </button>
 
           {advanced && (
-            <div className="mt-3 space-y-4 rounded-lg border border-border p-3">
+            <div className="edge-rule mt-3 space-y-4 border-t pt-3">
               <div>
                 <FieldLabel htmlFor={`${formId}-headers`}>{t('connections.headers')}</FieldLabel>
                 <Textarea
@@ -565,7 +562,7 @@ function ConnectionFormModal({
                   onChange={(event) => setHeadersText(event.target.value)}
                   className="font-mono text-xs"
                 />
-                <p className="mt-1 text-xs text-muted-foreground">{t('connections.headersHint')}</p>
+                <p className="mt-1 text-xs text-ink-2">{t('connections.headersHint')}</p>
               </div>
               <div>
                 <FieldLabel>{t('connections.quirks')}</FieldLabel>
@@ -596,16 +593,14 @@ function ConnectionFormModal({
                     </div>
                   ))}
                 </div>
-                <p className="mt-1.5 text-xs text-muted-foreground">
-                  {t('connections.quirksHint')}
-                </p>
+                <p className="mt-1.5 text-xs text-ink-2">{t('connections.quirksHint')}</p>
               </div>
             </div>
           )}
         </div>
 
         {mutation.error && (
-          <p role="alert" className="text-sm text-destructive">
+          <p role="alert" className="text-sm text-danger">
             {errorMessage(mutation.error)}
           </p>
         )}

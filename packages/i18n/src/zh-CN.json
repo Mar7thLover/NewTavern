@@ -51,19 +51,32 @@
   },
   "settings": {
     "title": "设置",
-    "general": "通用",
-    "appearance": "外观",
-    "theme": "主题",
-    "themeLight": "浅色",
-    "themeDark": "深色",
-    "themeSystem": "跟随系统",
     "languageDescription": "界面语言与内置提示词语言。",
     "sections": {
       "general": "通用",
+      "appearance": "外观",
       "worldInfo": "世界书",
       "globalSystemPrompt": "全局系统提示词",
       "regex": "正则脚本"
     }
+  },
+  "appearance": {
+    "world": "世界",
+    "worldHint": "每个世界有自己的材质、光线、字体与记忆物件；换主题只换世界，不换习惯。",
+    "select": "住进这个世界",
+    "mode": "白天与夜晚",
+    "modeHint": "同一个世界的两种时刻，各自独立调色；主题只提供一种时不显示这一项。",
+    "modes": {
+      "light": "白天",
+      "dark": "夜晚",
+      "system": "跟随系统"
+    },
+    "options": "这个世界的细节",
+    "optionsHint": "只属于当前世界的开关，换到别的世界时各自保留。",
+    "previewLine": "门轴吱呀一声，风里带着雪。",
+    "previewQuote": "「坐下罢。」",
+    "previewUser": "我把斗篷挂在门边。",
+    "previewUserName": "旅人"
   },
   "library": {
     "characters": {

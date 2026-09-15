@@ -1,10 +1,36 @@
 <!doctype html>
-<html lang="zh-CN" class="dark">
+<html lang="zh-CN" data-theme="su" data-mode="light">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="color-scheme" content="dark light" />
+    <meta name="color-scheme" content="light dark" />
     <title>新酒馆 · NewTavern</title>
+    <script>
+      // 首屏就把 data-theme / data-mode / data-opt-* 写好（persist v3 形状），避免主题 CSS 到达前闪一下别的世界
+      (function () {
+        try {
+          var saved = JSON.parse(localStorage.getItem('newtavern-ui') || 'null');
+          var state = (saved && saved.state) || {};
+          var mode = state.mode || state.theme || 'light';
+          if (mode === 'system') {
+            mode = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+          }
+          var root = document.documentElement;
+          root.dataset.theme = state.themeId || 'su';
+          root.dataset.mode = mode === 'dark' ? 'dark' : 'light';
+          root.style.colorScheme = root.dataset.mode;
+          // 主题选项：只写存过的；没存过的由 applyTheme 在渲染前按 ThemeMeta.options 补上默认值
+          var options = (state.themeOptions && state.themeOptions[root.dataset.theme]) || {};
+          for (var key in options) {
+            if (options[key] === 'on' || options[key] === 'off') {
+              root.setAttribute('data-opt-' + key, options[key]);
+            }
+          }
+        } catch (error) {
+          void error;
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

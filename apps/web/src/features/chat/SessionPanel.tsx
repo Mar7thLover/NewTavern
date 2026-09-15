@@ -12,6 +12,7 @@ import { formatTokens, isUsageEmpty, renderMacros, sumUsage, totalInput } from '
 import { Badge } from '../../components/ui/badge';
 import { FieldLabel, Input, Select } from '../../components/ui/field';
 import { IconButton } from '../../components/ui/icon-button';
+import { Segmented } from '../../components/ui/segmented';
 import {
   useCharacter,
   useConnectionModels,
@@ -73,25 +74,25 @@ export function SessionPanel({ chat, path }: SessionPanelProps) {
   }, [character.data, chat.character?.name, userName, t]);
 
   return (
-    <div className="flex flex-col gap-5 p-4">
+    <div data-part="session-panel" className="flex flex-col gap-5 p-4">
       {/* 角色 */}
       {chat.character ? (
         <section className="flex gap-3">
           <Avatar
             name={chat.character.name}
             assetId={chat.character.avatarAssetId}
-            className="size-12 rounded-lg"
+            className="size-12"
             textClassName="text-lg"
           />
           <div className="min-w-0 flex-1">
             <div className="truncate font-medium">{chat.character.name}</div>
-            <p className="mt-0.5 line-clamp-3 text-xs leading-relaxed text-muted-foreground">
+            <p className="mt-0.5 line-clamp-3 text-xs leading-relaxed text-ink-2">
               {description || t('chat.panel.noDescription')}
             </p>
           </div>
         </section>
       ) : (
-        <section className="text-sm text-muted-foreground">{t('chat.panel.noCharacter')}</section>
+        <section className="text-sm text-ink-2">{t('chat.panel.noCharacter')}</section>
       )}
 
       {/* 连接与模型 */}
@@ -100,7 +101,7 @@ export function SessionPanel({ chat, path }: SessionPanelProps) {
         {connections.data && connections.data.length === 0 ? (
           <Link
             to="/connections"
-            className="inline-block text-sm text-primary underline underline-offset-2"
+            className="inline-block text-sm text-accent underline underline-offset-2"
           >
             {t('chat.panel.addConnection')}
           </Link>
@@ -170,7 +171,7 @@ export function SessionPanel({ chat, path }: SessionPanelProps) {
       </section>
 
       {/* 作者注释 / 聊天世界书 / 全局系统提示词覆盖（M3 契约 §7.2） */}
-      <div className="space-y-2">
+      <div className="edge-rule border-t">
         <AuthorsNoteSection chat={chat} />
         <ChatLorebooksSection chat={chat} />
         <ChatSystemPromptSection chat={chat} />
@@ -179,24 +180,16 @@ export function SessionPanel({ chat, path }: SessionPanelProps) {
       {/* 布局模式 */}
       <section>
         <FieldLabel>{t('chat.panel.layoutMode')}</FieldLabel>
-        <div className="flex gap-1 rounded-md bg-muted/60 p-0.5">
-          {LAYOUT_MODES.map((mode) => (
-            <button
-              key={mode}
-              type="button"
-              onClick={() => patchOverrides({ layoutMode: mode })}
-              className={cn(
-                'flex-1 cursor-pointer rounded px-2 py-1 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                layoutMode === mode
-                  ? 'bg-card font-medium text-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground',
-              )}
-            >
-              {t(`chat.panel.layout.${mode === 'cache-aware' ? 'cacheAware' : 'strict'}`)}
-            </button>
-          ))}
-        </div>
-        <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
+        <Segmented
+          stretch
+          value={layoutMode}
+          onChange={(mode) => patchOverrides({ layoutMode: mode })}
+          items={LAYOUT_MODES.map((mode) => ({
+            value: mode,
+            label: t(`chat.panel.layout.${mode === 'cache-aware' ? 'cacheAware' : 'strict'}`),
+          }))}
+        />
+        <p className="mt-1.5 text-[11px] leading-relaxed text-ink-2">
           {t(
             layoutMode === 'strict'
               ? 'chat.panel.layout.strictHint'
@@ -300,11 +293,11 @@ function ModelPicker({
           onClick={() => connectionId && refresh.mutate(connectionId)}
           className="size-8"
         >
-          <RefreshCw aria-hidden className={cn(refresh.isPending && 'animate-spin')} />
+          <RefreshCw aria-hidden className={cn(refresh.isPending && 'opacity-40')} />
         </IconButton>
       </div>
       {open && options.length > 0 && (
-        <ul className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-border bg-card py-1 shadow-lg">
+        <ul className="surface-raised rounded-control edge-rule absolute z-20 mt-1 max-h-56 w-full overflow-y-auto border py-1">
           {options.map((model) => (
             <li key={model.id}>
               <button
@@ -315,8 +308,8 @@ function ModelPicker({
                   commit(model.id);
                 }}
                 className={cn(
-                  'block w-full cursor-pointer truncate px-2.5 py-1.5 text-left text-xs hover:bg-accent hover:text-accent-foreground',
-                  model.id === value && 'font-medium text-primary',
+                  'block w-full cursor-pointer truncate px-2.5 py-1.5 text-left text-xs hover:text-accent',
+                  model.id === value && 'font-medium text-accent',
                 )}
               >
                 {model.id}
@@ -326,7 +319,7 @@ function ModelPicker({
         </ul>
       )}
       {models.error && (
-        <p className="mt-1 text-[11px] text-destructive">{t('connections.modelsFailed')}</p>
+        <p className="mt-1 text-[11px] text-danger">{t('connections.modelsFailed')}</p>
       )}
     </div>
   );
@@ -349,31 +342,33 @@ function UsageCard({
   const ratio = usage && total > 0 ? usage.cacheRead / total : 0;
 
   return (
-    <div className="rounded-lg border border-border bg-card/60 p-3">
+    <div data-part="usage-card" className="edge-rule border-t pt-3">
       <div className="flex items-baseline justify-between gap-2">
         <span className="text-xs font-medium">{title}</span>
-        {note && <span className="truncate text-[11px] text-muted-foreground">{note}</span>}
+        {note && <span className="truncate text-[11px] text-ink-2">{note}</span>}
       </div>
       {usage === null ? (
-        <p className="mt-1.5 text-[11px] text-muted-foreground">{t('chat.panel.noUsage')}</p>
+        <p className="mt-1.5 text-[11px] text-ink-2">{t('chat.panel.noUsage')}</p>
       ) : (
         <>
           <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
             {USAGE_ROWS.map((key) => (
               <div key={key} className="flex items-baseline justify-between gap-1">
-                <dt className="truncate text-muted-foreground">{t(`chat.panel.tokens.${key}`)}</dt>
+                <dt className="truncate text-ink-2">{t(`chat.panel.tokens.${key}`)}</dt>
                 <dd className="tabular-nums">{formatTokens(usage[key], language)}</dd>
               </div>
             ))}
           </dl>
           <div className="mt-2.5">
-            <div className="flex items-baseline justify-between text-[11px] text-muted-foreground">
+            <div className="flex items-baseline justify-between text-[11px] text-ink-2">
               <span>{t('chat.panel.cacheHit')}</span>
               <span className="tabular-nums">{Math.round(ratio * 100)}%</span>
             </div>
-            <div className="mt-1 h-1 overflow-hidden rounded-full bg-muted">
+            {/* 比例条也只是线：底线 1px 发丝，命中部分叠一段 1px 橙线 */}
+            <div data-part="usage-bar" className="edge-rule relative mt-1.5 border-t">
               <div
-                className="h-full rounded-full bg-primary transition-[width] duration-300"
+                data-part="usage-bar-fill"
+                className="absolute start-0 -top-px border-t border-accent"
                 style={{ width: `${Math.min(100, Math.round(ratio * 100))}%` }}
               />
             </div>

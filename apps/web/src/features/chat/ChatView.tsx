@@ -47,13 +47,18 @@ export function ChatView({
   const title = chat.title?.trim() || chat.character?.name || t('chat.list.untitled');
 
   return (
-    <div className="flex h-full min-h-0 min-w-0 flex-col overflow-x-hidden">
-      <header className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
+    <div data-part="chat-view" className="flex h-full min-h-0 min-w-0 flex-col overflow-x-hidden">
+      <header
+        data-part="chat-header"
+        className="flex shrink-0 items-center gap-2 border-b edge-rule px-3 py-2"
+      >
         <IconButton label={t('chat.list.title')} onClick={onOpenList}>
           <Menu aria-hidden />
         </IconButton>
         <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-semibold">{title}</div>
+          <div data-part="chat-title" className="truncate text-sm font-semibold">
+            {title}
+          </div>
         </div>
         <ModelBadge chat={chat} />
         <IconButton label={t('inspector.title')} onClick={onOpenInspector}>

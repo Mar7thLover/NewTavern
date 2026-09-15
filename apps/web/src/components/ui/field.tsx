@@ -1,4 +1,5 @@
 import { cva, type VariantProps } from 'class-variance-authority';
+import { ChevronDown } from 'lucide-react';
 import type {
   InputHTMLAttributes,
   ReactNode,
@@ -9,18 +10,15 @@ import type {
 import { cn } from '../../lib/utils';
 
 /** 表单控件的共同外观；单独导出供自定义元素（如自适应 textarea）复用 */
-export const fieldVariants = cva(
-  'w-full rounded-md border border-input bg-background text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive',
-  {
-    variants: {
-      size: {
-        sm: 'h-8 px-2.5 text-xs',
-        md: 'h-9 px-3',
-      },
+export const fieldVariants = cva('field w-full text-sm', {
+  variants: {
+    size: {
+      sm: 'h-8 px-2.5 text-xs',
+      md: 'h-9 px-3',
     },
-    defaultVariants: { size: 'md' },
   },
-);
+  defaultVariants: { size: 'md' },
+});
 
 export interface InputProps
   extends Omit<InputHTMLAttributes<HTMLInputElement>, 'size'>, VariantProps<typeof fieldVariants> {}
@@ -49,20 +47,23 @@ export interface SelectProps
     Omit<SelectHTMLAttributes<HTMLSelectElement>, 'size'>,
     VariantProps<typeof fieldVariants> {}
 
-/** 原生 select：自带键盘与移动端体验，只换外观 */
+/**
+ * 原生 select：自带键盘与移动端体验，只换外观。
+ * 箭头是叠在上面的 lucide 图标（颜色跟 --ink-2 走）；data URI 里的 SVG 读不到 currentColor，黑模式会看不见。
+ * className 作用在外层（宽度等），select 本身铺满。
+ */
 export function Select({ className, size, ...props }: SelectProps) {
   return (
-    <select
-      className={cn(fieldVariants({ size }), 'cursor-pointer appearance-none pr-7', className)}
-      style={{
-        backgroundImage:
-          "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath fill='none' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' d='M3 4.5 6 7.5 9 4.5'/%3E%3C/svg%3E\")",
-        backgroundRepeat: 'no-repeat',
-        backgroundPosition: 'right 0.5rem center',
-        backgroundSize: '0.85rem',
-      }}
-      {...props}
-    />
+    <span className={cn('relative block w-full', className)}>
+      <select
+        className={cn(fieldVariants({ size }), 'cursor-pointer appearance-none pr-7')}
+        {...props}
+      />
+      <ChevronDown
+        aria-hidden
+        className="pointer-events-none absolute top-1/2 right-2 size-3.5 -translate-y-1/2 text-ink-2"
+      />
+    </span>
   );
 }
 
@@ -71,7 +72,7 @@ export function FieldLabel({ children, htmlFor }: { children: ReactNode; htmlFor
   return (
     <label
       htmlFor={htmlFor}
-      className="mb-1.5 block text-xs font-medium tracking-wide text-muted-foreground uppercase"
+      className="mb-1.5 block text-[11px] font-medium tracking-[0.08em] text-ink-3 uppercase"
     >
       {children}
     </label>

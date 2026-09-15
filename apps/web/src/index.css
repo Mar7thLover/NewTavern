@@ -1,53 +1,36 @@
 @import 'tailwindcss';
-@import './components/ui/tokens.css';
+/* 主题目录是运行中新增的，开发服务器不一定会扫到，显式声明 */
+@source './themes';
+@import './themes/slots.css';
+@import './themes/materials.css';
+
+html {
+  background-color: var(--canvas);
+}
 
 body {
-  @apply bg-background text-foreground antialiased;
-  font-family: var(--font-sans);
+  background-color: var(--canvas);
+  background-image: var(--texture-canvas);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* 流式光标：贴在正文最后一个块级元素末尾，随文字自然换行 */
-@keyframes nt-caret {
-  0%,
-  60% {
-    opacity: 1;
-  }
-  80%,
-  100% {
-    opacity: 0.15;
-  }
+/* 选中文字用主题的强调色 */
+::selection {
+  background-color: var(--accent);
+  color: var(--ink-on-primary);
 }
 
-.md-streaming > *:last-child::after {
-  content: '▍';
-  margin-inline-start: 0.1em;
-  color: var(--primary);
-  animation: nt-caret 1.1s ease-in-out infinite;
+/**
+ * 流式光标：正文渲染完后紧跟一个 `.nt-caret`（主题的 StreamingCursor）。
+ * 最后一个段落改成 inline，光标才会停在文字末尾而不是另起一行。
+ */
+.md-streaming > p:nth-last-child(2) {
+  display: inline;
 }
 
-/* 推理区「思考中…」的流光条 */
-@keyframes nt-shimmer {
-  0% {
-    transform: translateX(-100%);
-  }
-  100% {
-    transform: translateX(300%);
-  }
-}
-
-.nt-shimmer::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  width: 33%;
-  background: linear-gradient(90deg, transparent, var(--primary), transparent);
-  opacity: 0.6;
-  animation: nt-shimmer 1.6s linear infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .md-streaming > *:last-child::after,
-  .nt-shimmer::after {
-    animation: none;
-  }
+.md-streaming > .nt-caret {
+  display: inline;
 }

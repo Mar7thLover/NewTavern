@@ -93,18 +93,22 @@ export interface CompareResult {
   hints: string[];
 }
 
-/** 段左侧 4px 色条：颜色在 tokens.css 里按明暗各定义一套 */
+/**
+ * 段左侧色条：同一个色的不同明度分层（DESIGN §3）。
+ * 具体色相/彩度由主题的 `--origin-h/--origin-c`、明度阶梯由 `--origin-l0/--origin-step` 决定；
+ * 「素」里就是同一灰的十级明度。moved / clamped 才用强调色。
+ */
 export const ORIGIN_BAR_CLASS: Record<SegmentOriginKind, string> = {
-  preset: 'bg-inspector-preset',
-  character: 'bg-inspector-character',
-  persona: 'bg-inspector-persona',
-  worldinfo: 'bg-inspector-worldinfo',
-  authors_note: 'bg-inspector-authors-note',
-  history: 'bg-inspector-history',
-  injection: 'bg-inspector-injection',
-  user_input: 'bg-inspector-user-input',
-  variables: 'bg-inspector-variables',
-  global_system: 'bg-inspector-global-system',
+  preset: 'origin-bar origin-preset',
+  character: 'origin-bar origin-character',
+  persona: 'origin-bar origin-persona',
+  worldinfo: 'origin-bar origin-worldinfo',
+  authors_note: 'origin-bar origin-authors_note',
+  history: 'origin-bar origin-history',
+  injection: 'origin-bar origin-injection',
+  user_input: 'origin-bar origin-user_input',
+  variables: 'origin-bar origin-variables',
+  global_system: 'origin-bar origin-global_system',
 };
 
 /** 段正文：只有 text part 能直接展示，其余给一个占位 */

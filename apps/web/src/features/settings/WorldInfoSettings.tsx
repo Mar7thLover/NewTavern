@@ -69,7 +69,7 @@ export function WorldInfoSettings() {
           disabled={setGlobalBooks.isPending}
           onChange={(bookIds) => setGlobalBooks.mutate(bookIds)}
         />
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-ink-2">
           {(globalBooks.data ?? []).length > 0
             ? t('worldInfo.selected', { total: (globalBooks.data ?? []).length })
             : t('worldInfo.selectNone')}
@@ -103,15 +103,13 @@ export function WorldInfoSettings() {
                 onBlur={() => draft[key] !== settings.data?.[key] && commit(draft)}
               />
               {hint && (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {t(`worldInfo.fields.${key}Hint`)}
-                </p>
+                <p className="mt-1 text-xs text-ink-2">{t(`worldInfo.fields.${key}Hint`)}</p>
               )}
             </div>
           ))}
         </div>
 
-        <div className="divide-y divide-border">
+        <div className="divide-y divide-edge">
           {BOOLEAN_FIELDS.map(({ key, hint }) => (
             <SwitchRow
               key={key}

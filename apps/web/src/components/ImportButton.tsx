@@ -101,9 +101,6 @@ export function ImportButton({
         aria-busy={busy}
         onClick={() => inputRef.current?.click()}
       >
-        {busy && (
-          <span className="size-3.5 animate-spin rounded-full border-2 border-current border-r-transparent" />
-        )}
         {busy
           ? progress.total > 1
             ? t('common.importingProgress', progress)
@@ -113,7 +110,7 @@ export function ImportButton({
       {failures.length > 0 && (
         <div
           role="alert"
-          className="w-full max-w-md rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-left text-xs text-destructive"
+          className="rounded-card border-danger bg-danger-soft w-full max-w-md border px-3 py-2 text-left text-xs text-danger"
         >
           <div className="mb-1 flex items-center justify-between gap-2 font-medium">
             <span>{t('common.importFailed')}</span>
