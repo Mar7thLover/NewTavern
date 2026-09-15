@@ -273,33 +273,34 @@ loadFonts: () =>
 
 ### 5.3 其他页面与浮层
 
-| data-part                   | DOM 位置                                                                                                   | 附加属性                                           |
-| --------------------------- | ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
-| `page-header`               | 库页面/连接页的标题块（`LibraryHeader`）；开始页标题块                                                     | —                                                  |
-| `library-item`              | 角色卡按钮 / 预设行 / 世界书行 / 用户档案卡                                                                | `data-kind="character\|preset\|lorebook\|persona"` |
-| `persona-form`              | 用户档案新建/编辑表单 `form`（`modal-body` 内，左头像右字段，窄屏单列）                                    | —                                                  |
-| `persona-avatar-field`      | `persona-form` 左栏：`AvatarFrame` 预览 + 上传/移除按钮                                                    | —                                                  |
-| `persona-depth-fields`      | `persona-form` 里「按深度注入」时出现的深度 + 消息角色两栏                                                 | —                                                  |
-| `preset-editor`             | 预设编辑器页根（`/presets/:id`）                                                                           | —                                                  |
-| `preset-section`            | 编辑器分区 `section`（基本 / 采样参数 / 提示词条目）                                                       | `data-section="basic\|sampling\|prompts"`          |
-| `preset-prompt-list`        | 提示词条目列表 `ol`（按组装使用的 `prompt_order` 排序）                                                    | —                                                  |
-| `preset-prompt-item`        | 每个条目 `li`（开关、上移/下移、名称；普通条目可展开编辑）                                                 | `data-marker`、`data-enabled`、`data-open`         |
-| `preset-save-bar`           | 编辑器底部吸附的保存条（`surface-raised`，保存 / 放弃修改）                                                | `data-dirty`                                       |
-| `connection-card`           | 连接页每个连接 `li`                                                                                        | —                                                  |
-| `settings-nav`              | 设置页分区导航 `nav`                                                                                       | —                                                  |
-| `settings-nav-item`         | 分区按钮                                                                                                   | `data-active`（另有 `aria-current`）               |
-| `settings-section`          | 设置分区 `section`（标题 + 说明 + 内容）                                                                   | —                                                  |
-| `theme-card`                | 外观页每张主题卡（外层 `div`，最上层盖一个透明点击 `button`）                                              | `data-active`                                      |
-| `theme-preview`             | 预览卡的作用域根：`data-theme / data-mode / data-opt-*`，`surface-canvas relative isolate overflow-hidden` | 同 `<html>`                                        |
-| `modal-overlay` / `modal`   | 模态遮罩 / 面板（Portal 到 `body`，仍在 `<html data-theme>` 作用域内）                                     | —                                                  |
-| `modal-header`              | `modal` 头部行（仅传了 `title` 时渲染，含关闭键）                                                          | —                                                  |
-| `modal-title`               | `modal-header` 内的标题 `h2`                                                                               | —                                                  |
-| `modal-body`                | `modal` 正文（`children`）                                                                                 | —                                                  |
-| `modal-footer`              | `modal` 底部按钮区（仅传了 `footer` 时渲染）                                                               | —                                                  |
-| `drawer-overlay` / `drawer` | 抽屉遮罩 / 面板                                                                                            | `drawer`：`data-side="left\|right"`                |
-| `drawer-header`             | `drawer` 头部行（仅传了 `title` 时渲染，含关闭键）                                                         | —                                                  |
-| `drawer-title`              | `drawer-header` 内的标题 `div`                                                                             | —                                                  |
-| `drawer-body`               | `drawer` 正文（`children`）                                                                                | —                                                  |
+| data-part                   | DOM 位置                                                                                                   | 附加属性                                                                                  |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `page-header`               | 库页面/连接页的标题块（`LibraryHeader`）；开始页标题块                                                     | —                                                                                         |
+| `library-item`              | 角色卡按钮 / 预设行 / 世界书行 / 用户档案卡                                                                | `data-kind="character\|preset\|lorebook\|persona"`；预设行与用户档案卡另有 `data-default` |
+| `preset-default-badge`      | 预设行名称旁的「默认」徽标 `span`（`Badge`，仅默认预设渲染）                                               | —                                                                                         |
+| `persona-form`              | 用户档案新建/编辑表单 `form`（`modal-body` 内，左头像右字段，窄屏单列）                                    | —                                                                                         |
+| `persona-avatar-field`      | `persona-form` 左栏：`AvatarFrame` 预览 + 上传/移除按钮                                                    | —                                                                                         |
+| `persona-depth-fields`      | `persona-form` 里「按深度注入」时出现的深度 + 消息角色两栏                                                 | —                                                                                         |
+| `preset-editor`             | 预设编辑器页根（`/presets/:id`）                                                                           | —                                                                                         |
+| `preset-section`            | 编辑器分区 `section`（基本 / 采样参数 / 提示词条目）                                                       | `data-section="basic\|sampling\|prompts"`                                                 |
+| `preset-prompt-list`        | 提示词条目列表 `ol`（按组装使用的 `prompt_order` 排序）                                                    | —                                                                                         |
+| `preset-prompt-item`        | 每个条目 `li`（开关、上移/下移、名称；普通条目可展开编辑）                                                 | `data-marker`、`data-enabled`、`data-open`                                                |
+| `preset-save-bar`           | 编辑器底部吸附的保存条（`surface-raised`，保存 / 放弃修改）                                                | `data-dirty`                                                                              |
+| `connection-card`           | 连接页每个连接 `li`                                                                                        | —                                                                                         |
+| `settings-nav`              | 设置页分区导航 `nav`                                                                                       | —                                                                                         |
+| `settings-nav-item`         | 分区按钮                                                                                                   | `data-active`（另有 `aria-current`）                                                      |
+| `settings-section`          | 设置分区 `section`（标题 + 说明 + 内容）                                                                   | —                                                                                         |
+| `theme-card`                | 外观页每张主题卡（外层 `div`，最上层盖一个透明点击 `button`）                                              | `data-active`                                                                             |
+| `theme-preview`             | 预览卡的作用域根：`data-theme / data-mode / data-opt-*`，`surface-canvas relative isolate overflow-hidden` | 同 `<html>`                                                                               |
+| `modal-overlay` / `modal`   | 模态遮罩 / 面板（Portal 到 `body`，仍在 `<html data-theme>` 作用域内）                                     | —                                                                                         |
+| `modal-header`              | `modal` 头部行（仅传了 `title` 时渲染，含关闭键）                                                          | —                                                                                         |
+| `modal-title`               | `modal-header` 内的标题 `h2`                                                                               | —                                                                                         |
+| `modal-body`                | `modal` 正文（`children`）                                                                                 | —                                                                                         |
+| `modal-footer`              | `modal` 底部按钮区（仅传了 `footer` 时渲染）                                                               | —                                                                                         |
+| `drawer-overlay` / `drawer` | 抽屉遮罩 / 面板                                                                                            | `drawer`：`data-side="left\|right"`                                                       |
+| `drawer-header`             | `drawer` 头部行（仅传了 `title` 时渲染，含关闭键）                                                         | —                                                                                         |
+| `drawer-title`              | `drawer-header` 内的标题 `div`                                                                             | —                                                                                         |
+| `drawer-body`               | `drawer` 正文（`children`）                                                                                | —                                                                                         |
 
 ### 5.4 预览卡的结构（外观页）
 

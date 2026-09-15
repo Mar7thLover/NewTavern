@@ -160,7 +160,8 @@ export function SessionPanel({ chat, path }: SessionPanelProps) {
               patchChat.mutate({ id: chat.id, presetId: event.target.value || null })
             }
           >
-            <option value="">{t('chat.panel.builtinPreset')}</option>
+            {/* 「无」= presetId null：不用任何预设，没有主提示词 */}
+            <option value="">{t('chat.panel.noPreset')}</option>
             {(presets.data ?? []).map((preset) => (
               <option key={preset.id} value={preset.id}>
                 {preset.name}

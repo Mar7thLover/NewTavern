@@ -270,7 +270,7 @@
       "persona": "Persona",
       "none": "None",
       "preset": "Preset",
-      "builtinPreset": "Built-in default",
+      "noPreset": "None",
       "layoutMode": "Prompt layout",
       "layout": {
         "strict": "Strict",
@@ -596,6 +596,17 @@
   },
   "presets": {
     "back": "Presets",
+    "create": "New preset",
+    "duplicate": "Duplicate",
+    "defaultBadge": "Default",
+    "setDefault": "Set as default",
+    "unsetDefault": "Unset default",
+    "defaultHint": "New chats use this preset",
+    "builtinBadge": "Built-in",
+    "resetBuiltin": "Restore built-in content",
+    "resetBuiltinTitle": "Restore built-in content?",
+    "resetBuiltinMessage": "Prompts and sampling go back to the built-in defaults. The name stays. Unsaved changes are discarded too.",
+    "resetBuiltinConfirm": "Restore",
     "promptCount": "{{total}} prompt entries",
     "sections": {
       "basic": "Basics",

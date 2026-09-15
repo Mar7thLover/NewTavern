@@ -5,6 +5,7 @@ import { type WISettings } from '../worldinfo/types.js';
 import {
   assemblePrompt,
   DEFAULT_PRESET,
+  NO_PRESET,
   type AssembleCharacter,
   type AssembleHistoryNode,
   type AssembleInputV2,
@@ -624,6 +625,21 @@ describe('assemblePrompt 默认预设', () => {
       'history:n3',
       'history:n4',
     ]);
+  });
+
+  it('NO_PRESET：没有主提示词，其余段与内置预设一致，采样只有 temperature', () => {
+    const withDefault = assembleIr(baseInput({ preset: null }));
+    const ir = assembleIr(baseInput({ preset: NO_PRESET }));
+    expect(ir.meta.presetId).toBe('builtin:none');
+    expect(ids(ir)).not.toContain('preset:main');
+    expect(ids(ir)).toEqual(ids(withDefault).filter((id) => id !== 'preset:main'));
+    expect(ir.sampling).toEqual({ temperature: 1 });
+    // 不改变 DEFAULT_PRESET 本身
+    expect(
+      (DEFAULT_PRESET.data.prompts as { identifier: string }[]).some(
+        (p) => p.identifier === 'main',
+      ),
+    ).toBe(true);
   });
 
   it('layoutMode 原样写入 meta', () => {

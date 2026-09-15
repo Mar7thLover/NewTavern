@@ -2,6 +2,7 @@ import type { ModelCapabilities } from '@newtavern/providers';
 import { asc, eq } from 'drizzle-orm';
 
 import { schema, type Db } from '../db/client.js';
+import { NO_PRESET } from './assemble.js';
 import type {
   AssembleCharacter,
   AssembleHistoryNode,
@@ -181,6 +182,8 @@ export function buildAssembleInput(db: Db, ctx: BuildAssembleInputContext): Asse
     chatId: chat.id,
     model: ctx.model,
     provider: ctx.provider,
+    // 会话没选预设（或选的已删除）= 「无」：显式传 NO_PRESET（没有主提示词），
+    // 不走组装器 `preset ?? DEFAULT_PRESET` 的回退
     preset: presetRow
       ? {
           id: presetRow.id,
@@ -188,7 +191,7 @@ export function buildAssembleInput(db: Db, ctx: BuildAssembleInputContext): Asse
           data: presetRow.data as Record<string, unknown>,
           sampling: presetRow.sampling ?? null,
         }
-      : null,
+      : NO_PRESET,
     character:
       characterRow && characterData
         ? { id: characterRow.id, name: characterRow.name, data: characterData }

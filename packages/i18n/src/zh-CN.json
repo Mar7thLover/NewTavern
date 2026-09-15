@@ -270,7 +270,7 @@
       "persona": "用户档案",
       "none": "不使用",
       "preset": "预设",
-      "builtinPreset": "内置默认预设",
+      "noPreset": "无",
       "layoutMode": "提示词布局",
       "layout": {
         "strict": "严格保真",
@@ -596,6 +596,17 @@
   },
   "presets": {
     "back": "预设库",
+    "create": "新建预设",
+    "duplicate": "复制",
+    "defaultBadge": "默认",
+    "setDefault": "设为默认",
+    "unsetDefault": "取消默认",
+    "defaultHint": "新对话默认用这份预设",
+    "builtinBadge": "内置",
+    "resetBuiltin": "恢复内置内容",
+    "resetBuiltinTitle": "恢复内置内容？",
+    "resetBuiltinMessage": "提示词条目和采样参数会换回内置的默认内容，名称不变。未保存的修改也会丢掉。",
+    "resetBuiltinConfirm": "恢复",
     "promptCount": "{{total}} 个提示词条目",
     "sections": {
       "basic": "基本",

@@ -9,7 +9,8 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:8787',
+        // NT_API_TARGET：另起一套隔离服务端时覆盖（缺省是本机 8787）
+        target: process.env.NT_API_TARGET ?? 'http://localhost:8787',
         changeOrigin: true,
       },
     },

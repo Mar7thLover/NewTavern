@@ -35,6 +35,7 @@ import {
 import { isGlobalSystemPromptOverride } from '../services/global-system-prompt.js';
 import { buildInspect } from '../services/inspect.js';
 import { readDefaultPersonaId } from '../services/personas.js';
+import { readDefaultPresetId } from '../services/presets.js';
 import type { ProviderService } from '../services/providers.js';
 import { buildProviderRequest, requestForStorage } from '../services/provider-request.js';
 import { applyGlobalChanges } from '../services/variables.js';
@@ -99,7 +100,13 @@ export function createChatsRoutes(db: Db, providers: ProviderService) {
               ? body.personaId
               : null
             : readDefaultPersonaId(db);
-        const presetId = typeof body.presetId === 'string' ? body.presetId : null;
+        // 同上：没带 presetId 字段 → 用默认预设；显式 null → 不用预设（「无」）
+        const presetId =
+          'presetId' in body
+            ? typeof body.presetId === 'string'
+              ? body.presetId
+              : null
+            : readDefaultPresetId(db);
         const mode = body.mode === 'writing' || body.mode === 'crpg' ? body.mode : 'roleplay';
 
         const characterRow = characterIds[0]

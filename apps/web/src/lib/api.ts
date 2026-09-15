@@ -643,8 +643,88 @@ export function useUpdatePreset(id: string) {
   });
 }
 
+/** 新建预设（内容是内置默认预设的深拷贝，名称缺省「新预设」） */
+export function useCreatePreset() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { name?: string } = {}) =>
+      mutate<PresetDetail>('/api/presets', 'POST', { ...input, from: 'default' }),
+    onSuccess: (row) => {
+      queryClient.setQueryData(queryKeys.preset(row.id), row);
+      return queryClient.invalidateQueries({ queryKey: queryKeys.presets, exact: true });
+    },
+  });
+}
+
+/** 复制预设：名称「<原名> 副本」 */
+export function useDuplicatePreset() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => mutate<PresetDetail>(`/api/presets/${enc(id)}/duplicate`, 'POST'),
+    onSuccess: (row) => {
+      queryClient.setQueryData(queryKeys.preset(row.id), row);
+      return queryClient.invalidateQueries({ queryKey: queryKeys.presets, exact: true });
+    },
+  });
+}
+
+/** 恢复内置内容：只对种子写入的默认预设（`builtinPresetId`）可用，名称不变 */
+export function useResetBuiltinPreset(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => mutate<PresetDetail>(`/api/presets/${enc(id)}/reset-builtin`, 'POST'),
+    onSuccess: (row) => {
+      queryClient.setQueryData(queryKeys.preset(id), row);
+      return Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.presets, exact: true }),
+        queryClient.invalidateQueries({
+          predicate: (query) => query.queryKey[0] === 'chats' && query.queryKey[2] === 'inspect',
+        }),
+      ]);
+    },
+  });
+}
+
 export function useDeletePreset() {
-  return useDeleteResource('/api/presets', queryKeys.presets);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => mutate(`/api/presets/${enc(id)}`, 'DELETE'),
+    // 删掉的若是默认预设 / 内置默认预设，服务端会一并清掉设置
+    onSuccess: (_data, id) => {
+      queryClient.removeQueries({ queryKey: queryKeys.preset(id) });
+      return Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.presets, exact: true }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.setting(DEFAULT_PRESET_KEY) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.setting(BUILTIN_PRESET_KEY) }),
+      ]);
+    },
+  });
+}
+
+/** 设置 KV：新建对话不带 presetId 时服务端套用的预设 */
+export const DEFAULT_PRESET_KEY = 'defaultPresetId';
+/** 设置 KV：启动种子写入的「默认预设」id（只读；只有它能恢复内置内容） */
+export const BUILTIN_PRESET_KEY = 'builtinPresetId';
+
+const normalizeId = (value: unknown): string | null => (typeof value === 'string' ? value : null);
+
+export const useDefaultPresetId = () => useSetting(DEFAULT_PRESET_KEY, normalizeId);
+export const useBuiltinPresetId = () => useSetting(BUILTIN_PRESET_KEY, normalizeId);
+
+export function useSetDefaultPresetId() {
+  const queryClient = useQueryClient();
+  const url = `/api/settings/${enc(DEFAULT_PRESET_KEY)}`;
+  return useMutation({
+    mutationFn: async (id: string | null) => {
+      if (id === null) {
+        await mutate(url, 'DELETE');
+        return null;
+      }
+      const row = await mutate<{ key: string; value: unknown }>(url, 'PUT', id);
+      return normalizeId(row.value);
+    },
+    onSuccess: (data) => queryClient.setQueryData(queryKeys.setting(DEFAULT_PRESET_KEY), data),
+  });
 }
 
 export function useLorebooks() {

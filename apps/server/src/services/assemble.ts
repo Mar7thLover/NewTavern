@@ -4,7 +4,7 @@
  * AS 已在 `packages/core` 实现组装流水线 v2（`assemblePrompt` 返回 `AssembleResult`），
  * 这里直接转发；服务端其余代码只从本文件导入组装相关的符号，便于后续替换/包装。
  */
-export { assemblePrompt, DEFAULT_PRESET, diffLayouts } from '@newtavern/core';
+export { assemblePrompt, DEFAULT_PRESET, diffLayouts, NO_PRESET } from '@newtavern/core';
 export type {
   AssembleAuthorsNote,
   AssembleCharacter,

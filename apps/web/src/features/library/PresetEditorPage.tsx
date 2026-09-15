@@ -16,7 +16,14 @@ import { Button } from '../../components/ui/button';
 import { FieldLabel, Input, Select, Textarea } from '../../components/ui/field';
 import { IconButton } from '../../components/ui/icon-button';
 import { Switch } from '../../components/ui/switch';
-import { usePreset, useUpdatePreset, type PresetDetail } from '../../lib/api';
+import { Badge } from '../../components/ui/badge';
+import {
+  useBuiltinPresetId,
+  usePreset,
+  useResetBuiltinPreset,
+  useUpdatePreset,
+  type PresetDetail,
+} from '../../lib/api';
 import { cn } from '../../lib/utils';
 import { LibraryHeader, QueryStatus, errorMessage } from './shared';
 
@@ -155,6 +162,10 @@ export function PresetEditorPage() {
 function PresetEditor({ preset }: { preset: PresetDetail }) {
   const { t } = useTranslation();
   const update = useUpdatePreset(preset.id);
+  const builtinPresetId = useBuiltinPresetId();
+  const resetBuiltin = useResetBuiltinPreset(preset.id);
+  const isBuiltin = builtinPresetId.data === preset.id;
+  const [confirmReset, setConfirmReset] = useState(false);
 
   const [baseline, setBaseline] = useState(() => ({
     name: preset.name,
@@ -319,6 +330,21 @@ function PresetEditor({ preset }: { preset: PresetDetail }) {
     );
   };
 
+  /** 恢复内置内容：服务端返回的新行直接作为基线，本地草稿（含未保存的名称）一并丢弃 */
+  const restoreBuiltin = () => {
+    resetBuiltin.mutate(undefined, {
+      onSuccess: (row) => {
+        setBaseline({ name: row.name, json: JSON.stringify(row.data), data: row.data });
+        setDraft(row.data);
+        setName(row.name);
+        setRevision((value) => value + 1);
+        setExpanded(new Set());
+        update.reset();
+        setConfirmReset(false);
+      },
+    });
+  };
+
   const nameId = useId();
   const samplingKeys = SAMPLING_KEYS.filter((key) => draft[key] !== undefined);
   const deleteTarget = pendingDelete ? promptById.get(pendingDelete) : undefined;
@@ -327,11 +353,34 @@ function PresetEditor({ preset }: { preset: PresetDetail }) {
     <>
       <LibraryHeader
         title={name.trim() || baseline.name}
-        subtitle={t('presets.promptCount', { total: order.length })}
+        subtitle={
+          <span className="inline-flex flex-wrap items-center gap-2">
+            {t('presets.promptCount', { total: order.length })}
+            {isBuiltin && <Badge variant="muted">{t('presets.builtinBadge')}</Badge>}
+          </span>
+        }
       />
 
       <div className="space-y-10">
-        <PresetSection section="basic" title={t('presets.sections.basic')}>
+        <PresetSection
+          section="basic"
+          title={t('presets.sections.basic')}
+          actions={
+            isBuiltin ? (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={resetBuiltin.isPending}
+                onClick={() => {
+                  resetBuiltin.reset();
+                  setConfirmReset(true);
+                }}
+              >
+                {t('presets.resetBuiltin')}
+              </Button>
+            ) : undefined
+          }
+        >
           <div className="max-w-md">
             <FieldLabel htmlFor={nameId}>{t('presets.name')}</FieldLabel>
             <Input
@@ -449,6 +498,18 @@ function PresetEditor({ preset }: { preset: PresetDetail }) {
           if (pendingDelete) deletePrompt(pendingDelete);
           setPendingDelete(null);
         }}
+      />
+
+      <ConfirmDialog
+        open={confirmReset}
+        destructive
+        title={t('presets.resetBuiltinTitle')}
+        description={t('presets.resetBuiltinMessage')}
+        confirmLabel={t('presets.resetBuiltinConfirm')}
+        pending={resetBuiltin.isPending}
+        error={errorMessage(resetBuiltin.error)}
+        onCancel={() => setConfirmReset(false)}
+        onConfirm={restoreBuiltin}
       />
 
       <ConfirmDialog

@@ -243,6 +243,37 @@ export const DEFAULT_PRESET: AssemblePreset = {
   },
 };
 
+/**
+ * 「无预设」：会话没选预设（或选的预设已删除）时由服务端显式传入。
+ * 与 DEFAULT_PRESET 同结构，但没有 `main` 条目——只发角色卡字段、用户描述、世界书、示例对话与聊天记录。
+ * 采样只给中性的 temperature 1，不设输出上限与上下文上限（交给模型能力与适配器的默认值）。
+ * 注意：`assemblePrompt` 在 `preset` 为 null 时仍回退 DEFAULT_PRESET，这里不改变那条回退。
+ */
+export const NO_PRESET: AssemblePreset = {
+  id: 'builtin:none',
+  format: 'native',
+  data: {
+    prompts: (DEFAULT_PRESET.data.prompts as Record<string, unknown>[])
+      .filter((prompt) => prompt.identifier !== 'main')
+      .map((prompt) => ({ ...prompt })),
+    prompt_order: [
+      {
+        character_id: 100001,
+        order: DEFAULT_PRESET_IDENTIFIERS.filter((identifier) => identifier !== 'main').map(
+          (identifier) => ({ identifier, enabled: true }),
+        ),
+      },
+    ],
+    personality_format: '{{personality}}',
+    scenario_format: '{{scenario}}',
+    new_chat_prompt: '',
+    new_example_chat_prompt: '[Example Chat]',
+    wi_format: '{0}',
+    squash_system_messages: false,
+    temperature: 1,
+  },
+};
+
 // ───────────────────────── 常量 ─────────────────────────
 
 const INJECTION_POSITION_ABSOLUTE = 1;
