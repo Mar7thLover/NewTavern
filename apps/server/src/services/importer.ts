@@ -23,6 +23,8 @@ import {
   writeCharx,
   type StPreset,
   type V3Card,
+  detectStTextKind,
+  type StFileKind,
 } from '@newtavern/compat';
 import { desc, eq } from 'drizzle-orm';
 
@@ -101,6 +103,27 @@ function guard<T>(fn: () => T): T {
   }
 }
 
+/** 文件类型 → 提示文案（导入到了错误的页面时用） */
+const KIND_HINTS: Record<StFileKind, string> = {
+  character: '这是角色卡文件，请到「角色」页面导入。',
+  lorebook: '这是世界书文件，请到「世界书」页面导入。',
+  preset: '这是预设文件，请到「预设」页面导入。',
+  regex: '这是正则脚本文件，请到「设置 · 正则脚本」导入。',
+  chat: '这是 SillyTavern 聊天记录文件，目前还不支持导入。',
+};
+
+/**
+ * 解析前先粗判文件类型：能识别出是另一类文件时，直接给出「去哪个页面导入」的提示。
+ * 识别不出（null）或正是期望的类型时放行，交给各自的解析器——不会误伤合法但少见的文件。
+ */
+function assertExpectedKind(bytes: Uint8Array, expected: StFileKind) {
+  const detected: StFileKind | null =
+    isPng(bytes) || isZip(bytes)
+      ? 'character'
+      : detectStTextKind(new TextDecoder('utf-8').decode(bytes));
+  if (detected && detected !== expected) throw new ImportError(KIND_HINTS[detected]);
+}
+
 function toV3Card(data: unknown): V3Card {
   return normalizeCard({ spec: 'chara_card_v3', spec_version: '3.0', data });
 }
@@ -156,6 +179,7 @@ export function createImporter(db: Db, assets: AssetsService, dataDir: string) {
         const mime = icon ? IMAGE_MIME[icon.ext.toLowerCase()] : undefined;
         if (iconBytes && mime) avatar = { bytes: iconBytes, mime };
       } else {
+        assertExpectedKind(bytes, 'character');
         const parsed = guard(() => parseCardJson(parseJsonBytes(bytes, '角色卡')));
         spec = parsed.spec;
         card = guard(() => normalizeCard(parsed));
@@ -230,6 +254,7 @@ export function createImporter(db: Db, assets: AssetsService, dataDir: string) {
     },
 
     importPreset(fileName: string, bytes: Uint8Array) {
+      assertExpectedKind(bytes, 'preset');
       const preset = guard(() => parsePreset(parseJsonBytes(bytes, '预设')));
       const name = typeof preset['name'] === 'string' ? preset['name'] : baseName(fileName);
       return db
@@ -256,6 +281,7 @@ export function createImporter(db: Db, assets: AssetsService, dataDir: string) {
     },
 
     importLorebook(fileName: string, bytes: Uint8Array) {
+      assertExpectedKind(bytes, 'lorebook');
       const book = guard(() => parseWorldbook(parseJsonBytes(bytes, '世界书')));
       const { entries: _entries, ...meta } = book;
       const { form, items } = listWorldbookEntries(book);
@@ -289,6 +315,7 @@ export function createImporter(db: Db, assets: AssetsService, dataDir: string) {
 
     /** ST 正则脚本 JSON（单条或数组）→ regex_scripts 表（scope='global'，契约 §3.2） */
     importRegexScripts(fileName: string, bytes: Uint8Array): RegexScript[] {
+      assertExpectedKind(bytes, 'regex');
       const scripts = guard(() => parseRegexScripts(parseJsonBytes(bytes, '正则脚本')));
       const last = db
         .select()

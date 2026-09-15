@@ -288,6 +288,52 @@ describe('api', () => {
     expect((await app.request('/api/presets/nope/export')).status).toBe(404);
   });
 
+  it('传错页面时提示去哪里导入，合法文件不受影响', async () => {
+    const app = makeApp();
+    const message = async (res: Response) => {
+      expect(res.status).toBe(400);
+      return ((await res.json()) as { message: string }).message;
+    };
+
+    // 世界书传到角色卡
+    expect(
+      await message(
+        await upload(app, '/api/import/character', '王国.json', encodeJson(stWorldbook)),
+      ),
+    ).toBe('这是世界书文件，请到「世界书」页面导入。');
+    // 角色卡传到世界书 / 预设（预设校验宽松，原先会被静默当成预设）
+    expect(
+      await message(await upload(app, '/api/import/lorebook', '艾拉.json', encodeJson(v2Card))),
+    ).toBe('这是角色卡文件，请到「角色」页面导入。');
+    expect(
+      await message(await upload(app, '/api/import/preset', '艾拉.json', encodeJson(v2Card))),
+    ).toBe('这是角色卡文件，请到「角色」页面导入。');
+    // 预设传到正则、PNG 传到世界书
+    expect(
+      await message(await upload(app, '/api/import/regex', '预设.json', encodeJson(stPreset))),
+    ).toBe('这是预设文件，请到「预设」页面导入。');
+    const png = writeCardToPng(null, parseCardJson(v2Card));
+    expect(await message(await upload(app, '/api/import/lorebook', '卡.png', png))).toBe(
+      '这是角色卡文件，请到「角色」页面导入。',
+    );
+    // 聊天记录
+    const jsonl = [
+      JSON.stringify({ user_name: 'You', character_name: '艾拉', chat_metadata: {} }),
+      JSON.stringify({ name: '艾拉', is_user: false, mes: '你好' }),
+    ].join('\n');
+    expect(
+      await message(await upload(app, '/api/import/character', '聊天.jsonl', encodeText(jsonl))),
+    ).toBe('这是 SillyTavern 聊天记录文件，目前还不支持导入。');
+
+    // 合法文件照常导入
+    expect(
+      (await upload(app, '/api/import/lorebook', '王国.json', encodeJson(stWorldbook))).status,
+    ).toBe(201);
+    expect(
+      (await upload(app, '/api/import/preset', '预设.json', encodeJson(stPreset))).status,
+    ).toBe(201);
+  });
+
   it('未知 /api 路径返回 404 json', async () => {
     const app = makeApp();
     const res = await app.request('/api/nope');
