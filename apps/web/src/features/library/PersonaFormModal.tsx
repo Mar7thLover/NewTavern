@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { ImageCropperDialog, cropResultToFile } from '../../components/ImageCropper';
 import { Modal } from '../../components/Modal';
 import { Button } from '../../components/ui/button';
 import { Input, Select, Textarea } from '../../components/ui/field';
@@ -20,7 +21,8 @@ import { useSignature } from '../../themes/signature';
 import { errorMessage } from './shared';
 
 const AVATAR_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
-const AVATAR_MAX_BYTES = 5 * 1024 * 1024;
+/** 源图上限：选好的图会先裁成 ≤512px 的正方形再上传，远小于服务端的 5MB */
+const AVATAR_SOURCE_MAX_BYTES = 20 * 1024 * 1024;
 const MAX_DEPTH = 10000;
 const ROLES: PersonaRole[] = ['system', 'user', 'assistant'];
 
@@ -78,6 +80,8 @@ export function PersonaFormModal({
   const [avatarRemoved, setAvatarRemoved] = useState(false);
   const [avatarError, setAvatarError] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  /** 选好、待裁切的源图；非空时叠出裁切弹窗 */
+  const [cropSource, setCropSource] = useState<File | null>(null);
 
   useEffect(() => {
     if (!avatarFile) {
@@ -99,17 +103,19 @@ export function PersonaFormModal({
 
   const pickFile = (file: File | undefined) => {
     if (!file) return;
+    // 校验失败时关掉裁切弹窗（「重新选择」进来的），错误显示在头像栏
     if (!AVATAR_TYPES.includes(file.type)) {
+      setCropSource(null);
       setAvatarError(t('library.personas.avatarBadType'));
       return;
     }
-    if (file.size > AVATAR_MAX_BYTES) {
+    if (file.size > AVATAR_SOURCE_MAX_BYTES) {
+      setCropSource(null);
       setAvatarError(t('library.personas.avatarTooLarge'));
       return;
     }
     setAvatarError(null);
-    setAvatarFile(file);
-    setAvatarRemoved(false);
+    setCropSource(file);
   };
 
   const removeAvatar = () => {
@@ -350,6 +356,21 @@ export function PersonaFormModal({
           )}
         </div>
       </form>
+
+      {cropSource && (
+        // 叠层而不是内嵌：Modal 栈负责焦点进出，Esc / 遮罩只关裁切，表单内容原样保留
+        <ImageCropperDialog
+          source={cropSource}
+          title={t('common.cropper.title')}
+          onCancel={() => setCropSource(null)}
+          onReselect={() => fileRef.current?.click()}
+          onConfirm={(result) => {
+            setAvatarFile(cropResultToFile(result, 'avatar'));
+            setAvatarRemoved(false);
+            setCropSource(null);
+          }}
+        />
+      )}
     </Modal>
   );
 }

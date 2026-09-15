@@ -47,7 +47,20 @@
     "refresh": "Refresh",
     "unsaved": "Unsaved",
     "enabled": "Enabled",
-    "none": "None"
+    "none": "None",
+    "cropper": {
+      "title": "Crop image",
+      "viewport": "Crop area",
+      "viewportRole": "Image cropper",
+      "hint": "Drag to move. Scroll or pinch to zoom.",
+      "zoom": "Zoom",
+      "zoomIn": "Zoom in",
+      "zoomOut": "Zoom out",
+      "reselect": "Choose another",
+      "confirm": "Use this",
+      "loadFailed": "Couldn't read this image.",
+      "exportFailed": "Couldn't crop the image. Try again."
+    }
   },
   "settings": {
     "title": "Settings",
@@ -178,8 +191,8 @@
       "avatarUpload": "Upload avatar",
       "avatarChange": "Change",
       "avatarRemove": "Remove",
-      "avatarHint": "PNG, JPEG or WebP, up to 5 MB",
-      "avatarTooLarge": "The image is larger than 5 MB.",
+      "avatarHint": "PNG, JPEG or WebP, up to 20 MB",
+      "avatarTooLarge": "The image is larger than 20 MB.",
       "avatarBadType": "Only PNG, JPEG or WebP.",
       "position": "Where the description goes",
       "positions": {

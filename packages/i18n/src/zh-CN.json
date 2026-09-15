@@ -47,7 +47,20 @@
     "refresh": "刷新",
     "unsaved": "未保存",
     "enabled": "已启用",
-    "none": "无"
+    "none": "无",
+    "cropper": {
+      "title": "裁切图片",
+      "viewport": "裁切区域",
+      "viewportRole": "图片裁切",
+      "hint": "拖动调整位置，滚轮或双指缩放",
+      "zoom": "缩放",
+      "zoomIn": "放大",
+      "zoomOut": "缩小",
+      "reselect": "重新选择",
+      "confirm": "使用这张",
+      "loadFailed": "读不了这张图片。",
+      "exportFailed": "裁切失败，请重试。"
+    }
   },
   "settings": {
     "title": "设置",
@@ -178,8 +191,8 @@
       "avatarUpload": "上传头像",
       "avatarChange": "更换",
       "avatarRemove": "移除",
-      "avatarHint": "PNG、JPEG、WebP，不超过 5MB",
-      "avatarTooLarge": "图片超过 5MB。",
+      "avatarHint": "PNG、JPEG、WebP，不超过 20MB",
+      "avatarTooLarge": "图片超过 20MB。",
       "avatarBadType": "只支持 PNG、JPEG、WebP。",
       "position": "描述放在哪",
       "positions": {
