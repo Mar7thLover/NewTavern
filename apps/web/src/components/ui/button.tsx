@@ -30,5 +30,8 @@ export interface ButtonProps
   extends ButtonHTMLAttributes<HTMLButtonElement>, VariantProps<typeof buttonVariants> {}
 
 export function Button({ className, variant, size, ...props }: ButtonProps) {
-  return <button className={cn(buttonVariants({ variant, size }), className)} {...props} />;
+  // 默认 type="button"：放进 <form> 里也不会误触提交（需要提交时显式传 type="submit"）
+  return (
+    <button type="button" className={cn(buttonVariants({ variant, size }), className)} {...props} />
+  );
 }
