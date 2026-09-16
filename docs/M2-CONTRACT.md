@@ -173,7 +173,7 @@ export const DEFAULT_PRESET: AssemblePreset; // format:'native'
    - `worldInfoBefore` / `worldInfoAfter` / `enhanceDefinitions`（M3 前不产生段）。
 4. 非标记 prompt：`content` 宏替换后为空则跳过；role 缺省 system；`injection_position===1` → 深度注入（同上），否则依次进 system 槽（`anchor.slot='system'`，`order` 递增）。
 5. 覆盖：`preferCharacterPrompt` 且 prompt 无 `forbid_overrides`：identifier `main` 且 `card.system_prompt` 非空 → 内容替换为卡的 `system_prompt`；identifier `jailbreak`（或 `nsfw`? 否，仅 `jailbreak`）且 `card.post_history_instructions` 非空 → 替换。替换后仍做宏替换（卡内 `{{original}}` 替换为预设原内容）。
-6. `squash_system_messages===true`：相邻 system 段（仅 system 槽内、且都不是深度注入）合并为一段，`\n` 连接（ST 用 `\n`）；`id` 取首段。
+6. `squash_system_messages===true`：IR **不合并**，只把开关写进 `meta.squashSystemMessages`；合并由渲染层（providers `irToChatMessages`）在最终消息列表上做，规则见 §9 第 4 条。
 7. 采样：`temperature top_p top_k min_p frequency_penalty presence_penalty repetition_penalty openai_max_tokens→maxTokens seed`，从 `preset.sampling ?? preset.data` 取。
 8. 历史裁剪：`tokenEstimate`（heuristic）超过 `maxContextTokens - maxTokens` 时，从最早的历史段开始丢弃（不丢非历史段与最后一条 user），`meta.warnings` 记一条。
 9. `stability`：preset/character/persona/global_system 段 `static`；history 段 `history`；最后 user `turn`；深度注入 `turn`。
@@ -210,7 +210,7 @@ native 与 st-openai 走同一展开逻辑（native 只是子集）。
 1. **`<START>` 分块前后各有一条分隔消息**。ST `populateDialogueExamples` 在**每个**示例块之前插入一条独立的 system 消息，内容取 `new_example_chat_prompt`（默认 **`[Example Chat]`**，不是 `[Start a new Chat]`），且不是拼在块内容前面。段 id：`preset:newExampleChat`(`#n`) + `character:mes_example`(`#n`)。
 2. **历史最前有 `[Start a new Chat]`**。ST `populateChatHistory` 末尾 `insertAtStart(newMainChat)`，内容取 `new_chat_prompt`（默认 `[Start a new Chat]`）。§2.1 完全没提。实现：段 id `preset:newMainChat`，`origin.kind='preset'`、`ref='new_chat_prompt'`、`stability='static'`，放在历史段之前；`new_chat_prompt` 为空串则不产生段（`DEFAULT_PRESET` 即设为空串）。
 3. **同 depth 内还要按 role 分组**。ST `populationInjectionPrompts` 的最终时序是 `injection_order 升序 → role（assistant, user, system）→ prompts 数组原顺序`；§2.1-3 漏了中间的 role 一级。另外 ST 会把同 (depth, order, role) 的多条注入用 `\n` **合并为一条消息**，实现为保留 IR 粒度仍每条一段（渲染层合并同角色即可），M3 黄金测试时需注意这一差异。
-4. **`squash_system_messages` 作用于整条消息列表**，不是「仅 system 槽」。ST 在 `ChatCompletion.squashSystemMessages` 里对 flatten 后的全部消息做，历史里的 system 节点与深度注入同样会被卷入；排除条件是 `identifier ∈ {newMainChat, newChat, groupNudge}` 或消息带 `name`。实现照此，并额外要求两段都是纯文本段（含 image/document/reasoning_opaque 的段不合并）。
+4. **`squash_system_messages` 作用于整条消息列表**，不是「仅 system 槽」。ST 在 `ChatCompletion.squashSystemMessages` 里对 flatten 后的全部消息做，历史里的 system 节点与深度注入同样会被卷入；排除条件是 `identifier ∈ {newMainChat, newChat, groupNudge}` 或消息带 `name`。实现照此，并额外要求两段都是纯文本段（含 image/document/reasoning_opaque 的段不合并）。**实现位置在渲染层**（2026-09-15 起）：`assemblePrompt` 不再合并段——合并会把世界书、角色卡字段并进相邻的预设段，检查器就看不到它们的来源了；IR 只写 `meta.squashSystemMessages`，providers `irToChatMessages` 在最终消息列表上按上述规则合并（core `isSquashableSegment`），且不跨 `cachePlan` 断点。
 5. **`{{trim}}` 只吃换行不吃空格**。ST 正则 `(?:\r?\n)*{{trim}}(?:\r?\n)*`；§2.2「删除两侧空白与换行」不准确。
 6. **`{{original}}` 在 env 最前且只展开一次**。ST `substituteParamsLegacy` 先把 `original` 放进 env，所以被插回的预设原文里的 `{{char}}` 等还会继续展开；同一段文本里第二次及以后的 `{{original}}` 替换为空串。
 7. **历史消息文本也会走宏替换**。ST `populateChatHistory` 对每条历史消息调 `promptManager.preparePrompt(prompt)`（即 `substituteParams`）。§2.1 未提，实现照 ST 执行。

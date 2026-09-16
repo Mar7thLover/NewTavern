@@ -1,4 +1,10 @@
-import type { Part, PromptIR, Role, Segment } from '@newtavern/core';
+import {
+  isSquashableSegment,
+  type Part,
+  type PromptIR,
+  type Role,
+  type Segment,
+} from '@newtavern/core';
 
 /**
  * PromptIR.segments → 扁平消息列表。各适配器共用，之后再各自渲染为原生 content 块。
@@ -101,6 +107,42 @@ export function mergeAdjacentSameRole(
   return out;
 }
 
+/** ST `ChatCompletion.squashSystemMessages` 用的连接符 */
+const SQUASH_JOINER = '\n';
+
+/**
+ * ST `ChatCompletion.squashSystemMessages`：相邻的、可合并的 system 消息用 `\n` 连成一条。
+ * 作用于**最终消息列表**（历史里的 system 节点与深度注入同样会被卷入），先于同角色合并。
+ * `squashable[i]` 由 core 的 `isSquashableSegment` 按段算好（system、无 name、单文本 part、非分隔段）。
+ * 带缓存断点的消息是前缀的边界：后一条不并进来，免得断点位置被合并改掉。
+ */
+export function squashSystemMessages(
+  messages: readonly ChatMessage[],
+  squashable: readonly boolean[],
+): ChatMessage[] {
+  const out: ChatMessage[] = [];
+  let prevSquashable = false;
+  messages.forEach((msg, index) => {
+    const prev = out[out.length - 1];
+    const canSquash = squashable[index] === true;
+    if (prev && prevSquashable && canSquash && !prev.cacheBreakpoint) {
+      appendParts(prev.parts, msg.parts, SQUASH_JOINER);
+      prev.segmentIds.push(...msg.segmentIds);
+      if (msg.cacheBreakpoint) prev.cacheBreakpoint = true;
+      return;
+    }
+    out.push({
+      role: msg.role,
+      parts: [...msg.parts],
+      segmentIds: [...msg.segmentIds],
+      ...(msg.name === undefined ? {} : { name: msg.name }),
+      ...(msg.cacheBreakpoint ? { cacheBreakpoint: true } : {}),
+    });
+    prevSquashable = canSquash;
+  });
+  return out;
+}
+
 function isTopSystem(seg: Segment): boolean {
   return seg.role === 'system' && seg.anchor.slot === 'system';
 }
@@ -177,6 +219,10 @@ export function irToChatMessages(
     };
   });
 
+  // 预设 squash_system_messages：IR 保留段粒度，合并在这里做（ST 也是在最终消息列表上做）
+  if (ir.meta.squashSystemMessages === true) {
+    messages = squashSystemMessages(messages, bodySegments.map(isSquashableSegment));
+  }
   if (mergeSameRole) messages = mergeAdjacentSameRole(messages, joiner);
 
   // 2. 末尾必须是 user

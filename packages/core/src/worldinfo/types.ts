@@ -60,6 +60,12 @@ export interface WIEntry {
   preventRecursion?: boolean;
   /** boolean 或递归层级数（ST 1.12.4+ 允许数字） */
   delayUntilRecursion?: boolean | number;
+  /**
+   * CCv3 `@@is_greeting <n>`：该条目不是世界书注入，而是角色的第 n 条开场白。
+   * 无参数时为 0。带此字段的条目由 `scanWorldInfo` 直接拒绝（reason `greeting`），
+   * 改由 `collectBookOpeners` 取出，见 `openers.ts`。
+   */
+  isGreeting?: number;
   ignoreBudget?: boolean;
   /** ST 1.18 的 checkWorldInfo 不读此字段（向量条目由向量扩展外部激活），引擎仅透传供检查器展示 */
   vectorized?: boolean;
@@ -200,7 +206,8 @@ export type WIRejectReason =
   | 'probability'
   | 'budget'
   | 'group-lost'
-  | 'empty-content';
+  | 'empty-content'
+  | 'greeting';
 
 export interface WIScanResult {
   /** 最终激活集合（已过预算、组、概率），按 order 降序 = ST 构建提示词时的遍历顺序 */

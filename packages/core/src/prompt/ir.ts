@@ -91,5 +91,27 @@ export interface PromptIR {
     activations: WIActivationSummary[];
     warnings: string[];
     tokenEstimate: number;
+    /**
+     * 预设 `squash_system_messages`。IR **保留段粒度**（检查器要看得到每一段的来源），
+     * 真正的合并由渲染层在最终消息列表上做（providers `irToChatMessages`），
+     * 与 ST 在 `ChatCompletion.squashSystemMessages` 里合并的时机一致。
+     */
+    squashSystemMessages?: boolean;
   };
+}
+
+/** ST `squashSystemMessages` 的 excludeList（newMainChat / newChat / groupNudge）对应的段 ref */
+export const SQUASH_EXCLUDED_REFS: ReadonlySet<string> = new Set([
+  'new_chat_prompt',
+  'new_example_chat_prompt',
+]);
+
+/**
+ * 该段能否参与 `squash_system_messages` 合并：system 角色、无 name、单个文本 part、
+ * 且不是分隔段。带 image / document / reasoning_opaque 的段不合并。
+ */
+export function isSquashableSegment(segment: Segment): boolean {
+  if (segment.role !== 'system' || segment.name !== undefined) return false;
+  if (SQUASH_EXCLUDED_REFS.has(segment.origin.ref ?? '')) return false;
+  return segment.parts.length === 1 && segment.parts[0]?.type === 'text';
 }

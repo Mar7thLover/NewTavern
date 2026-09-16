@@ -229,6 +229,27 @@ describe('layoutCacheAware', () => {
     expect(result.report.warnings.some((w) => w.includes('易变宏'))).toBe(true);
   });
 
+  it('规则 4 只把被降级的段标成 moved：被动前移的 static 段不报', () => {
+    const segments = [
+      seg({ id: 'preset:a', anchor: { slot: 'system', order: 0 } }),
+      seg({
+        id: 'authors_note',
+        origin: { kind: 'authors_note' },
+        anchor: { slot: 'system', order: 1 },
+        stability: 'session',
+      }),
+      seg({ id: 'preset:b', anchor: { slot: 'system', order: 2 } }),
+      history('h1', 0, true),
+    ];
+    const result = layoutCacheAware(segments, ctx());
+    // 顺序确实变了：session 段被排到两个 static 段之后
+    expect(ids(result.segments)).toEqual(['preset:a', 'preset:b', 'authors_note', 'history:h1']);
+    // 但只有被降级的那一段算「已移动」
+    expect(
+      result.report.moves.filter((move) => move.kind === 'moved').map((m) => m.segmentId),
+    ).toEqual(['authors_note']);
+  });
+
   it('规则 4：session 层排到 static 之后、历史之前', () => {
     const result = layoutCacheAware(sample(), ctx());
     const list = ids(result.segments);

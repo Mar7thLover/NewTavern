@@ -7,4 +7,5 @@ export * from './tokenizer.js';
 export * from './tree/path.js';
 export * from './variables/transaction.js';
 export * from './worldinfo/engine.js';
+export * from './worldinfo/openers.js';
 export * from './worldinfo/types.js';

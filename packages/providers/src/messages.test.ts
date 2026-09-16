@@ -241,3 +241,99 @@ describe('mergeAdjacentSameRole', () => {
     ]);
   });
 });
+
+// ───────────── squash_system_messages（ST ChatCompletion.squashSystemMessages） ─────────────
+
+describe('irToChatMessages squash_system_messages', () => {
+  /** strict + meta 开关：只看 squash，不叠加同角色合并 */
+  const squashed = (segments: Segment[], breakpoints: number[] = []) => {
+    const base = ir(segments, breakpoints, 'strict');
+    return irToChatMessages({ ...base, meta: { ...base.meta, squashSystemMessages: true } })
+      .messages;
+  };
+
+  it('相邻 system 段用 \n 连成一条、segmentIds 累加；user 段与带 name 的段打断', () => {
+    const messages = squashed([
+      seg('s1', 'system', 'A'),
+      seg('s2', 'system', 'B'),
+      seg('ex', 'system', 'Example', 'system', 0, 'example_user'),
+      seg('s3', 'system', 'C'),
+      seg('h1', 'user', 'hi', 'history'),
+      seg('i1', 'system', '注入 1', 'history'),
+      seg('i2', 'system', '注入 2', 'history'),
+    ]);
+    expect(messages).toEqual([
+      { role: 'system', parts: [{ type: 'text', text: 'A\nB' }], segmentIds: ['s1', 's2'] },
+      {
+        role: 'system',
+        name: 'example_user',
+        parts: [{ type: 'text', text: 'Example' }],
+        segmentIds: ['ex'],
+      },
+      { role: 'system', parts: [{ type: 'text', text: 'C' }], segmentIds: ['s3'] },
+      { role: 'user', parts: [{ type: 'text', text: 'hi' }], segmentIds: ['h1'] },
+      {
+        role: 'system',
+        parts: [{ type: 'text', text: '注入 1\n注入 2' }],
+        segmentIds: ['i1', 'i2'],
+      },
+    ]);
+  });
+
+  it('分隔段（new_chat_prompt / new_example_chat_prompt）不参与合并', () => {
+    const separator: Segment = {
+      ...seg('sep', 'system', '[Start a new Chat]'),
+      origin: { kind: 'preset', ref: 'new_chat_prompt' },
+    };
+    const messages = squashed([seg('s1', 'system', 'A'), separator, seg('s2', 'system', 'B')]);
+    expect(messages.map((m) => partsToText(m.parts))).toEqual(['A', '[Start a new Chat]', 'B']);
+  });
+
+  it('带非文本 part 的段不合并', () => {
+    const withImage: Segment = {
+      ...seg('img', 'system', '看图'),
+      parts: [
+        { type: 'text', text: '看图' },
+        { type: 'image', assetId: 'a1', mime: 'image/png' },
+      ],
+    };
+    const messages = squashed([seg('s1', 'system', 'A'), withImage, seg('s2', 'system', 'B')]);
+    expect(messages.map((m) => m.segmentIds)).toEqual([['s1'], ['img'], ['s2']]);
+  });
+
+  it('不跨缓存断点合并：断点所在消息是前缀边界', () => {
+    const messages = squashed(
+      [seg('s1', 'system', 'A'), seg('s2', 'system', 'B'), seg('s3', 'system', 'C')],
+      [1],
+    );
+    expect(messages.map((m) => partsToText(m.parts))).toEqual(['A\nB', 'C']);
+    expect(messages[0]?.cacheBreakpoint).toBe(true);
+    expect(messages[1]?.cacheBreakpoint).toBeUndefined();
+  });
+
+  it('meta 没开时不合并（strict 也不做同角色合并）', () => {
+    const { messages } = irToChatMessages(
+      ir([seg('s1', 'system', 'A'), seg('s2', 'system', 'B')], [], 'strict'),
+    );
+    expect(messages).toHaveLength(2);
+  });
+
+  it("systemPlacement='top'：抽走的顶层 system 块不受影响，正文里的仍然合并", () => {
+    const base = ir(
+      [
+        seg('s1', 'system', 'A'),
+        seg('h1', 'user', 'hi', 'history'),
+        seg('i1', 'system', '注入 1', 'history'),
+        seg('i2', 'system', '注入 2', 'history'),
+      ],
+      [],
+      'strict',
+    );
+    const { systemBlocks, messages } = irToChatMessages(
+      { ...base, meta: { ...base.meta, squashSystemMessages: true } },
+      { systemPlacement: 'top' },
+    );
+    expect(systemBlocks.map((b) => b.segmentIds)).toEqual([['s1']]);
+    expect(messages.map((m) => m.segmentIds)).toEqual([['h1'], ['i1', 'i2']]);
+  });
+});

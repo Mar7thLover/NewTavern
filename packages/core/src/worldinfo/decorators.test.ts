@@ -129,10 +129,20 @@ describe('装饰器参与激活判定', () => {
 
   it('未实现的装饰器只产生警告', () => {
     const books = [
-      makeBook([makeEntry({ id: 'e1', constant: true, content: '@@is_greeting 1\nx' })]),
+      makeBook([makeEntry({ id: 'e1', constant: true, content: '@@ignore_on_max_context\nx' })]),
     ];
     const result = runScan({ books });
     expect(activatedIds(result)).toEqual(['e1']);
-    expect(result.warnings).toEqual(['条目 e1 的装饰器 @@is_greeting 未实现，已忽略']);
+    expect(result.warnings).toEqual(['条目 e1 的装饰器 @@ignore_on_max_context 未实现，已忽略']);
+  });
+
+  it('@@is_greeting 的条目是开场白，不注入世界书', () => {
+    const books = [
+      makeBook([makeEntry({ id: 'e1', constant: true, content: '@@is_greeting 1\nx' })]),
+    ];
+    const result = runScan({ books });
+    expect(activatedIds(result)).toEqual([]);
+    expect(rejectionOf(result, 'e1')).toEqual(['greeting']);
+    expect(result.warnings).toEqual([]);
   });
 });

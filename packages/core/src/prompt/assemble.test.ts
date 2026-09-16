@@ -494,39 +494,15 @@ describe('assemblePrompt 角色卡覆盖', () => {
 // ───────────── squash ─────────────
 
 describe('assemblePrompt squash_system_messages', () => {
-  it('false 时不合并', () => {
-    const ir = assembleIr(baseInput({ preset: stPreset({ squash_system_messages: false }) }));
-    expect(ir.segments).toHaveLength(19);
-  });
+  it('IR 不合并段：开关只写进 meta，合并交给渲染层（providers irToChatMessages）', () => {
+    const off = assembleIr(baseInput({ preset: stPreset({ squash_system_messages: false }) }));
+    expect(off.segments).toHaveLength(19);
+    expect(off.meta.squashSystemMessages).toBe(false);
 
-  it('true 时合并相邻 system 段（\\n 连接，id 取首段），分隔段与带 name 的段不参与', () => {
-    const ir = assembleIr(baseInput({ preset: stPreset({ squash_system_messages: true }) }));
-    expect(ids(ir)).toEqual([
-      'preset:main',
-      'preset:newExampleChat',
-      'character:mes_example',
-      'character:mes_example#1',
-      'preset:newExampleChat#1',
-      'character:mes_example#2',
-      'character:mes_example#3',
-      'preset:newMainChat',
-      'history:n1',
-      'history:n2',
-      'history:n3',
-      'injection:a1b2-note',
-      'history:n4',
-      'injection:c3d4-style',
-      'preset:jailbreak',
-    ]);
-    expect(textOf(find(ir, 'preset:main'))).toBe(
-      [
-        "Write Seraphine's next reply.",
-        'A Seraphine of few words.',
-        "[Seraphine's personality: stoic]",
-        '[Circumstances: A rainy rooftop.]',
-        'Ren is a tired detective.',
-      ].join('\n'),
-    );
+    // 开了也保留 19 段：检查器要看得到世界书 / 角色卡字段各自的来源
+    const on = assembleIr(baseInput({ preset: stPreset({ squash_system_messages: true }) }));
+    expect(ids(on)).toEqual(ids(off));
+    expect(on.meta.squashSystemMessages).toBe(true);
   });
 });
 

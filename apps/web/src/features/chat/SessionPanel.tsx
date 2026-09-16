@@ -118,7 +118,8 @@ export function SessionPanel({ chat, path }: SessionPanelProps) {
   const effectiveConnectionId =
     overrides.connectionId ?? generationDefault.data?.connectionId ?? '';
   const effectiveModel = overrides.model ?? generationDefault.data?.model ?? '';
-  const layoutMode: LayoutMode = overrides.layoutMode ?? 'cache-aware';
+  // 缺省与服务端 resolveGenerationContext 一致（strict）：面板显示的就是实际发出去的布局
+  const layoutMode: LayoutMode = overrides.layoutMode ?? 'strict';
 
   const patchOverrides = (partial: Partial<ChatOverrides>) =>
     patchChat.mutate({ id: chat.id, overrides: { ...overrides, ...partial } });

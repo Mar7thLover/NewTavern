@@ -133,13 +133,13 @@
       "emptyHint": "Import SillyTavern World Info files (.json).",
       "entryCount": "{{total}} entries",
       "noEntries": "This lorebook has no entries.",
-      "untitled": "(untitled)",
+      "untitled": "Untitled entry",
       "unknownPosition": "Position {{value}}",
       "deleteTitle": "Delete lorebook?",
       "deleteMessage": "“{{name}}” and all of its entries will be permanently deleted. This cannot be undone.",
       "scopes": {
         "global": "Global",
-        "char": "Character",
+        "char": "Embedded in card",
         "chat": "Chat"
       },
       "status": {
@@ -147,24 +147,133 @@
         "active": "Keyword-triggered",
         "disabled": "Disabled"
       },
-      "columns": {
-        "status": "Status",
-        "title": "Title / keys",
+      "positions": {
+        "0": "Before Char Defs",
+        "1": "After Char Defs",
+        "2": "Before AN",
+        "3": "After AN",
+        "4": "at Depth @D",
+        "5": "Before EM",
+        "6": "After EM",
+        "7": "Outlet"
+      },
+      "create": "New lorebook",
+      "back": "Lorebooks",
+      "name": "Name",
+      "search": "Search title, keywords, content",
+      "searchCount": "{{count}} matches",
+      "sortDisabled": "Clear the search to reorder",
+      "addEntry": "Add entry",
+      "noMatches": "No matching entries.",
+      "showMore": "Show more ({{count}} left)",
+      "positionShort": {
+        "0": "↑Char",
+        "1": "↓Char",
+        "2": "↑AN",
+        "3": "↓AN",
+        "4": "@D{{depth}}",
+        "5": "↑EM",
+        "6": "↓EM",
+        "7": "Outlet"
+      },
+      "logic": {
+        "0": "AND ANY",
+        "1": "NOT ALL",
+        "2": "NOT ANY",
+        "3": "AND ALL"
+      },
+      "strategy": {
+        "constant": "Constant",
+        "normal": "Normal",
+        "vectorized": "Vectorized"
+      },
+      "roles": {
+        "system": "System",
+        "user": "User",
+        "assistant": "AI"
+      },
+      "tri": {
+        "global": "Use global",
+        "yes": "Yes",
+        "no": "No"
+      },
+      "entry": {
+        "toggle": "Enable \"{{name}}\"",
+        "moveUp": "Move up",
+        "moveDown": "Move down",
+        "orderMeta": "Order {{value}}",
+        "noKeys": "No keywords",
+        "title": "Title/Memo",
+        "keys": "Primary Keywords",
+        "keysPlaceholder": "Press Enter or comma to add",
+        "secondaryKeys": "Optional Filter",
+        "secondaryPlaceholder": "Ignored if empty",
+        "removeKey": "Remove \"{{key}}\"",
+        "logic": "Logic",
         "content": "Content",
+        "chars": "{{count}} chars",
+        "strategy": "Strategy",
         "position": "Position",
         "depth": "Depth",
-        "probability": "Probability"
+        "role": "Role",
+        "outletName": "Outlet Name",
+        "order": "Order",
+        "probability": "Trigger %",
+        "useProbability": "Use Probability",
+        "advanced": "Advanced",
+        "delete": "Delete entry",
+        "deleteTitle": "Delete entry?",
+        "deleteMessage": "\"{{name}}\" will be removed from the lorebook when you save."
       },
-      "positions": {
-        "0": "Before character",
-        "1": "After character",
-        "2": "Before author's note",
-        "3": "After author's note",
-        "4": "At depth",
-        "5": "Before examples",
-        "6": "After examples",
-        "7": "Outlet"
-      }
+      "advanced": {
+        "group": "Inclusion Group",
+        "groupHint": "Only one entry with the same label will be activated. Separate groups with commas.",
+        "groupOverride": "Prioritize",
+        "groupOverrideHint": "Prefer this entry in its group; among several, the highest Order wins.",
+        "groupWeight": "Group Weight",
+        "groupWeightHint": "Relative likelihood of activation within the group.",
+        "scanDepth": "Scan Depth",
+        "useGlobal": "Use global setting",
+        "caseSensitive": "Case-Sensitive",
+        "matchWholeWords": "Whole Words",
+        "useGroupScoring": "Group Scoring",
+        "automationId": "Automation ID",
+        "automationIdHint": "Can be used to automatically activate Quick Replies.",
+        "none": "(None)",
+        "sticky": "Sticky",
+        "stickyHint": "Stays active for N messages after being triggered.",
+        "stickyPlaceholder": "Non-sticky",
+        "cooldown": "Cooldown",
+        "cooldownHint": "Can't be activated for N messages after being triggered.",
+        "cooldownPlaceholder": "No cooldown",
+        "delay": "Delay",
+        "delayHint": "Can't be activated until the chat has N messages.",
+        "delayPlaceholder": "No delay",
+        "excludeRecursion": "Non-recursable",
+        "excludeRecursionHint": "Will not be recursively activated by other entries.",
+        "preventRecursion": "Prevent further recursion",
+        "preventRecursionHint": "Will not activate other entries recursively.",
+        "delayUntilRecursion": "Delay until recursion",
+        "delayUntilRecursionHint": "Can only be activated on recursive checking.",
+        "recursionLevel": "Recursion Level",
+        "ignoreBudget": "Ignore budget",
+        "ignoreBudgetHint": "Included regardless of the budget, if all other checks pass."
+      },
+      "editor": {
+        "dirty": "Unsaved changes",
+        "clean": "No unsaved changes",
+        "saved": "Saved",
+        "saving": "Saving…",
+        "discard": "Discard changes",
+        "saveFailed": "Save failed: {{message}}",
+        "leaveTitle": "Leave the editor?",
+        "leaveMessage": "Unsaved changes will be lost.",
+        "leave": "Leave"
+      },
+      "globalOn": "Active globally",
+      "globalToggle": "Enable “{{name}}” globally",
+      "globalToggleShort": "Global",
+      "loadHint": "A book applies when switched on globally here, attached to a chat in the session panel, or embedded in a character card."
     },
     "personas": {
       "create": "New persona",
@@ -235,14 +344,16 @@
       "deleteMessage": "“{{name}}” and all of its messages will be permanently deleted. This cannot be undone."
     },
     "start": {
-      "title": "Pick a character to start",
-      "hint": "Click a card to open a new chat, or start from blank.",
+      "title": "Start a chat",
+      "hint": "Pick a card to start a chat, or start blank.",
       "blank": "Blank chat",
-      "noCharactersTitle": "No characters yet",
-      "noCharactersHint": "Import a character card in the library first, then come back.",
       "personaLabel": "Persona",
       "personaOption": "Start as {{name}}",
-      "personaNone": "No persona"
+      "personaNone": "No persona",
+      "lorebookKicker": "Lorebook · {{count}} opening(s)",
+      "emptyTitle": "Nothing to open with yet",
+      "emptyHint": "Import a character card, or import a lorebook.",
+      "lorebookKickerPlain": "Lorebook"
     },
     "composer": {
       "placeholder": "Say something…",
@@ -521,7 +632,8 @@
       "empty": "No segments.",
       "tokens": "~{{total}} tok",
       "depth": "Depth {{depth}}",
-      "system": "System slot"
+      "system": "System slot",
+      "squashNote": "This preset squashes system messages: adjacent system segments are sent as one message. See the Request tab for the merged form."
     },
     "origins": {
       "preset": "Preset",
@@ -594,7 +706,8 @@
         "probability": "Probability roll failed",
         "budget": "Over budget",
         "group-lost": "Lost group draw",
-        "empty-content": "Empty content"
+        "empty-content": "Empty content",
+        "greeting": "Greeting entry"
       }
     },
     "request": {

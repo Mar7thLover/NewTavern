@@ -3,6 +3,7 @@ import { createBrowserRouter, RouterProvider } from 'react-router';
 import { PlaceholderPage } from '../components/PlaceholderPage';
 import { ChatPage } from '../features/chat/ChatPage';
 import { CharactersPage } from '../features/library/CharactersPage';
+import { LorebookEditorPage } from '../features/library/LorebookEditorPage';
 import { LorebooksPage } from '../features/library/LorebooksPage';
 import { PersonasPage } from '../features/library/PersonasPage';
 import { PresetEditorPage } from '../features/library/PresetEditorPage';
@@ -20,6 +21,7 @@ const router = createBrowserRouter([
       { path: '/presets', element: <PresetsPage /> },
       { path: '/presets/:id', element: <PresetEditorPage /> },
       { path: '/lorebooks', element: <LorebooksPage /> },
+      { path: '/lorebooks/:id', element: <LorebookEditorPage /> },
       { path: '/personas', element: <PersonasPage /> },
       { path: '/studio', element: <PlaceholderPage titleKey="nav.studio" /> },
       { path: '/writing', element: <PlaceholderPage titleKey="nav.writing" /> },

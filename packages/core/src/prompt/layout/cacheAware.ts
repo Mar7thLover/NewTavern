@@ -95,19 +95,22 @@ export function layoutCacheAware(segments: readonly Segment[], ctx: LayoutContex
       const segment = sorted[index];
       if (segment !== undefined) working[position] = segment;
     });
-    for (let i = 0; i < movable.length; i += 1) {
-      const before = movable[i];
-      const after = sorted[i];
-      if (before && after && before.id !== after.id) {
-        moves.push({
-          segmentId: after.id,
-          kind: 'moved',
-          from: after.anchor,
-          to: after.anchor,
-          reason: `按稳定性分层重排：${after.stability} 层移到 static 层之后`,
-        });
-      }
-    }
+    /**
+     * 只报「被排到后面」的段。排到前面的（比如被降级的 session 段让出位置后往前补的
+     * static 段）相对同层的顺序并没有变，是被动补位，标成「已移动」只会是噪音。
+     */
+    const oldIndexById = new Map(movable.map((segment, index) => [segment.id, index]));
+    sorted.forEach((segment, newIndex) => {
+      const oldIndex = oldIndexById.get(segment.id);
+      if (oldIndex === undefined || newIndex <= oldIndex) return;
+      moves.push({
+        segmentId: segment.id,
+        kind: 'moved',
+        from: segment.anchor,
+        to: segment.anchor,
+        reason: `按稳定性分层重排：${segment.stability} 层排到 static 层之后，以保住 static 前缀的缓存`,
+      });
+    });
   }
 
   // ── 规则 1：static 区的触发式 WI 合并后移到尾部

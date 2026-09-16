@@ -133,13 +133,13 @@
       "emptyHint": "导入 SillyTavern 世界书文件（.json）。",
       "entryCount": "{{total}} 个条目",
       "noEntries": "这本世界书没有条目。",
-      "untitled": "（无标题）",
+      "untitled": "未命名条目",
       "unknownPosition": "位置 {{value}}",
       "deleteTitle": "删除世界书？",
       "deleteMessage": "将永久删除「{{name}}」及其全部条目，此操作无法撤销。",
       "scopes": {
         "global": "全局",
-        "char": "角色",
+        "char": "角色卡内嵌",
         "chat": "对话"
       },
       "status": {
@@ -147,24 +147,133 @@
         "active": "关键词触发",
         "disabled": "已禁用"
       },
-      "columns": {
-        "status": "状态",
-        "title": "标题 / 关键词",
+      "positions": {
+        "0": "角色定义前",
+        "1": "角色定义后",
+        "2": "作者注释前",
+        "3": "作者注释后",
+        "4": "插入深度 @D",
+        "5": "示例消息前",
+        "6": "示例消息后",
+        "7": "锚点"
+      },
+      "create": "新建世界书",
+      "back": "世界书库",
+      "name": "名称",
+      "search": "搜索标题、关键词、正文",
+      "searchCount": "匹配 {{count}} 条",
+      "sortDisabled": "搜索时不能调整顺序",
+      "addEntry": "新增条目",
+      "noMatches": "没有匹配的条目。",
+      "showMore": "继续显示（还剩 {{count}} 条）",
+      "positionShort": {
+        "0": "↑角色",
+        "1": "↓角色",
+        "2": "↑注释",
+        "3": "↓注释",
+        "4": "@D{{depth}}",
+        "5": "↑示例",
+        "6": "↓示例",
+        "7": "锚点"
+      },
+      "logic": {
+        "0": "与任意",
+        "1": "非所有",
+        "2": "非任何",
+        "3": "与所有"
+      },
+      "strategy": {
+        "constant": "常驻",
+        "normal": "关键词触发",
+        "vectorized": "向量化"
+      },
+      "roles": {
+        "system": "系统",
+        "user": "用户",
+        "assistant": "AI"
+      },
+      "tri": {
+        "global": "使用全局",
+        "yes": "是",
+        "no": "否"
+      },
+      "entry": {
+        "toggle": "启用「{{name}}」",
+        "moveUp": "上移",
+        "moveDown": "下移",
+        "orderMeta": "顺序 {{value}}",
+        "noKeys": "无关键词",
+        "title": "标题（备忘）",
+        "keys": "主要关键字",
+        "keysPlaceholder": "输入后按回车或逗号",
+        "secondaryKeys": "可选过滤器",
+        "secondaryPlaceholder": "为空则忽略",
+        "removeKey": "删除「{{key}}」",
+        "logic": "逻辑",
         "content": "内容",
+        "chars": "{{count}} 字",
+        "strategy": "触发策略",
         "position": "插入位置",
         "depth": "深度",
-        "probability": "概率"
+        "role": "消息角色",
+        "outletName": "锚点名称",
+        "order": "顺序",
+        "probability": "触发概率 %",
+        "useProbability": "使用概率",
+        "advanced": "高级",
+        "delete": "删除条目",
+        "deleteTitle": "删除条目？",
+        "deleteMessage": "「{{name}}」会从世界书中移除，保存后生效。"
       },
-      "positions": {
-        "0": "角色定义之前",
-        "1": "角色定义之后",
-        "2": "作者注释之前",
-        "3": "作者注释之后",
-        "4": "指定深度",
-        "5": "示例消息之前",
-        "6": "示例消息之后",
-        "7": "出口（Outlet）"
-      }
+      "advanced": {
+        "group": "包含组",
+        "groupHint": "同组条目同时触发时只激活一条，多个组用逗号分隔。",
+        "groupOverride": "确定优先级",
+        "groupOverrideHint": "同组里优先选这条；多条优先时取顺序最高的。",
+        "groupWeight": "组权重",
+        "groupWeightHint": "组内被选中的相对概率。",
+        "scanDepth": "扫描深度",
+        "useGlobal": "使用全局设置",
+        "caseSensitive": "区分大小写",
+        "matchWholeWords": "完整单词",
+        "useGroupScoring": "组评分",
+        "automationId": "自动化 ID",
+        "automationIdHint": "可用于自动激活快速回复。",
+        "none": "（无）",
+        "sticky": "黏性",
+        "stickyHint": "触发后保持激活 N 条消息。",
+        "stickyPlaceholder": "无黏性",
+        "cooldown": "冷却",
+        "cooldownHint": "触发后 N 条消息内不能再激活。",
+        "cooldownPlaceholder": "无冷却",
+        "delay": "延迟",
+        "delayHint": "聊天里有 N 条消息后才能激活。",
+        "delayPlaceholder": "无延迟",
+        "excludeRecursion": "不可递归",
+        "excludeRecursionHint": "不会被其他条目递归激活。",
+        "preventRecursion": "防止进一步递归",
+        "preventRecursionHint": "不会递归激活其他条目。",
+        "delayUntilRecursion": "延迟到递归",
+        "delayUntilRecursionHint": "只在递归扫描时才能激活。",
+        "recursionLevel": "递归等级",
+        "ignoreBudget": "忽略预算",
+        "ignoreBudgetHint": "其他检查都通过时，不受世界书预算限制。"
+      },
+      "editor": {
+        "dirty": "有未保存的修改",
+        "clean": "没有未保存的修改",
+        "saved": "已保存",
+        "saving": "保存中…",
+        "discard": "放弃修改",
+        "saveFailed": "保存失败：{{message}}",
+        "leaveTitle": "离开编辑器？",
+        "leaveMessage": "未保存的修改会丢失。",
+        "leave": "离开"
+      },
+      "globalOn": "全局生效",
+      "globalToggle": "全局启用「{{name}}」",
+      "globalToggleShort": "全局",
+      "loadHint": "生效方式：在这里打开「全局」，或在会话面板里挂到单个对话；角色卡内嵌的书随卡生效。"
     },
     "personas": {
       "create": "新建档案",
@@ -235,14 +344,16 @@
       "deleteMessage": "将永久删除「{{name}}」及其全部消息，此操作无法撤销。"
     },
     "start": {
-      "title": "选择角色开始",
-      "hint": "点一张角色卡新建对话，或者从空白开始。",
+      "title": "开始一段对话",
+      "hint": "点一张卡新建对话，或者从空白开始。",
       "blank": "空白对话",
-      "noCharactersTitle": "还没有角色",
-      "noCharactersHint": "先到角色库导入角色卡，再回来开始对话。",
       "personaLabel": "用户档案",
       "personaOption": "以「{{name}}」的身份开始",
-      "personaNone": "不使用用户档案"
+      "personaNone": "不使用用户档案",
+      "lorebookKicker": "世界书 · {{count}} 段开场",
+      "emptyTitle": "还没有可以开场的卡",
+      "emptyHint": "到角色库导入角色卡，或到世界书库导入一本世界书。",
+      "lorebookKickerPlain": "世界书"
     },
     "composer": {
       "placeholder": "说点什么…",
@@ -521,7 +632,8 @@
       "empty": "没有段。",
       "tokens": "~{{total}} tok",
       "depth": "深度 {{depth}}",
-      "system": "系统槽"
+      "system": "系统槽",
+      "squashNote": "预设开启了「合并系统消息」：发送时相邻的 system 段会并成一条，合并后的样子见「请求」页。"
     },
     "origins": {
       "preset": "预设",
@@ -594,7 +706,8 @@
         "probability": "概率未命中",
         "budget": "超出预算",
         "group-lost": "分组落选",
-        "empty-content": "内容为空"
+        "empty-content": "内容为空",
+        "greeting": "开场白条目"
       }
     },
     "request": {

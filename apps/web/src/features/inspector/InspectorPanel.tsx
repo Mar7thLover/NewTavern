@@ -48,7 +48,9 @@ export function InspectorPanel({ chat, isGenerating }: InspectorPanelProps) {
     if (!developerMode && tab === 'compare') setTab('segments');
   }, [developerMode, tab]);
 
-  const layoutMode: LayoutMode = chat.overrides?.layoutMode ?? 'cache-aware';
+  // 缺省与服务端 resolveGenerationContext 一致（strict）；生成请求不带 layoutMode，
+  // 检查器若默认按 cache-aware 预览，看到的就不是实际发出去的那份
+  const layoutMode: LayoutMode = chat.overrides?.layoutMode ?? 'strict';
   const connectionId = chat.overrides?.connectionId ?? generationDefault.data?.connectionId ?? null;
   const model = chat.overrides?.model ?? generationDefault.data?.model ?? null;
 
@@ -267,6 +269,12 @@ function InspectorBody({
       <div className="px-3 pt-2 text-[11px] text-ink-2">
         {t('inspector.segments.count', { total: showing.segments.length })}
       </div>
+      {showing.meta.squashSystemMessages && (
+        // 段列表保留每段来源；预设开了合并时发出去的 system 消息会比这里的段少，说清楚免得误会
+        <p className="px-3 pt-1 text-[11px] leading-relaxed text-ink-2">
+          {t('inspector.segments.squashNote')}
+        </p>
+      )}
 
       {view === 'strict' && strictIr ? (
         <SegmentList ir={strictIr} focusId={focusId} />

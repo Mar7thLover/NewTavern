@@ -39,6 +39,7 @@ import {
 } from '../services/generation-context.js';
 import { isGlobalSystemPromptOverride } from '../services/global-system-prompt.js';
 import { buildInspect } from '../services/inspect.js';
+import { loadBookOpeners } from '../services/openers.js';
 import { readDefaultPersonaId } from '../services/personas.js';
 import { readDefaultPresetId } from '../services/presets.js';
 import type { ProviderService } from '../services/providers.js';
@@ -153,44 +154,78 @@ export function createChatsRoutes(db: Db, providers: ProviderService) {
           ? db.select().from(schema.personas).where(eq(schema.personas.id, personaId)).get()
           : undefined;
 
+        // 新建对话页可以只挑一本世界书开场（不带角色卡），这些书同时落成聊天书
+        const lorebookIds = Array.isArray(body.lorebookIds)
+          ? [
+              ...new Set(
+                body.lorebookIds.filter((id): id is string => typeof id === 'string' && id !== ''),
+              ),
+            ]
+          : [];
+        const bookRows = lorebookIds.map((id) =>
+          db.select().from(schema.lorebooks).where(eq(schema.lorebooks.id, id)).get(),
+        );
+        const missingIndex = bookRows.findIndex((row) => row === undefined);
+        if (missingIndex >= 0) {
+          return c.json(
+            { error: 'not_found', message: `世界书不存在：${lorebookIds[missingIndex]}` },
+            404,
+          );
+        }
+        const openers = loadBookOpeners(db, lorebookIds);
+
+        // 标题：显式给的 > 角色名 > 第一本世界书的名字（没有开场白的书同样能开场）
         const title =
           typeof body.title === 'string' && body.title.trim()
             ? body.title.trim()
-            : (characterRow?.name ?? '');
+            : (characterRow?.name ?? bookRows[0]?.name ?? '');
 
         let chat = db
           .insert(schema.chats)
           .values({ title, mode, characterIds, personaId, presetId })
           .returning()
           .get();
+        if (lorebookIds.length > 0) setChatLorebooks(db, chat.id, lorebookIds);
 
-        // first_mes + alternate_greetings → 根节点与它的 swipe 兄弟
+        /**
+         * 开场白 → 根节点与它的 swipe 兄弟。来源按顺序拼：角色卡的
+         * `first_mes` + `alternate_greetings`，再接世界书自带的开场白
+         * （`@@is_greeting` 在前、role=assistant 的 prefill 在后，见 services/openers.ts）。
+         */
         const card = (characterRow?.data ?? {}) as Record<string, unknown>;
+        const charName = characterRow?.name ?? '';
         const firstMes = typeof card.first_mes === 'string' ? card.first_mes : '';
-        if (characterRow && firstMes.trim()) {
-          const charName = characterRow.name;
+        const cardGreetings = characterRow
+          ? [
+              firstMes,
+              ...(Array.isArray(card.alternate_greetings)
+                ? card.alternate_greetings.filter(
+                    (g): g is string => typeof g === 'string' && !!g.trim(),
+                  )
+                : []),
+            ].filter((greeting) => greeting.trim() !== '')
+          : [];
+        const openings = [
+          ...cardGreetings.map((text) => ({ text, name: charName })),
+          // 无角色卡时用书名当说话人，与用书名当标题保持一致
+          ...openers.map((opener) => ({ text: opener.content, name: charName || opener.bookName })),
+        ];
+
+        if (openings.length > 0) {
           const userName = personaRow?.name ?? 'User';
-          const greetings = [
-            firstMes,
-            ...(Array.isArray(card.alternate_greetings)
-              ? card.alternate_greetings.filter(
-                  (g): g is string => typeof g === 'string' && !!g.trim(),
-                )
-              : []),
-          ];
           let rootId: string | null = null;
-          greetings.forEach((greeting, index) => {
+          openings.forEach((opening, index) => {
             const row = insertNode(db, {
               chatId: chat.id,
               parentId: null,
               siblingSeq: index,
               role: 'assistant',
-              name: charName,
+              name: opening.name,
               parts: [
                 {
                   type: 'text',
-                  text: substituteMacros(greeting, {
-                    char: charName,
+                  text: substituteMacros(opening.text, {
+                    char: opening.name,
                     user: userName,
                     persona: personaRow?.description,
                     description:

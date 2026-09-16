@@ -6,12 +6,15 @@ import { Button, buttonVariants } from '../../components/ui/button';
 import { Input, Select } from '../../components/ui/field';
 import {
   assetUrl,
+  lorebookOpenerTotal,
   useCharacters,
   useCreateChat,
   useDefaultPersonaId,
+  useLorebooks,
   usePersonas,
   type CharacterSummary,
   type CreateChatInput,
+  type LorebookSummary,
 } from '../../lib/api';
 import { EmptyState, QueryStatus, errorMessage } from '../library/shared';
 
@@ -19,10 +22,19 @@ export interface StartScreenProps {
   onCreated: (chatId: string) => void;
 }
 
-/** 「选择角色开始」：角色网格 + 空白对话 */
+/**
+ * 一张卡 = 一个开场。角色卡与世界书同在一个网格里，点哪张就用哪张开一段新对话：
+ * 有开场白的书把开场白铺成 swipe，没有的就挂上这本书从空白开始。
+ */
+type StartItem =
+  | { kind: 'character'; id: string; name: string; character: CharacterSummary }
+  | { kind: 'lorebook'; id: string; name: string; book: LorebookSummary };
+
+/** 「选择角色开始」：角色卡与世界书同格 + 空白对话 */
 export function StartScreen({ onCreated }: StartScreenProps) {
   const { t } = useTranslation();
   const characters = useCharacters();
+  const lorebooks = useLorebooks();
   const createChat = useCreateChat();
   const [query, setQuery] = useState('');
   const personas = usePersonas();
@@ -38,20 +50,41 @@ export function StartScreen({ onCreated }: StartScreenProps) {
       : '';
   const selectedPersonaId = personaChoice ?? defaultPersonaId;
 
+  /** 角色卡在前、世界书在后；每本书都能开场，不要求自带开场白 */
+  const items: StartItem[] = [
+    ...(characters.data ?? []).map((character): StartItem => ({
+      kind: 'character',
+      id: character.id,
+      name: character.name,
+      character,
+    })),
+    ...(lorebooks.data ?? []).map((book): StartItem => ({
+      kind: 'lorebook',
+      id: book.id,
+      name: book.name,
+      book,
+    })),
+  ];
   const needle = query.trim().toLowerCase();
-  const list = (characters.data ?? []).filter(
-    (character) => needle === '' || character.name.toLowerCase().includes(needle),
-  );
+  const list = items.filter((item) => needle === '' || item.name.toLowerCase().includes(needle));
 
-  const start = (character: CharacterSummary | null) => {
+  /** item 为 null = 空白对话 */
+  const start = (item: StartItem | null) => {
     if (createChat.isPending) return;
-    const input: CreateChatInput = character ? { characterIds: [character.id] } : {};
+    const input: CreateChatInput =
+      item === null
+        ? {}
+        : item.kind === 'character'
+          ? { characterIds: [item.id] }
+          : { lorebookIds: [item.id] };
     // 档案列表与默认设置都到了才显式传；否则不带字段，由服务端套用默认档案
     if (personaReady) input.personaId = selectedPersonaId || null;
     createChat.mutate(input, {
       onSuccess: (chat) => onCreated(chat.id),
     });
   };
+
+  const ready = characters.data !== undefined && lorebooks.data !== undefined;
 
   return (
     <div
@@ -109,26 +142,35 @@ export function StartScreen({ onCreated }: StartScreenProps) {
             onRetry={() => void characters.refetch()}
           />
 
-          {characters.data &&
-            (characters.data.length === 0 ? (
+          {ready &&
+            (items.length === 0 ? (
+              // 没有角色卡不等于开不了场：世界书同样能开，所以两条路都给出来
               <EmptyState
                 kind="characters"
-                title={t('chat.start.noCharactersTitle')}
-                hint={t('chat.start.noCharactersHint')}
+                title={t('chat.start.emptyTitle')}
+                hint={t('chat.start.emptyHint')}
                 action={
-                  <Link to="/characters" className={buttonVariants({ size: 'lg' })}>
-                    {t('nav.characters')}
-                  </Link>
+                  <div className="flex flex-wrap items-center justify-center gap-2">
+                    <Link to="/characters" className={buttonVariants({ size: 'lg' })}>
+                      {t('nav.characters')}
+                    </Link>
+                    <Link
+                      to="/lorebooks"
+                      className={buttonVariants({ size: 'lg', variant: 'outline' })}
+                    >
+                      {t('nav.lorebooks')}
+                    </Link>
+                  </div>
                 }
               />
             ) : (
               <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-                {list.map((character) => (
-                  <li key={character.id}>
-                    <CharacterCard
-                      character={character}
+                {list.map((item) => (
+                  <li key={`${item.kind}:${item.id}`}>
+                    <StartCard
+                      item={item}
                       disabled={createChat.isPending}
-                      onStart={() => start(character)}
+                      onStart={() => start(item)}
                     />
                   </li>
                 ))}
@@ -141,31 +183,35 @@ export function StartScreen({ onCreated }: StartScreenProps) {
 }
 
 /**
- * 角色卡：1px 线的 3:4 卡片，中间是 28/300 的姓名首字，下方是名字；悬停时线变墨色。
- * 有头像图时图片铺满上部，名字仍在卡片下方。
+ * 开场卡：1px 线的 3:4 卡片，中间是 28/300 的名字首字，下方是名字；悬停时线变墨色。
+ * 角色卡有头像图时图片铺满上部；世界书没有画像，改用一行小字标出它是书。
  */
-function CharacterCard({
-  character,
+function StartCard({
+  item,
   disabled,
   onStart,
 }: {
-  character: CharacterSummary;
+  item: StartItem;
   disabled: boolean;
   onStart: () => void;
 }) {
-  const initial = Array.from(character.name.trim())[0]?.toUpperCase() ?? '?';
+  const { t } = useTranslation();
+  const initial = Array.from(item.name.trim())[0]?.toUpperCase() ?? '?';
+  const avatarAssetId = item.kind === 'character' ? item.character.avatarAssetId : null;
+  const openerCount = item.kind === 'lorebook' ? lorebookOpenerTotal(item.book) : 0;
   return (
     <button
       type="button"
       data-part="character-card"
+      data-kind={item.kind}
       disabled={disabled}
       onClick={onStart}
       className="rounded-card edge-rule surface-reading focus-ring flex aspect-[3/4] w-full cursor-pointer flex-col overflow-hidden border text-left transition-colors hover:border-ink disabled:opacity-50"
     >
       <span className="flex min-h-0 flex-1 items-center justify-center">
-        {character.avatarAssetId ? (
+        {avatarAssetId ? (
           <img
-            src={assetUrl(character.avatarAssetId)}
+            src={assetUrl(avatarAssetId)}
             alt=""
             loading="lazy"
             className="size-full object-cover"
@@ -180,11 +226,20 @@ function CharacterCard({
           </span>
         )}
       </span>
-      <span
-        data-part="character-card-name"
-        className="truncate px-3 pb-3 text-sm font-medium text-ink"
-      >
-        {character.name}
+      <span className="flex min-w-0 flex-col px-3 pb-3">
+        {item.kind === 'lorebook' && (
+          <span
+            data-part="start-card-kicker"
+            className="truncate text-[11px] tracking-wide text-ink-2"
+          >
+            {openerCount > 0
+              ? t('chat.start.lorebookKicker', { count: openerCount })
+              : t('chat.start.lorebookKickerPlain')}
+          </span>
+        )}
+        <span data-part="character-card-name" className="truncate text-sm font-medium text-ink">
+          {item.name}
+        </span>
       </span>
     </button>
   );

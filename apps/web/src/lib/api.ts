@@ -134,16 +134,29 @@ export interface PresetDetail extends PresetSummary {
 
 export type LorebookScope = 'global' | 'char' | 'chat';
 
+/** 世界书自带的开场白条数：`@@is_greeting` 与 role=assistant 的 prefill 分开计 */
+export interface LorebookOpenerCounts {
+  greeting: number;
+  prefill: number;
+}
+
 export interface LorebookSummary {
   id: string;
   name: string;
   scope: LorebookScope;
   settings: Record<string, unknown> | null;
   entryCount: number;
+  openerCounts: LorebookOpenerCounts;
   createdAt: string;
   updatedAt: string;
 }
 
+/** 这本书能不能单独用来开一段对话 */
+export function lorebookOpenerTotal(book: LorebookSummary): number {
+  return (book.openerCounts?.greeting ?? 0) + (book.openerCounts?.prefill ?? 0);
+}
+
+/** `lorebook_entries` 行：ST 字段逐列拉平；可空列 = 跟随全局设置 / 原文件没有该字段 */
 export interface LorebookEntry {
   id: string;
   uid: number | null;
@@ -153,16 +166,56 @@ export interface LorebookEntry {
   comment: string | null;
   constant: boolean;
   selective: boolean;
+  selectiveLogic: number | null;
   position: number;
   depth: number | null;
   entryOrder: number;
   probability: number | null;
   group: string | null;
+  groupOverride: boolean | null;
+  groupWeight: number | null;
+  scanDepth: number | null;
+  caseSensitive: boolean | null;
+  matchWholeWords: boolean | null;
+  useGroupScoring: boolean | null;
+  automationId: string | null;
+  role: 'system' | 'user' | 'assistant' | null;
   disabled: boolean;
   sticky: number | null;
   cooldown: number | null;
   delay: number | null;
-  [key: string]: unknown;
+  excludeRecursion: boolean | null;
+  preventRecursion: boolean | null;
+  delayUntilRecursion: boolean | null;
+  ignoreBudget: boolean | null;
+  displayIndex: number | null;
+  /** `{ stKey, raw }`：raw 是原始 ST 条目（无独立列的字段从这里读） */
+  extra: { stKey?: string; raw?: Record<string, unknown> } | null;
+}
+
+/** 可编辑的列（uid / displayIndex 由服务端维护） */
+export type LorebookEntryColumn = Exclude<
+  keyof LorebookEntry,
+  'id' | 'uid' | 'displayIndex' | 'extra'
+>;
+
+/**
+ * 整本保存里的一条：有 id = 已有条目（只传改动的字段），无 id = 新条目。
+ * `delayUntilRecursion` 可以是正整数（递归等级）；`useProbability` / `vectorized` / `outletName`
+ * 没有独立列，服务端写进原始条目。
+ */
+export type LorebookEntryInput = { id?: string } & Partial<
+  Omit<Pick<LorebookEntry, LorebookEntryColumn>, 'delayUntilRecursion'>
+> & {
+    delayUntilRecursion?: boolean | number | null;
+    useProbability?: boolean;
+    vectorized?: boolean;
+    outletName?: string;
+  };
+
+export interface LorebookUpdateInput {
+  name?: string;
+  entries: LorebookEntryInput[];
 }
 
 export interface LorebookDetail extends Omit<LorebookSummary, 'entryCount'> {
@@ -373,6 +426,8 @@ export interface ChatDetail extends ChatSummary {
 
 export interface CreateChatInput {
   characterIds?: string[];
+  /** 挂上的世界书；书里自带的开场白会铺成根节点的 swipe */
+  lorebookIds?: string[];
   personaId?: string | null;
   presetId?: string | null;
   title?: string;
@@ -756,6 +811,38 @@ export function useLorebook(id: string | null) {
 
 export function useDeleteLorebook() {
   return useDeleteResource('/api/lorebooks', queryKeys.lorebooks);
+}
+
+/** 新建空世界书（名称缺省「新世界书」） */
+export function useCreateLorebook() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { name?: string } = {}) =>
+      mutate<LorebookDetail>('/api/lorebooks', 'POST', input),
+    onSuccess: (row) => {
+      queryClient.setQueryData(queryKeys.lorebook(row.id), row);
+      return queryClient.invalidateQueries({ queryKey: queryKeys.lorebooks, exact: true });
+    },
+  });
+}
+
+/** 整本保存：返回保存后的完整详情 */
+export function useUpdateLorebook(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: LorebookUpdateInput) =>
+      mutate<LorebookDetail>(`/api/lorebooks/${enc(id)}`, 'PUT', input),
+    onSuccess: (row) => {
+      queryClient.setQueryData(queryKeys.lorebook(id), row);
+      return Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.lorebooks, exact: true }),
+        // 检查器结果依赖世界书条目：各会话的 inspect 缓存一并失效
+        queryClient.invalidateQueries({
+          predicate: (query) => query.queryKey[0] === 'chats' && query.queryKey[2] === 'inspect',
+        }),
+      ]);
+    },
+  });
 }
 
 export function usePersonas() {

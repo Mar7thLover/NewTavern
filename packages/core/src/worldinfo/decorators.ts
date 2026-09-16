@@ -40,7 +40,6 @@ const KNOWN_DECORATORS: readonly string[] = [
 /** 解析得到但无法映射到 ST 语义的装饰器；scanWorldInfo 会为它们产生一条 warning */
 export const UNSUPPORTED_DECORATORS: readonly string[] = [
   'activate_only_every',
-  'is_greeting',
   'ignore_on_max_context',
 ];
 
@@ -140,8 +139,11 @@ function normalizeDecorators(lines: readonly string[]): Record<string, unknown> 
       case 'scan_depth':
       case 'activate_only_after':
       case 'activate_only_every':
-      case 'is_greeting':
         out[name] = toInt(raw) ?? raw;
+        break;
+      // `@@is_greeting` 可不带参数（RisuAI 视作第 0 条）；带参数时是开场白序号
+      case 'is_greeting':
+        out[name] = raw === '' ? 0 : (toInt(raw) ?? raw);
         break;
       case 'position':
         out[name] = POSITION_ALIASES[raw.toLowerCase()] ?? toInt(raw) ?? raw;
@@ -189,6 +191,8 @@ export function applyDecorators(entry: WIEntry): WIEntry {
   if (isRole(role)) next.role = role;
   const scanDepth = decorators['scan_depth'];
   if (typeof scanDepth === 'number') next.scanDepth = scanDepth;
+  const greeting = decorators['is_greeting'];
+  if (typeof greeting === 'number') next.isGreeting = Math.max(0, greeting);
   const after = decorators['activate_only_after'];
   if (typeof after === 'number') next.delay = after;
   if (decorators['keep_activate_after_match'] === true) next.sticky = FOREVER;

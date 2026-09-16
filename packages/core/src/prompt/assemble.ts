@@ -304,9 +304,6 @@ const STABILITY_RANK: Record<Segment['stability'], number> = {
   turn: 3,
 };
 
-/** ST `squashSystemMessages` 的 excludeList：newMainChat / newChat / groupNudge */
-const SQUASH_EXCLUDED_REFS = new Set(['new_chat_prompt', 'new_example_chat_prompt']);
-
 type NumericSamplingKey =
   | 'temperature'
   | 'topP'
@@ -401,13 +398,6 @@ function segmentTokens(segment: Segment): number {
     if (part.type === 'text') total += estimateTokens(part.text);
   }
   return total;
-}
-
-function textOf(segment: Segment): string | undefined {
-  if (segment.parts.length !== 1) return undefined;
-  const part = segment.parts[0];
-  if (part === undefined || part.type !== 'text') return undefined;
-  return part.text;
 }
 
 // ───────────────────────── 预设读取 ─────────────────────────
@@ -1090,8 +1080,11 @@ export function assemblePrompt(input: AssembleInputV2): AssembleResult {
     warnings.push(`上下文预算不足，已丢弃最早的 ${dropped} 条历史消息`);
   }
 
-  // ── squash_system_messages
-  const placed = data.squash_system_messages === true ? squashSystem(segments) : segments;
+  // ── squash_system_messages：**不在这里合并**。IR 保留段粒度（检查器要看得到世界书、
+  // 角色卡字段等每一段的来源），合并放到渲染层（providers `irToChatMessages` 读
+  // `meta.squashSystemMessages`），与 ST 在 `ChatCompletion.squashSystemMessages`
+  // 里对最终消息列表做合并的时机一致。
+  const squashSystemMessages = data.squash_system_messages === true;
 
   // ── Layout
   const layoutMode = input.layoutMode ?? 'strict';
@@ -1101,8 +1094,8 @@ export function assemblePrompt(input: AssembleInputV2): AssembleResult {
     policy,
     countTokens: estimateTokens,
   };
-  const strict = layoutStrict(placed, layoutCtx);
-  const chosen = layoutMode === 'cache-aware' ? layoutCacheAware(placed, layoutCtx) : strict;
+  const strict = layoutStrict(segments, layoutCtx);
+  const chosen = layoutMode === 'cache-aware' ? layoutCacheAware(segments, layoutCtx) : strict;
 
   const activations: WIActivationSummary[] = wi.activations.map((activation) => ({
     entryId: activation.entry.id,
@@ -1125,6 +1118,7 @@ export function assemblePrompt(input: AssembleInputV2): AssembleResult {
       activations,
       warnings: [...warnings, ...result.report.warnings],
       tokenEstimate: result.segments.reduce((sum, segment) => sum + segmentTokens(segment), 0),
+      squashSystemMessages,
     },
   });
 
@@ -1471,36 +1465,4 @@ function buildHistorySegment(
     stability: isLastUser ? 'turn' : 'history',
     ...(item.volatile ? { volatile: true } : {}),
   };
-}
-
-/**
- * ST `ChatCompletion.squashSystemMessages`：把相邻的、无 name 的 system 消息用 `\n` 合并；
- * `newMainChat` / `newChat` / `groupNudge` 不参与。作用于**整条消息列表**。
- */
-function squashSystem(segments: readonly Segment[]): Segment[] {
-  const squashable = (segment: Segment): boolean =>
-    segment.role === 'system' &&
-    segment.name === undefined &&
-    !SQUASH_EXCLUDED_REFS.has(segment.origin.ref ?? '') &&
-    textOf(segment) !== undefined;
-
-  const result: Segment[] = [];
-  for (const segment of segments) {
-    const previous = result[result.length - 1];
-    if (previous !== undefined && squashable(previous) && squashable(segment)) {
-      result[result.length - 1] = {
-        ...previous,
-        parts: [{ type: 'text', text: `${textOf(previous)}\n${textOf(segment)}` }],
-        stability:
-          STABILITY_RANK[segment.stability] > STABILITY_RANK[previous.stability]
-            ? segment.stability
-            : previous.stability,
-        ...(previous.volatile || segment.volatile ? { volatile: true } : {}),
-        ...(previous.locked || segment.locked ? { locked: true } : {}),
-      };
-      continue;
-    }
-    result.push(segment);
-  }
-  return result;
 }
