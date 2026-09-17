@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="112" height="112" viewBox="0 0 112 112" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">NewTavern</title>
+  <desc id="desc">An open book forms the threshold of an arched doorway, with a golden star above it.</desc>
+  <rect x="2" y="2" width="108" height="108" rx="28" fill="#F5F1E8" stroke="#D9D3C6" stroke-width="2"/>
+  <path d="M35 73V44a21 21 0 0 1 42 0v29" stroke="#243F3A" stroke-width="6" stroke-linecap="round"/>
+  <path d="M56 51v37c-9-7-20-10-34-9V44c14-1 25 1 34 7Z" fill="#243F3A"/>
+  <path d="M56 51v37c9-7 20-10 34-9V44c-14-1-25 1-34 7Z" fill="#386057"/>
+  <path d="M56 53v30" stroke="#F5F1E8" stroke-width="2" stroke-linecap="round"/>
+  <path d="M30 56c7 0 13 2 18 5M30 65c7 0 13 2 18 5M82 56c-7 0-13 2-18 5M82 65c-7 0-13 2-18 5" stroke="#F5F1E8" stroke-width="2" stroke-linecap="round" opacity="0.7"/>
+  <path d="m56 29 2.5 6.5L65 38l-6.5 2.5L56 47l-2.5-6.5L47 38l6.5-2.5L56 29Z" fill="#C88A36"/>
+</svg>
