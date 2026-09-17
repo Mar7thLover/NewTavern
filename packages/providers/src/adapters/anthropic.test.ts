@@ -2,6 +2,7 @@ import type { Part, PromptIR, Role, Segment } from '@newtavern/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { HttpError } from '../http.js';
+import { PDF_B64, PNG_B64, resolveAsset, TXT_CONTENT } from '../test-media.js';
 import type { Connection, GenEvent } from '../types.js';
 import { anthropicAdapter } from './anthropic.js';
 
@@ -256,7 +257,7 @@ describe('anthropic buildRequest', () => {
     expect(req.warnings?.some((w) => w.includes('与当前模型不符'))).toBe(true);
   });
 
-  it('图片 / 文档 part 渲染为 asset: 占位并告警', () => {
+  it('没有 resolver 时图片 / 文档 part 渲染为 asset: 占位，不告警', () => {
     const ir = makeIr([
       seg('h1', 'user', [
         { type: 'text', text: '看图' },
@@ -270,10 +271,7 @@ describe('anthropic buildRequest', () => {
       { type: 'image', source: { type: 'url', url: 'asset:img1' } },
       { type: 'document', source: { type: 'url', url: 'asset:doc1' } },
     ]);
-    expect(req.warnings).toEqual([
-      '图片 img1 以 asset: 占位 URL 渲染，需由服务端替换为图片源',
-      '文档 doc1 以 asset: 占位 URL 渲染，需由服务端替换为文档源',
-    ]);
+    expect(req.warnings).toBeUndefined();
   });
 
   it("thinking='adaptive' + effort → output_config.effort", () => {
@@ -728,5 +726,139 @@ describe('anthropic listModels / normalizeError / countTokens', () => {
     expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
       'https://api.anthropic.com/v1/messages/count_tokens',
     );
+  });
+});
+
+describe('anthropic 多模态', () => {
+  it('有 resolver：base64 image / document 块，保持 parts 原顺序（不把图片挪到文本前）', () => {
+    const ir = makeIr([
+      seg('h1', 'user', [
+        { type: 'text', text: '先看文字' },
+        { type: 'image', assetId: 'img2', mime: 'image/jpeg' },
+        { type: 'document', assetId: 'doc1', mime: 'application/pdf' },
+        { type: 'text', text: '再说' },
+      ]),
+    ]);
+    const { req, body: b } = body(ir, 'claude-opus-5', { resolveAsset });
+    expect(b.messages[0]?.content).toEqual([
+      { type: 'text', text: '先看文字' },
+      { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: PNG_B64 } },
+      {
+        type: 'document',
+        source: { type: 'base64', media_type: 'application/pdf', data: PDF_B64 },
+      },
+      { type: 'text', text: '再说' },
+    ]);
+    expect(req.warnings).toBeUndefined();
+  });
+
+  it('imageIn / documentIn 为 false（GLM 兼容端点）：丢弃并汇总告警；只有媒体的消息用零宽空格占位', () => {
+    const ir = makeIr([
+      seg('h1', 'user', [
+        { type: 'image', assetId: 'img1', mime: 'image/png' },
+        { type: 'document', assetId: 'doc1', mime: 'application/pdf' },
+      ]),
+    ]);
+    const { req, body: b } = body(ir, 'glm-5.3-flash', { resolveAsset });
+    expect(b.messages).toEqual([{ role: 'user', content: [{ type: 'text', text: '​' }] }]);
+    expect(req.warnings).toEqual([
+      '模型不支持图片输入，已丢弃 1 张图片',
+      '模型不支持 PDF 输入，已丢弃 1 个 PDF',
+    ]);
+  });
+
+  it('assistant 与顶层 system 里的媒体丢弃并按角色告警', () => {
+    const ir = makeIr([
+      seg(
+        's1',
+        'system',
+        [
+          { type: 'text', text: '预设' },
+          { type: 'image', assetId: 'img1', mime: 'image/png' },
+        ],
+        'system',
+      ),
+      text('h1', 'user', '画'),
+      seg('h2', 'assistant', [
+        { type: 'text', text: '好了' },
+        { type: 'image', assetId: 'img1', mime: 'image/png' },
+      ]),
+      seg('h3', 'user', [
+        { type: 'text', text: '改一下' },
+        { type: 'image', assetId: 'img1', mime: 'image/png' },
+      ]),
+    ]);
+    const { req, body: b } = body(ir, 'claude-opus-5', { resolveAsset });
+    expect(b.system).toEqual([{ type: 'text', text: '预设' }]);
+    expect(b.messages.map((m) => m.content)).toEqual([
+      [{ type: 'text', text: '画' }],
+      [{ type: 'text', text: '好了' }],
+      [
+        { type: 'text', text: '改一下' },
+        { type: 'image', source: { type: 'base64', media_type: 'image/png', data: PNG_B64 } },
+      ],
+    ]);
+    expect(req.warnings).toEqual([
+      'Anthropic 的 system 消息不接受图片 / PDF，已丢弃 1 个',
+      'Anthropic 的 assistant 消息不接受图片 / PDF，已丢弃 1 个',
+    ]);
+  });
+
+  it('没有 resolver 时 assistant 里的图片同样丢弃（预览与真实请求一致）', () => {
+    const ir = makeIr([
+      text('h1', 'user', '画'),
+      seg('h2', 'assistant', [{ type: 'image', assetId: 'img1', mime: 'image/png' }]),
+      text('h3', 'user', '好'),
+    ]);
+    const { req, body: b } = body(ir);
+    expect(b.messages[1]).toEqual({
+      role: 'assistant',
+      content: [{ type: 'text', text: '​' }],
+    });
+    expect(req.warnings).toEqual(['Anthropic 的 assistant 消息不接受图片 / PDF，已丢弃 1 个']);
+  });
+
+  it('找不到资产与文本类文档：前者丢弃告警，后者解码为 text 块', () => {
+    const ir = makeIr([
+      seg('h1', 'user', [
+        { type: 'document', assetId: 'txt1', mime: 'text/markdown' },
+        { type: 'image', assetId: 'missing', mime: 'image/png' },
+        { type: 'text', text: '看附件' },
+      ]),
+    ]);
+    const { req, body: b } = body(ir, 'claude-opus-5', { resolveAsset });
+    expect(b.messages[0]?.content).toEqual([
+      { type: 'text', text: TXT_CONTENT },
+      { type: 'text', text: '看附件' },
+    ]);
+    expect(req.warnings).toEqual(['找不到资产 missing，已丢弃']);
+  });
+
+  it('缓存断点仍落在最后一个 text 块上（图片不抢断点）', () => {
+    const ir = makeIr(
+      [
+        seg('h1', 'user', [
+          { type: 'text', text: '看' },
+          { type: 'image', assetId: 'img1', mime: 'image/png' },
+        ]),
+      ],
+      { breakpoints: [0] },
+    );
+    const { body: b } = body(ir, 'claude-opus-5', { resolveAsset });
+    expect(b.messages[0]?.content[0]).toEqual({
+      type: 'text',
+      text: '看',
+      cache_control: { type: 'ephemeral' },
+    });
+    expect(b.messages[0]?.content[1]?.cache_control).toBeUndefined();
+  });
+
+  it('imageOutput=true：告警该提供商不支持图片输出，请求体不变', () => {
+    const ir = makeIr([text('h1', 'user', '画')]);
+    const plain = body(ir);
+    const { req, body: b } = body(ir, 'claude-opus-5', { imageOutput: true });
+    expect(b).toEqual(plain.body);
+    expect(req.warnings).toEqual(['该提供商不支持图片输出，已忽略 imageOutput']);
+    expect(body(ir, 'claude-opus-5', { imageOutput: false }).req.warnings).toBeUndefined();
   });
 });

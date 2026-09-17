@@ -8,12 +8,25 @@ import { RegexSettings } from './RegexSettings';
 import { WorldInfoSettings } from './WorldInfoSettings';
 import { SettingsSection } from './shared';
 import { useUiStore } from '../../app/store/ui';
+import { formatBytes } from '../../components/AttachmentFiles';
 import { Button } from '../../components/ui/button';
 import { Switch } from '../../components/ui/switch';
+import { useAssetsGc } from '../../lib/api';
 import { cn } from '../../lib/utils';
 
-const SECTIONS = ['general', 'appearance', 'worldInfo', 'globalSystemPrompt', 'regex'] as const;
+const SECTIONS = [
+  'general',
+  'appearance',
+  'worldInfo',
+  'globalSystemPrompt',
+  'regex',
+  'storage',
+] as const;
 type SectionKey = (typeof SECTIONS)[number];
+
+/** 分区标题的 i18n 键：「存储」在 M4 的 settings.storage.* 命名空间里 */
+const sectionLabelKey = (key: SectionKey) =>
+  key === 'storage' ? 'settings.storage.title' : `settings.sections.${key}`;
 
 /** 设置页：桌面左侧分区导航 + 右侧内容，窄屏顶部页签 */
 export function SettingsPage() {
@@ -47,7 +60,7 @@ export function SettingsPage() {
               section === key ? 'font-medium text-accent' : 'text-ink-story hover:text-ink',
             )}
           >
-            {t(`settings.sections.${key}`)}
+            {t(sectionLabelKey(key))}
           </button>
         ))}
       </nav>
@@ -58,6 +71,7 @@ export function SettingsPage() {
         {section === 'worldInfo' && <WorldInfoSettings />}
         {section === 'globalSystemPrompt' && <GlobalSystemPromptSettings />}
         {section === 'regex' && <RegexSettings />}
+        {section === 'storage' && <StorageSettings />}
       </div>
     </div>
   );
@@ -98,5 +112,39 @@ function GeneralSettings() {
         />
       </SettingsSection>
     </>
+  );
+}
+
+/** 存储：清理没人用的上传文件与生成图片（M4 契约 §3.4 → `POST /api/assets/gc`） */
+function StorageSettings() {
+  const { t, i18n } = useTranslation();
+  const gc = useAssetsGc();
+
+  return (
+    <SettingsSection title={t('settings.storage.title')} hint={t('settings.storage.hint')}>
+      <div data-part="storage-gc" className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <Button variant="outline" size="sm" disabled={gc.isPending} onClick={() => gc.mutate()}>
+          {gc.isPending ? t('settings.storage.cleaning') : t('settings.storage.clean')}
+        </Button>
+        <p role="status" aria-live="polite" className="min-w-0 text-xs leading-relaxed">
+          {gc.isError ? (
+            <span className="text-danger">
+              {t('settings.storage.failed', {
+                message: gc.error instanceof Error ? gc.error.message : String(gc.error),
+              })}
+            </span>
+          ) : gc.data ? (
+            <span className="text-ink-2">
+              {gc.data.removed === 0
+                ? t('settings.storage.nothing')
+                : t('settings.storage.result', {
+                    total: gc.data.removed,
+                    size: formatBytes(gc.data.freedBytes, i18n.language),
+                  })}
+            </span>
+          ) : null}
+        </p>
+      </div>
+    </SettingsSection>
   );
 }

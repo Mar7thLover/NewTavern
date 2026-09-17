@@ -3,6 +3,13 @@ import type { Part, PromptIR } from '@newtavern/core';
 import { defaultMaxTokens, lookupCapabilities } from '../catalog.js';
 import { errorTypeToKind, isAbortError, normalizeUnknownError } from '../errors.js';
 import { providerFetch, providerGet, trimTrailingSlash } from '../http.js';
+import {
+  createMediaRenderer,
+  parseDataUrl,
+  resolveImageOutput,
+  sourceUrl,
+  type MediaRenderer,
+} from '../media.js';
 import { irToChatMessages, type ChatMessage } from '../messages.js';
 import { parseSseStream } from '../sse.js';
 import { canDisableThinking, resolveThinking, stEffortToOpenAI } from '../thinking.js';
@@ -76,7 +83,10 @@ function resolveQuirks(conn: Connection): Record<string, boolean> {
 }
 
 type OpenAiContentPart =
-  { type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } };
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } }
+  /** PDF：`file_data` 是 data URL（官方 Chat Completions 的 file content part） */
+  | { type: 'file'; file: { filename: string; file_data: string } };
 
 interface OpenAiMessage {
   role: string;
@@ -85,23 +95,43 @@ interface OpenAiMessage {
   name?: string;
 }
 
-function renderParts(parts: readonly Part[], warnings: string[]): string | OpenAiContentPart[] {
+/**
+ * 渲染一条消息的 content。图片 / PDF 只能出现在 user 消息里
+ * （system / developer / assistant 的 content 只接受文本），其他角色里的媒体丢弃并告警。
+ * 没有媒体块时退化为纯字符串（多段文本用 `\n` 连接）。
+ */
+function renderParts(
+  parts: readonly Part[],
+  role: ChatMessage['role'],
+  media: MediaRenderer,
+  warnings: string[],
+): string | OpenAiContentPart[] {
   const out: OpenAiContentPart[] = [];
   let hasNonText = false;
+  const roleCtx = { accepts: role === 'user', role };
   for (const part of parts) {
     switch (part.type) {
       case 'text':
         out.push({ type: 'text', text: part.text });
         break;
       case 'image':
-        hasNonText = true;
-        // assetId 占位，由服务端在 M4 替换为 data URL / 可公开访问的 URL
-        out.push({ type: 'image_url', image_url: { url: `asset:${part.assetId}` } });
-        warnings.push(`图片 ${part.assetId} 以 asset: 占位 URL 渲染，需由服务端替换为 data URL`);
+      case 'document': {
+        const rendered = media.render(part, roleCtx);
+        if (!rendered) break;
+        if (rendered.kind === 'text') {
+          out.push({ type: 'text', text: rendered.text });
+        } else if (rendered.kind === 'image') {
+          hasNonText = true;
+          out.push({ type: 'image_url', image_url: { url: sourceUrl(rendered.source) } });
+        } else {
+          hasNonText = true;
+          out.push({
+            type: 'file',
+            file: { filename: rendered.filename, file_data: sourceUrl(rendered.source) },
+          });
+        }
         break;
-      case 'document':
-        warnings.push(`OpenAI Chat 端点不支持文档输入，已丢弃 ${part.assetId}`);
-        break;
+      }
       case 'reasoning_opaque':
         warnings.push('OpenAI Chat 端点无法回传推理块，已丢弃');
         break;
@@ -151,11 +181,18 @@ function buildRequest(
     });
   }
 
+  const media = createMediaRenderer({
+    caps,
+    resolveAsset: opts?.resolveAsset,
+    label: 'OpenAI Chat',
+    warnings,
+  });
   const rendered: OpenAiMessage[] = messages.map((msg) => ({
     role: mapRole(msg, quirks),
-    content: renderParts(msg.parts, warnings),
+    content: renderParts(msg.parts, msg.role, media, warnings),
     ...(msg.name === undefined ? {} : { name: msg.name }),
   }));
+  media.flush();
 
   const s = ir.sampling;
   const body: OpenAiBody = {
@@ -176,6 +213,11 @@ function buildRequest(
     warnings.push('OpenAI Chat 不支持 repetition_penalty，已丢弃');
 
   if (quirks.streamUsage !== false) body.stream_options = { include_usage: true };
+
+  // 生图：OpenRouter 形态 `modalities: ['image','text']`，缺省在 caps.imageOut 时开
+  if (resolveImageOutput(opts, caps, caps.imageOut, model, warnings)) {
+    body.modalities = ['image', 'text'];
+  }
 
   // 推理控制：会话覆盖 > IR 扩展 > 预设 reasoning_effort（见 thinking.ts）
   const resolved = resolveThinking(ir, opts);
@@ -316,6 +358,46 @@ function mapFinishReason(reason: string | null | undefined): Extract<GenEvent, {
   }
 }
 
+/** 生图元素的 URL：`{ type:'image_url', image_url:{ url } }`，兼容 `image_url` 直接是字符串 / 顶层 `url` */
+function imageUrlOf(raw: unknown): string | undefined {
+  if (typeof raw !== 'object' || raw === null) return undefined;
+  const item = raw as { image_url?: unknown; url?: unknown };
+  if (typeof item.image_url === 'string') return item.image_url;
+  if (typeof item.image_url === 'object' && item.image_url !== null) {
+    const url = (item.image_url as { url?: unknown }).url;
+    if (typeof url === 'string') return url;
+  }
+  return typeof item.url === 'string' ? item.url : undefined;
+}
+
+/**
+ * OpenRouter 形态的图片数组 → 事件。
+ * data URL → `image`；http(s) 链接 `image` 事件表达不了（服务端要落盘 base64），
+ * 告警并把链接作为 Markdown 图片文本输出。
+ */
+function imageEvents(images: readonly unknown[], sawText: boolean): GenEvent[] {
+  const out: GenEvent[] = [];
+  let needGap = sawText;
+  for (const raw of images) {
+    const url = imageUrlOf(raw);
+    if (url === undefined || url === '') continue;
+    const parsed = parseDataUrl(url);
+    if (parsed) {
+      out.push({ type: 'image', mime: parsed.mime, data: parsed.base64 });
+    } else if (/^https?:\/\//i.test(url)) {
+      out.push({
+        type: 'warning',
+        message: `模型返回的是图片链接而不是内联数据，已作为 Markdown 图片文本输出：${url}`,
+      });
+      out.push({ type: 'text.delta', text: `${needGap ? '\n\n' : ''}![image](${url})` });
+      needGap = true;
+    } else {
+      out.push({ type: 'warning', message: '模型返回了无法识别的图片地址，已忽略' });
+    }
+  }
+  return out;
+}
+
 async function* stream(
   conn: Connection,
   req: ProviderRequest,
@@ -323,6 +405,8 @@ async function* stream(
 ): AsyncGenerator<GenEvent, void, undefined> {
   let usage: Extract<GenEvent, { type: 'usage' }> | undefined;
   let stopEvent: Extract<GenEvent, { type: 'stop' }> | undefined;
+  /** 已输出过正文：http 图片链接降级成 Markdown 时要先空一行 */
+  let sawText = false;
 
   try {
     const res = await providerFetch(conn, req, signal);
@@ -368,13 +452,22 @@ async function* stream(
           }
           const content = delta.content;
           if (typeof content === 'string' && content !== '') {
+            sawText = true;
             yield { type: 'text.delta', text: content };
           } else if (Array.isArray(content)) {
             for (const c of content) {
               const block = c as { type?: string; text?: unknown };
               if (block.type === 'text' && typeof block.text === 'string' && block.text !== '') {
+                sawText = true;
                 yield { type: 'text.delta', text: block.text };
               }
+            }
+          }
+          // OpenRouter 生图：流式 `delta.images[]`、非流式 `message.images[]`
+          if (Array.isArray(delta.images)) {
+            for (const ev of imageEvents(delta.images, sawText)) {
+              if (ev.type === 'text.delta') sawText = true;
+              yield ev;
             }
           }
           const toolCalls = delta.tool_calls;

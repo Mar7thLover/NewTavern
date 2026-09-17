@@ -9,6 +9,7 @@ import {
   type WIScanResult,
 } from './assemble.js';
 import { buildAssembleInput } from './assemble-input.js';
+import type { AssetsService } from './assets.js';
 import { pathToNode, type Usage } from './chat-tree.js';
 import type { GenerationContext, LayoutMode } from './generation-context.js';
 import { buildProviderRequest, requestForInspect } from './provider-request.js';
@@ -41,7 +42,12 @@ export interface InspectData {
 }
 
 /** 组装一轮（检查器 / 比对共用）；`layoutMode` 可强制为 strict */
-function assembleFor(db: Db, context: GenerationContext, layoutMode: LayoutMode): AssembleResult {
+function assembleFor(
+  db: Db,
+  context: GenerationContext,
+  layoutMode: LayoutMode,
+  assets?: AssetsService,
+): AssembleResult {
   const { resolved, model } = context;
   return assemblePrompt(
     buildAssembleInput(db, {
@@ -53,6 +59,8 @@ function assembleFor(db: Db, context: GenerationContext, layoutMode: LayoutMode)
       model,
       layoutMode,
       caps: resolved.adapter.capabilities(model, resolved.conn),
+      // 文档附件与真实请求一样先内联（M4 §3.3）；图片 / PDF 仍是 asset:<id> 占位（不传解析器）
+      ...(assets ? { assets } : {}),
       dryRun: true,
     }),
   );
@@ -71,14 +79,19 @@ export function readLastUsage(context: GenerationContext): Usage | null {
   return null;
 }
 
-export function buildInspect(db: Db, context: GenerationContext): InspectData {
-  const result = assembleFor(db, context, context.layoutMode);
+export function buildInspect(
+  db: Db,
+  context: GenerationContext,
+  assets?: AssetsService,
+): InspectData {
+  const result = assembleFor(db, context, context.layoutMode, assets);
   const request = buildProviderRequest(
     context.resolved.adapter,
     result.ir,
     context.resolved.conn,
     context.model,
     context.overrides.thinking,
+    { imageOutput: context.overrides.imageOutput },
   );
   const strictIr = context.layoutMode === 'cache-aware' ? (result.strictIr ?? null) : null;
 

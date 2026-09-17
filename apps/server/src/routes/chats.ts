@@ -12,6 +12,7 @@ import { streamSSE } from 'hono/streaming';
 import { schema, type Db } from '../db/client.js';
 import { assemblePrompt } from '../services/assemble.js';
 import { buildAssembleInput, readFrozenVolatile } from '../services/assemble-input.js';
+import type { AssetsService } from '../services/assets.js';
 import { parseAuthorsNote } from '../services/authors-note.js';
 import {
   clearOpaqueSubtree,
@@ -39,6 +40,15 @@ import {
 } from '../services/generation-context.js';
 import { isGlobalSystemPromptOverride } from '../services/global-system-prompt.js';
 import { buildInspect } from '../services/inspect.js';
+import {
+  AttachmentError,
+  compactMediaParts,
+  createAssetResolver,
+  generatedImageMime,
+  isMediaPart,
+  messageParts,
+  parseAttachments,
+} from '../services/media.js';
 import { loadBookOpeners } from '../services/openers.js';
 import { readDefaultPersonaId } from '../services/personas.js';
 import { readDefaultPresetId } from '../services/presets.js';
@@ -55,7 +65,8 @@ const SSE_PADDING = 2048;
 const PING_INTERVAL_MS = 15_000;
 
 interface GenerateBody {
-  userMessage?: { text: string; name?: string } | null;
+  /** attachments：上传得到的 assetId，按顺序（M4 §1.3）；文本为空但有附件也可以发送 */
+  userMessage?: { text?: string; name?: string; attachments?: unknown } | null;
   parentId?: string | null;
   connectionId?: string;
   model?: string;
@@ -107,7 +118,12 @@ function appendNode(db: Db, chat: ChatRow, input: Omit<InsertNodeInput, 'chatId'
   return row;
 }
 
-export function createChatsRoutes(db: Db, providers: ProviderService) {
+/** 请求体里 `attachments` 非空（用来放行「只发附件、不写字」） */
+function hasAttachments(raw: unknown): boolean {
+  return Array.isArray(raw) && raw.length > 0;
+}
+
+export function createChatsRoutes(db: Db, providers: ProviderService, assets: AssetsService) {
   return (
     new Hono()
       .get('/', (c) => {
@@ -215,6 +231,11 @@ export function createChatsRoutes(db: Db, providers: ProviderService) {
           const userName = personaRow?.name ?? 'User';
           let rootId: string | null = null;
           openings.forEach((opening, index) => {
+            // ST 1.18：开场白里的 {{persona}} {{description}} … 取各字段 baseChatReplace 后的值
+            // （字段先 trim、再只展开 {{user}} {{char}} 等，字段里的卡类宏为空），见 M4 契约 §9 MSS 修正
+            const seed = { char: opening.name, user: userName };
+            const base = (value: unknown) =>
+              typeof value === 'string' ? substituteMacros(value.trim(), seed) : undefined;
             const row = insertNode(db, {
               chatId: chat.id,
               parentId: null,
@@ -225,16 +246,12 @@ export function createChatsRoutes(db: Db, providers: ProviderService) {
                 {
                   type: 'text',
                   text: substituteMacros(opening.text, {
-                    char: opening.name,
-                    user: userName,
-                    persona: personaRow?.description,
-                    description:
-                      typeof card.description === 'string' ? card.description : undefined,
-                    personality:
-                      typeof card.personality === 'string' ? card.personality : undefined,
-                    scenario: typeof card.scenario === 'string' ? card.scenario : undefined,
-                    mesExamples:
-                      typeof card.mes_example === 'string' ? card.mes_example : undefined,
+                    ...seed,
+                    persona: base(personaRow?.description),
+                    description: base(card.description),
+                    personality: base(card.personality),
+                    scenario: base(card.scenario),
+                    mesExamples: base(card.mes_example),
                   }),
                 },
               ],
@@ -297,6 +314,15 @@ export function createChatsRoutes(db: Db, providers: ProviderService) {
               delete overrides.thinking;
             } else if (!isThinkingOverride(thinking)) {
               return c.json({ error: 'invalid', message: 'overrides.thinking 非法' }, 400);
+            }
+          }
+          // 允许模型输出图片：null = 按默认（删掉该键）
+          if (overrides && 'imageOutput' in overrides) {
+            const imageOutput: unknown = overrides.imageOutput;
+            if (imageOutput === null || imageOutput === undefined) {
+              delete overrides.imageOutput;
+            } else if (typeof imageOutput !== 'boolean') {
+              return c.json({ error: 'invalid', message: 'overrides.imageOutput 非法' }, 400);
             }
           }
           patch.overrides = overrides;
@@ -376,8 +402,21 @@ export function createChatsRoutes(db: Db, providers: ProviderService) {
         if (role !== 'user' && role !== 'assistant' && role !== 'system') {
           return c.json({ error: 'invalid', message: 'role 非法' }, 400);
         }
-        if (typeof body.text !== 'string') {
+        // 只带附件时 text 可以省略
+        if (
+          typeof body.text !== 'string' &&
+          !(body.text === undefined && hasAttachments(body.attachments))
+        ) {
           return c.json({ error: 'invalid', message: '缺少 text' }, 400);
+        }
+        let media: Part[];
+        try {
+          media = parseAttachments(assets, body.attachments);
+        } catch (e) {
+          if (e instanceof AttachmentError) {
+            return c.json({ error: 'invalid', message: e.message }, 400);
+          }
+          throw e;
         }
         const parentId =
           body.parentId !== undefined
@@ -389,7 +428,7 @@ export function createChatsRoutes(db: Db, providers: ProviderService) {
         const node = appendNode(db, chat, {
           parentId,
           role,
-          parts: [{ type: 'text', text: body.text }],
+          parts: messageParts(typeof body.text === 'string' ? body.text : '', media),
           name: typeof body.name === 'string' ? body.name : null,
         });
         return c.json({
@@ -411,17 +450,33 @@ export function createChatsRoutes(db: Db, providers: ProviderService) {
         }
         const patch: Partial<typeof schema.messageNodes.$inferInsert> = {};
         let textChanged = false;
+        let parts = (node.parts as Part[] | null) ?? [];
         if (body.text !== undefined) {
           if (typeof body.text !== 'string') {
             return c.json({ error: 'invalid', message: 'text 非法' }, 400);
           }
           // 非文本 part（图片/文档）保留，只替换文本部分
-          const kept = ((node.parts as Part[] | null) ?? []).filter(
+          const kept = parts.filter(
             (part) => part.type !== 'text' && part.type !== 'reasoning_opaque',
           );
-          patch.parts = [{ type: 'text', text: body.text }, ...kept] satisfies Part[];
+          parts = [{ type: 'text', text: body.text }, ...kept];
           textChanged = true;
         }
+        // 附件（M4 §3.3）：替换该节点全部 image / document part，文本保留；null / [] = 移除全部附件
+        if (body.attachments !== undefined) {
+          let media: Part[];
+          try {
+            media = parseAttachments(assets, body.attachments);
+          } catch (e) {
+            if (e instanceof AttachmentError) {
+              return c.json({ error: 'invalid', message: e.message }, 400);
+            }
+            throw e;
+          }
+          parts = [...parts.filter((part) => !isMediaPart(part)), ...media];
+          textChanged = true;
+        }
+        if (textChanged) patch.parts = compactMediaParts(parts);
         if (body.isHidden !== undefined) {
           if (typeof body.isHidden !== 'boolean') {
             return c.json({ error: 'invalid', message: 'isHidden 非法' }, 400);
@@ -437,7 +492,7 @@ export function createChatsRoutes(db: Db, providers: ProviderService) {
           .where(eq(schema.messageNodes.id, nodeId))
           .returning()
           .get();
-        // 编辑正文使下游推理块失效（PLAN §3.1「推理内容持久化」）
+        // 编辑正文 / 附件使下游推理块失效（PLAN §3.1「推理内容持久化」）
         if (textChanged) clearOpaqueSubtree(db, chat.id, nodeId);
         patchChat(db, chat.id, {});
         const fresh = loadNodes(db, chat.id).find((row) => row.id === nodeId) ?? updated;
@@ -472,7 +527,7 @@ export function createChatsRoutes(db: Db, providers: ProviderService) {
           throw e;
         }
         try {
-          return c.json(buildInspect(db, context));
+          return c.json(buildInspect(db, context, assets));
         } catch (e) {
           return c.json({ error: 'invalid', message: (e as Error).message }, 400);
         }
@@ -503,6 +558,17 @@ export function createChatsRoutes(db: Db, providers: ProviderService) {
         const { overrides, connectionId, model, resolved, parentId, layoutMode } = context;
         const provider = resolved.conn.provider;
 
+        // 附件在开流之前校验：不存在的 assetId 直接回 400，不产生半截节点
+        let userMedia: Part[] = [];
+        try {
+          userMedia = parseAttachments(assets, body.userMessage?.attachments);
+        } catch (e) {
+          if (e instanceof AttachmentError) {
+            return c.json({ error: 'invalid', message: e.message }, 400);
+          }
+          throw e;
+        }
+
         c.header('X-Accel-Buffering', 'no');
         return streamSSE(c, async (stream) => {
           const startedAt = Date.now();
@@ -525,6 +591,11 @@ export function createChatsRoutes(db: Db, providers: ProviderService) {
 
           let assistantId: string | null = null;
           let text = '';
+          /** 最终 parts：文本与模型输出的图片按到达顺序交错，连续文本增量并进同一个 text part（M4 §1.3） */
+          const outParts: Part[] = [];
+          let imageCount = 0;
+          /** 流式解析中的非致命告警（GenEvent `warning`，例如 http 图片链接降级） */
+          const streamWarnings: string[] = [];
           let reasoningText = '';
           const opaque: unknown[] = [];
           let usage: Usage | null = null;
@@ -536,11 +607,14 @@ export function createChatsRoutes(db: Db, providers: ProviderService) {
             // 1. 可选的 user 节点
             let genParentId = parentId;
             const userMessage = body.userMessage;
-            if (userMessage && typeof userMessage.text === 'string') {
+            if (userMessage && (typeof userMessage.text === 'string' || userMedia.length > 0)) {
               const userRow = appendNode(db, chatNow(), {
                 parentId: genParentId,
                 role: 'user',
-                parts: [{ type: 'text', text: userMessage.text }],
+                parts: messageParts(
+                  typeof userMessage.text === 'string' ? userMessage.text : '',
+                  userMedia,
+                ),
                 name: typeof userMessage.name === 'string' ? userMessage.name : null,
               });
               genParentId = userRow.id;
@@ -562,9 +636,24 @@ export function createChatsRoutes(db: Db, providers: ProviderService) {
                 model,
                 layoutMode,
                 caps,
+                // 文档附件在组装前内联（M4 §3.3）
+                assets,
               }),
             );
             const ir = assembled.ir;
+            // 图片 / PDF 渲染成各家内联块：只解析 IR 里出现过的资产，首次用到时读文件
+            const resolveAsset = createAssetResolver(assets, ir);
+
+            /** 连续文本增量并进最后一个 text part；前面是图片时另起一段 */
+            const appendText = (delta: string) => {
+              if (delta === '') return;
+              const last = outParts[outParts.length - 1];
+              if (last?.type === 'text') {
+                outParts[outParts.length - 1] = { type: 'text', text: last.text + delta };
+              } else {
+                outParts.push({ type: 'text', text: delta });
+              }
+            };
 
             // 3. assistant 节点（parts 空），head 移过去；WI 时间态与变量快照随节点落库
             const assistantRow = appendNode(db, chatNow(), {
@@ -594,6 +683,7 @@ export function createChatsRoutes(db: Db, providers: ProviderService) {
                 active.conn,
                 model,
                 overrides.thinking,
+                { resolveAsset, imageOutput: overrides.imageOutput },
               );
               let firstEvent = true;
               let retry = false;
@@ -611,7 +701,31 @@ export function createChatsRoutes(db: Db, providers: ProviderService) {
                 switch (ev.type) {
                   case 'text.delta':
                     text += ev.text;
+                    appendText(ev.text);
                     await send('text.delta', { nodeId: assistantId, text: ev.text });
+                    break;
+                  case 'image': {
+                    // 模型输出的图片：先落盘成 generated 资产，再追加 part、发 SSE `image`
+                    const bytes = Buffer.from(ev.data, 'base64');
+                    const mime = bytes.length > 0 ? generatedImageMime(bytes, ev.mime) : null;
+                    if (!mime) {
+                      streamWarnings.push(`模型输出的图片无法识别（${ev.mime}），已忽略`);
+                      break;
+                    }
+                    const asset = assets.save({
+                      bytes,
+                      kind: 'generated',
+                      mime,
+                      source: `generated:${assistantId}`,
+                    });
+                    const part = { type: 'image', assetId: asset.id, mime: asset.mime } as const;
+                    outParts.push(part);
+                    imageCount += 1;
+                    await send('image', { nodeId: assistantId, part });
+                    break;
+                  }
+                  case 'warning':
+                    streamWarnings.push(ev.message);
                     break;
                   case 'reasoning.delta':
                     reasoningText += ev.text;
@@ -637,7 +751,7 @@ export function createChatsRoutes(db: Db, providers: ProviderService) {
                     genError = ev.error;
                     break;
                   default:
-                    // image / tool.call：M2 不落地，保留事件名
+                    // tool.call：暂不落地，保留事件名
                     break;
                 }
               }
@@ -646,8 +760,8 @@ export function createChatsRoutes(db: Db, providers: ProviderService) {
 
             if (aborted) stopReason = 'abort';
 
-            if (genError && text === '') {
-              // 无任何文本：删除刚创建的节点、head 回退、只发 error
+            if (genError && text === '' && imageCount === 0) {
+              // 无任何文本且无图片：删除刚创建的节点、head 回退、只发 error
               deleteSubtree(db, chatNow(), assistantId);
               assistantId = null;
               await send('error', {
@@ -665,17 +779,26 @@ export function createChatsRoutes(db: Db, providers: ProviderService) {
               const finalRow = db
                 .update(schema.messageNodes)
                 .set({
-                  parts: text ? ([{ type: 'text', text }] satisfies Part[]) : [],
+                  // 文本与图片按到达顺序；中止时已收到的图片同样保留
+                  parts: outParts,
                   reasoning,
                   usage,
                   extra: {
                     stopReason: stopReason ?? (genError ? 'error' : 'end'),
+                    // 已脱敏：内联图片 / PDF 的 base64 替换成占位串
                     request: requestForStorage(finalRequest),
                     capabilities: capabilitiesSummary(caps),
                     // 契约 §6：布局报告、WI 激活摘要与告警随节点返回，供检查器/前端展示
                     layout: assembled.layout,
                     activations: ir.meta.activations,
-                    warnings: ir.meta.warnings,
+                    // 组装告警 + 适配器告警（例如「模型不支持图片输入，已丢弃 N 张图片」）+ 流式告警
+                    warnings: [
+                      ...new Set([
+                        ...ir.meta.warnings,
+                        ...((finalRequest as ProviderRequest | null)?.warnings ?? []),
+                        ...streamWarnings,
+                      ]),
+                    ],
                   },
                 })
                 .where(eq(schema.messageNodes.id, assistantId))
@@ -726,10 +849,16 @@ export function createChatsRoutes(db: Db, providers: ProviderService) {
               }
             }
           } catch (e) {
-            // 组装 / buildRequest / 适配器抛出的异常：无文本则回滚节点
-            if (assistantId && text === '') {
+            // 组装 / buildRequest / 适配器抛出的异常：无文本且无图片则回滚节点；
+            // 否则把已收到的文本与图片写进节点（不然已落盘的生成图片没有任何节点引用）
+            if (assistantId && text === '' && imageCount === 0) {
               deleteSubtree(db, chatNow(), assistantId);
               assistantId = null;
+            } else if (assistantId) {
+              db.update(schema.messageNodes)
+                .set({ parts: outParts, extra: { stopReason: 'error' } })
+                .where(eq(schema.messageNodes.id, assistantId))
+                .run();
             }
             await send('error', {
               nodeId: assistantId ?? undefined,

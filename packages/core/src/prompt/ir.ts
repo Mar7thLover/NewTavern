@@ -33,8 +33,9 @@ export interface ToolDef {
 
 export type Part =
   | { type: 'text'; text: string }
-  | { type: 'image'; assetId: string; mime: string }
-  | { type: 'document'; assetId: string; mime: string }
+  /** name：原始文件名（上传/导入时记录，渲染 PDF 的 filename 与界面展示用） */
+  | { type: 'image'; assetId: string; mime: string; name?: string }
+  | { type: 'document'; assetId: string; mime: string; name?: string }
   | { type: 'reasoning_opaque'; provider: string; model: string; payload: unknown };
 
 export type SegmentOriginKind =

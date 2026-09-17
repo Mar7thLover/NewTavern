@@ -11,4 +11,5 @@ export * from './st/preset.js';
 export * from './st/worldbook.js';
 export * from './st/regex.js';
 export * from './st/chat-jsonl.js';
+export * from './st/chat-tree.js';
 export * from './st/detect.js';

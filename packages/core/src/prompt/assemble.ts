@@ -417,6 +417,8 @@ interface PresetPrompt {
   locked: boolean;
   /** 被角色卡覆盖时，原预设内容（供 `{{original}}` 使用） */
   original?: string;
+  /** 被角色卡覆盖时，覆盖内容在 baseChatReplace 阶段是否含易变宏（`content` 已是展开后的文本） */
+  overrideVolatile?: boolean;
 }
 
 function readPrompts(data: Record<string, unknown>): PresetPrompt[] {
@@ -549,6 +551,14 @@ export function assemblePrompt(input: AssembleInputV2): AssembleResult {
   const cardData = input.character?.data ?? {};
 
   // ── Macros：先用「种子上下文」展开卡字段（对应 ST 的 baseChatReplace）
+  //
+  // ST 1.18 `getCharacterCardFieldsLazy`（public/script.js）对卡的 description / personality / scenario /
+  // mes_example / system_prompt / post_history_instructions / depth_prompt / creator_notes，以及档案描述本身，
+  // 都先做 `baseChatReplace` = `substituteParams(v, { replaceCharacterCard: false })`。默认的新宏引擎
+  // （`experimental_macro_engine: true`）在这一步把 {{persona}} {{description}} {{scenario}} 等卡类宏展开为
+  // **空串**（`env.character` 为空对象，handler 返回 `?? ''`），{{user}} {{char}} 照常展开；宏的输出不会再被解析。
+  // 这些 baseChatReplace 过的值就是 {{persona}} {{description}} … 宏在其他文本里的取值。
+  // 录制核对见 docs/M4-CONTRACT.md §9「修正（2026-09-16，MSS）」。
   const seedCtx: MacroContext = {
     char: charName,
     user: userName,
@@ -560,16 +570,41 @@ export function assemblePrompt(input: AssembleInputV2): AssembleResult {
     ...(input.idleDurationMs === undefined ? {} : { idleDurationMs: input.idleDurationMs }),
   };
 
-  const description = substituteMacrosDetailed(readString(cardData.description) ?? '', seedCtx);
-  const personality = substituteMacrosDetailed(readString(cardData.personality) ?? '', seedCtx);
-  const scenario = substituteMacrosDetailed(readString(cardData.scenario) ?? '', seedCtx);
-  const mesExamples = substituteMacrosDetailed(readString(cardData.mes_example) ?? '', seedCtx);
-  const personaDescription = substituteMacrosDetailed(input.persona?.description ?? '', seedCtx);
+  const description = substituteMacrosDetailed(
+    (readString(cardData.description) ?? '').trim(),
+    seedCtx,
+  );
+  const personality = substituteMacrosDetailed(
+    (readString(cardData.personality) ?? '').trim(),
+    seedCtx,
+  );
+  const scenario = substituteMacrosDetailed((readString(cardData.scenario) ?? '').trim(), seedCtx);
+  const mesExamples = substituteMacrosDetailed(
+    (readString(cardData.mes_example) ?? '').trim(),
+    seedCtx,
+  );
+  /** {{persona}} 宏的取值（档案描述的 baseChatReplace）；档案描述**进提示词**时另行完整展开，见 `personaPromptText` */
+  const personaDescription = substituteMacrosDetailed(
+    (input.persona?.description ?? '').trim(),
+    seedCtx,
+  );
   const personaPosition = input.persona?.position ?? 'in_prompt';
   // ST 判的是原始描述（`!power_user.persona_description`），不是宏替换后的结果
   const personaHasDescription = (input.persona?.description ?? '') !== '';
-  const creatorNotes = readString(cardData.creator_notes) ?? '';
-  const charDepthPromptText = input.characterDepthPrompt?.text ?? '';
+  const creatorNotes = substituteMacros((readString(cardData.creator_notes) ?? '').trim(), seedCtx);
+  // 卡的 system_prompt / post_history_instructions 覆盖 main / jailbreak 时用的也是 baseChatReplace 过的值
+  const charPromptBase = substituteMacrosDetailed(
+    (readString(cardData.system_prompt) ?? '').trim(),
+    seedCtx,
+  );
+  const charJailbreakBase = substituteMacrosDetailed(
+    (readString(cardData.post_history_instructions) ?? '').trim(),
+    seedCtx,
+  );
+  const charDepthPromptText = substituteMacros(
+    (input.characterDepthPrompt?.text ?? '').trim(),
+    seedCtx,
+  );
 
   const macroHistory: MacroHistoryMessage[] = input.history
     .filter((node) => node.isHidden !== true)
@@ -594,8 +629,8 @@ export function assemblePrompt(input: AssembleInputV2): AssembleResult {
     // ST `{{mesExamples}}` = `parseMesExamples(card.mes_example).join('')`（每块带 `<START>\n` 头与尾换行）
     mesExamples: parseMesExampleBlocks(mesExamples.text).join(''),
     charVersion: readString(cardData.character_version),
-    charPrompt: readString(cardData.system_prompt),
-    charJailbreak: readString(cardData.post_history_instructions),
+    charPrompt: charPromptBase.text,
+    charJailbreak: charJailbreakBase.text,
     charDepthPrompt: charDepthPromptText,
     creatorNotes,
     history: macroHistory,
@@ -672,8 +707,9 @@ export function assemblePrompt(input: AssembleInputV2): AssembleResult {
     // `addPersonaDescriptionExtensionPrompt`），WI 扫描时 `buffer.addInject` 会把它并进扫描源
     // （world-info.js `checkWorldInfo`）。ST 在扫描之后才设置它，所以切换聊天后的第一次生成
     // 扫不到（`clearChat` 清空了 extension_prompts）；这里取稳态行为，每次都并入。
+    // 扫描缓冲里的是 `getExtensionPromptByName` = substituteParams(原始描述)（完整展开）
     ...(personaPosition === 'at_depth' && personaHasDescription
-      ? { injects: [personaDescription.text] }
+      ? { injects: [substitute(input.persona?.description ?? '')] }
       : {}),
     substitute: (text: string) => substitute(text),
     random,
@@ -716,6 +752,17 @@ export function assemblePrompt(input: AssembleInputV2): AssembleResult {
     return session ? 'session' : 'static';
   };
 
+  /**
+   * 档案描述**进提示词**时的文本：ST 用的是原始 `power_user.persona_description`
+   * （IN_PROMPT 标记 openai.js `preparePromptsForChatCompletion`、AT_DEPTH / TOP_AN / BOTTOM_AN
+   * script.js `addPersonaDescriptionExtensionPrompt`），随后整段做一次完整宏替换——
+   * 所以描述里的 {{description}} {{persona}} 等展开为各字段的 baseChatReplace 值，而不是空串。
+   */
+  const personaPromptText =
+    personaHasDescription && personaPosition !== 'none'
+      ? substituteMacrosDetailed(input.persona?.description ?? '', ctx)
+      : { text: '', volatile: false };
+
   // ── 作者注释（ST setFloatingPrompt 的 interval 判定；计数用**用户消息**条数）
   const an = input.authorsNote ?? null;
   const anInterval = an?.interval ?? 1;
@@ -740,8 +787,8 @@ export function assemblePrompt(input: AssembleInputV2): AssembleResult {
   // 在 WI 并入 AN 之后执行，同样只在 `shouldWIAddPrompt`（AN interval 命中）时拼接，不做 trim
   let anText = anWithWi;
   if (anShouldAdd && personaHasDescription) {
-    if (personaPosition === 'top_an') anText = `${personaDescription.text}\n${anWithWi}`;
-    else if (personaPosition === 'bottom_an') anText = `${anWithWi}\n${personaDescription.text}`;
+    if (personaPosition === 'top_an') anText = `${personaPromptText.text}\n${anWithWi}`;
+    else if (personaPosition === 'bottom_an') anText = `${anWithWi}\n${personaPromptText.text}`;
   }
 
   // ── 预设 prompts 与顺序
@@ -756,7 +803,13 @@ export function assemblePrompt(input: AssembleInputV2): AssembleResult {
   for (const identifier of orderIdentifiers) {
     const prompt = promptById.get(identifier);
     if (!prompt) continue;
-    resolved.push(applyCardOverride(prompt, cardData, preferCharacterPrompt));
+    resolved.push(
+      applyCardOverride(
+        prompt,
+        { system_prompt: charPromptBase, post_history_instructions: charJailbreakBase },
+        preferCharacterPrompt,
+      ),
+    );
   }
 
   // ── Placement
@@ -902,7 +955,7 @@ export function assemblePrompt(input: AssembleInputV2): AssembleResult {
         case 'personaDescription':
           // ST openai.js `preparePromptsForChatCompletion`：只有 IN_PROMPT 才进 personaDescription 标记
           if (personaPosition !== 'in_prompt') break;
-          addTextSegment('persona', personaDescription, { kind: 'persona' }, 'static', {
+          addTextSegment('persona', personaPromptText, { kind: 'persona' }, 'static', {
             locked: prompt.locked,
           });
           break;
@@ -956,12 +1009,14 @@ export function assemblePrompt(input: AssembleInputV2): AssembleResult {
               anPosition,
               anDepth,
               anRole,
-              characterDepthPrompt: input.characterDepthPrompt ?? null,
+              characterDepthPrompt: input.characterDepthPrompt
+                ? { ...input.characterDepthPrompt, text: charDepthPromptText }
+                : null,
               personaDepthPrompt:
                 personaPosition === 'at_depth' && personaHasDescription
                   ? {
-                      text: personaDescription.text,
-                      volatile: personaDescription.volatile,
+                      text: personaPromptText.text,
+                      volatile: personaPromptText.volatile,
                       depth: input.persona?.depth ?? PERSONA_DEFAULT_DEPTH,
                       role: input.persona?.role ?? 0,
                     }
@@ -994,7 +1049,7 @@ export function assemblePrompt(input: AssembleInputV2): AssembleResult {
       addAuthorsNoteRelative('start');
       addTextSegment(
         'preset:main',
-        substituteMacrosDetailed(prompt.content, promptCtx(ctx, prompt)),
+        expandPrompt(prompt, ctx),
         { kind: 'preset', ref: 'main' },
         'static',
         { role: prompt.role, locked: prompt.locked },
@@ -1006,7 +1061,7 @@ export function assemblePrompt(input: AssembleInputV2): AssembleResult {
 
     addTextSegment(
       `preset:${prompt.identifier}`,
-      substituteMacrosDetailed(prompt.content, promptCtx(ctx, prompt)),
+      expandPrompt(prompt, ctx),
       { kind: 'preset', ref: prompt.identifier },
       'static',
       { role: prompt.role, locked: prompt.locked },
@@ -1139,9 +1194,17 @@ export function assemblePrompt(input: AssembleInputV2): AssembleResult {
 
 // ───────────────────────── 子过程 ─────────────────────────
 
+/**
+ * 卡的 system_prompt / post_history_instructions 覆盖 main / jailbreak。
+ * `overrides` 是 baseChatReplace 过的值（ST `getCharacterCardFieldsLazy` 的 system / jailbreak）：
+ * 卡类宏已展开为空；{{original}} 在那一步保持原样，留到组装预设时展开。
+ */
 function applyCardOverride(
   prompt: PresetPrompt,
-  cardData: Record<string, unknown>,
+  overrides: Record<
+    'system_prompt' | 'post_history_instructions',
+    { text: string; volatile: boolean }
+  >,
   preferCharacterPrompt: boolean,
 ): PresetPrompt {
   if (!preferCharacterPrompt || prompt.forbidOverrides) return prompt;
@@ -1152,13 +1215,27 @@ function applyCardOverride(
         ? 'post_history_instructions'
         : null;
   if (field === null) return prompt;
-  const override = (readString(cardData[field]) ?? '').trim();
-  if (override === '') return prompt;
-  return { ...prompt, content: override, original: prompt.content };
+  const override = overrides[field];
+  if (override.text === '') return prompt;
+  return {
+    ...prompt,
+    content: override.text,
+    original: prompt.content,
+    ...(override.volatile ? { overrideVolatile: true } : {}),
+  };
 }
 
 function promptCtx(ctx: MacroContext, prompt: PresetPrompt): MacroContext {
   return prompt.original === undefined ? ctx : { ...ctx, original: prompt.original };
+}
+
+/** 预设 prompt 正文的宏展开；卡覆盖内容在 baseChatReplace 阶段含易变宏时同样记为易变 */
+function expandPrompt(
+  prompt: PresetPrompt,
+  ctx: MacroContext,
+): { text: string; volatile: boolean } {
+  const result = substituteMacrosDetailed(prompt.content, promptCtx(ctx, prompt));
+  return prompt.overrideVolatile ? { text: result.text, volatile: true } : result;
 }
 
 function formatField(
@@ -1355,7 +1432,7 @@ function buildHistory(args: BuildHistoryArgs): Segment[] {
         const sources: InjectionSource[] = depthPrompts
           .filter((prompt) => prompt.injectionOrder === order && prompt.role === role)
           .map((prompt) => {
-            const substituted = substituteMacrosDetailed(prompt.content, promptCtx(ctx, prompt));
+            const substituted = expandPrompt(prompt, ctx);
             return {
               id: `injection:${prompt.identifier}`,
               origin: { kind: 'injection', ref: prompt.identifier } as Segment['origin'],

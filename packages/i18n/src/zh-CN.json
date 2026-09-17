@@ -15,6 +15,32 @@
     "settings": "设置",
     "migration": "迁移向导"
   },
+  "palette": {
+    "title": "命令面板",
+    "open": "搜索与跳转",
+    "placeholder": "搜对话、角色、页面或世界",
+    "empty": "没有和「{{query}}」相符的",
+    "groups": {
+      "actions": "这段对话",
+      "chats": "最近对话",
+      "pages": "页面",
+      "characters": "角色",
+      "themes": "世界"
+    },
+    "actions": {
+      "inspector": "打开检查器",
+      "session": "打开会话面板"
+    },
+    "newChat": "新建对话",
+    "current": "当前",
+    "settingsSection": "设置 · {{name}}",
+    "mode": "模式 · {{name}}",
+    "hints": {
+      "move": "选择",
+      "run": "打开"
+    },
+    "failed": "没能完成：{{message}}"
+  },
   "common": {
     "language": "语言",
     "save": "保存",
@@ -73,7 +99,16 @@
       "regex": "正则脚本"
     },
     "developerMode": "开发者模式",
-    "developerModeHint": "显示面向开发与排错的工具，比如检查器里的 ST 对照。"
+    "developerModeHint": "显示面向开发与排错的工具，比如检查器里的 ST 对照。",
+    "storage": {
+      "title": "存储",
+      "hint": "上传过但已经没有消息、角色或档案在用的文件，还有随消息删掉的生成图片，会一直占着硬盘。这里只清一天以前的。",
+      "clean": "清理未使用的文件",
+      "cleaning": "正在清理…",
+      "result": "清掉 {{total}} 个文件，腾出 {{size}}。",
+      "nothing": "没有要清理的文件。",
+      "failed": "没清成：{{message}}"
+    }
   },
   "appearance": {
     "world": "世界",
@@ -334,6 +369,28 @@
     "emptyTitle": "开始这段对话",
     "emptyWithCharacterHint": "这张角色卡没有开场白，发一条消息就能开始。",
     "emptyBlankHint": "空白对话没有角色设定，直接输入你想说的内容。",
+    "transfer": {
+      "import": "导入聊天记录",
+      "importTitle": "导入 SillyTavern 聊天记录",
+      "character": "绑定角色",
+      "noCharacter": "不绑定角色",
+      "matched": "按记录里的角色名「{{name}}」选好了。",
+      "unmatched": "记录里的角色是「{{name}}」，库里没有同名角色。",
+      "unreadable": "读不出这个文件的开头，仍然可以试着导入。",
+      "submit": "导入",
+      "importing": "导入中…",
+      "importFailed": "导入失败：{{message}}",
+      "doneTitle": "导入好了",
+      "doneSummary": "{{messages}} 条消息，建成 {{nodes}} 个节点。",
+      "warnings": "有几处没能完全带过来：",
+      "open": "打开对话",
+      "export": "导出为 SillyTavern 聊天记录",
+      "exporting": "导出中…",
+      "exportFailed": "导出失败：{{message}}",
+      "exportedTitle": "已导出",
+      "droppedBranches": "有 {{count}} 条分支不在当前路径上，没有导出。",
+      "skippedAttachments": "{{count}} 个附件没有写进文件，SillyTavern 读不到在这里上传的文件。"
+    },
     "list": {
       "title": "会话",
       "new": "新建对话",
@@ -360,6 +417,37 @@
       "send": "发送",
       "stop": "停止生成",
       "hint": "Enter 发送，Shift+Enter 换行"
+    },
+    "attach": {
+      "add": "添加图片或文件",
+      "trayLabel": "待发送的附件",
+      "remove": "移除「{{name}}」",
+      "retry": "重新上传「{{name}}」",
+      "uploading": "上传中 {{percent}}%",
+      "pdfMeta": "PDF · {{pages}} 页 · {{size}}",
+      "errors": {
+        "unsupported": "发不了这种文件",
+        "tooLarge": "超过 20 MB 了",
+        "failed": "没传上去"
+      },
+      "blockedRetry": "「{{name}}」没传上去，重试或移除后才能发送。",
+      "blockedRemove": "「{{name}}」{{reason}}，移除后才能发送。",
+      "blockedMany": "有 {{total}} 个文件没传上去，处理好才能发送。",
+      "imageDropped": "当前模型看不到图片，发送时会被丢弃。",
+      "pdfAsText": "当前模型读不了 PDF，将以文本发送。",
+      "pdfDropped": "当前模型读不了 PDF，发送时会被丢弃。",
+      "dropTitle": "松手，放进输入框",
+      "dropHint": "图片、PDF 或文本文件，每个不超过 20 MB",
+      "openImage": "查看「{{name}}」",
+      "openImageIndex": "查看第 {{index}} 张图（共 {{total}} 张）",
+      "kindPdf": "PDF 文档",
+      "kindText": "{{ext}} 文本",
+      "editLabel": "这条消息的附件",
+      "image": "图片",
+      "document": "文件",
+      "imageOutput": "允许模型输出图片",
+      "imageOutputHint": "模型可以在回复里附上它画的图。",
+      "imageOutputHintTool": "给模型挂上画图工具；画图按次另外计费。"
     },
     "message": {
       "copy": "复制",
@@ -436,6 +524,93 @@
         "cacheWrite": "缓存写入",
         "reasoning": "推理"
       }
+    }
+  },
+  "lightbox": {
+    "title": "看图",
+    "close": "关闭",
+    "prev": "上一张",
+    "next": "下一张",
+    "download": "下载原图",
+    "counter": "{{current}} / {{total}}",
+    "loadFailed": "这张图打不开了"
+  },
+  "gallery": {
+    "title": "图片",
+    "count": "{{total}} 张",
+    "empty": "这段对话里还没有图片。",
+    "showAll": "看全部 {{total}} 张",
+    "showLess": "收起"
+  },
+  "migration": {
+    "title": "从 SillyTavern 搬过来",
+    "subtitle": "角色、聊天、预设、世界书和用户档案一次带过来。那边的文件只读取，不会被改动。",
+    "forbiddenTitle": "只能在运行服务端的电脑上迁移",
+    "steps": {
+      "label": "迁移步骤",
+      "source": "选文件夹",
+      "review": "挑选",
+      "run": "迁移"
+    },
+    "source": {
+      "label": "SillyTavern 文件夹",
+      "placeholder": "D:\\SillyTavern",
+      "hint": "安装目录（如 D:\\SillyTavern）、它的 data 文件夹，或者具体的用户文件夹（…\\data\\default-user）都可以。",
+      "scan": "扫描",
+      "scanning": "扫描中…",
+      "users": "这里有 {{count}} 个用户，选一个："
+    },
+    "review": {
+      "from": "来自 {{path}}",
+      "selectAll": "全选",
+      "selected": "{{selected}} / {{total}}",
+      "exists": "已在库中",
+      "unreadable": "读不出来",
+      "chatCount": "{{count}} 段聊天",
+      "entryCount": "{{count}} 条",
+      "noCharacter": "没有对应的角色卡",
+      "none": "没有",
+      "categories": {
+        "characters": "角色",
+        "chats": "聊天",
+        "presets": "预设",
+        "lorebooks": "世界书",
+        "personas": "用户档案",
+        "settings": "设置与正则"
+      },
+      "regex": "全局正则脚本",
+      "regexHint": "新增 {{newCount}} 条，共 {{count}} 条；库里已有的会跳过。",
+      "worldInfo": "世界书全局设置",
+      "worldInfoHint": "扫描深度、预算、递归这些设置，以及全局启用的书：{{books}}",
+      "worldInfoNoBooks": "扫描深度、预算、递归这些设置；没有全局启用的书。",
+      "defaultPersona": "默认用户档案",
+      "defaultPersonaHint": "把「{{name}}」设为新对话默认使用的档案。",
+      "skipped": "这一版不迁移：背景 {{backgrounds}} · 指令模板 {{instruct}} · 上下文模板 {{contextTemplates}} · 主题 {{themes}} · 快捷回复 {{quickReplies}} · 群聊 {{groupChats}}",
+      "start": "开始迁移 {{count}} 项",
+      "nothing": "还没有勾选任何东西",
+      "back": "换个文件夹"
+    },
+    "run": {
+      "running": "正在迁移 {{done}} / {{total}}",
+      "done": "迁移完成",
+      "interrupted": "连接断了。已经完成的部分已在库里，可以重新扫描后继续。",
+      "failed": "迁移没能开始：{{message}}",
+      "summary": "导入 {{imported}} · 跳过 {{skipped}} · 失败 {{failed}}",
+      "status": {
+        "imported": "已导入",
+        "skipped": "跳过",
+        "failed": "失败"
+      },
+      "settingsItems": {
+        "worldInfo": "世界书全局设置",
+        "defaultPersona": "默认用户档案"
+      },
+      "warnings": "需要留意",
+      "goCharacters": "去看角色",
+      "goPresets": "去看预设",
+      "goLorebooks": "去看世界书",
+      "goChats": "去对话",
+      "again": "再扫描一次"
     }
   },
   "connections": {

@@ -37,6 +37,12 @@ import {
   type LorebookEntryExtra,
   type LorebookSettings,
 } from './character-book.js';
+import {
+  ChatTransferError,
+  importStChat,
+  type ImportStChatInput,
+  type ImportStChatResult,
+} from './chat-transfer.js';
 import { stRegexToScript, toRegexColumns, toRegexScript, type RegexScript } from './regex-map.js';
 
 export type CharacterFormat = 'png' | 'charx' | 'json';
@@ -109,14 +115,14 @@ const KIND_HINTS: Record<StFileKind, string> = {
   lorebook: '这是世界书文件，请到「世界书」页面导入。',
   preset: '这是预设文件，请到「预设」页面导入。',
   regex: '这是正则脚本文件，请到「设置 · 正则脚本」导入。',
-  chat: '这是 SillyTavern 聊天记录文件，目前还不支持导入。',
+  chat: '这是 SillyTavern 聊天记录，请在对话列表里导入。',
 };
 
 /**
  * 解析前先粗判文件类型：能识别出是另一类文件时，直接给出「去哪个页面导入」的提示。
  * 识别不出（null）或正是期望的类型时放行，交给各自的解析器——不会误伤合法但少见的文件。
  */
-function assertExpectedKind(bytes: Uint8Array, expected: StFileKind) {
+export function assertExpectedKind(bytes: Uint8Array, expected: StFileKind) {
   const detected: StFileKind | null =
     isPng(bytes) || isZip(bytes)
       ? 'character'
@@ -253,10 +259,12 @@ export function createImporter(db: Db, assets: AssetsService, dataDir: string) {
       return { fileName, mime, bytes: writeCharx(card, files) };
     },
 
-    importPreset(fileName: string, bytes: Uint8Array) {
+    /** options.name：迁移 ST 目录时用文件名当名字（ST 里预设名就是文件名） */
+    importPreset(fileName: string, bytes: Uint8Array, options: { name?: string } = {}) {
       assertExpectedKind(bytes, 'preset');
       const preset = guard(() => parsePreset(parseJsonBytes(bytes, '预设')));
-      const name = typeof preset['name'] === 'string' ? preset['name'] : baseName(fileName);
+      const name =
+        options.name ?? (typeof preset['name'] === 'string' ? preset['name'] : baseName(fileName));
       return db
         .insert(schema.presets)
         .values({
@@ -280,7 +288,8 @@ export function createImporter(db: Db, assets: AssetsService, dataDir: string) {
       };
     },
 
-    importLorebook(fileName: string, bytes: Uint8Array) {
+    /** options.name：迁移 ST 目录时用文件名当名字（ST 里世界书名就是文件名） */
+    importLorebook(fileName: string, bytes: Uint8Array, options: { name?: string } = {}) {
       assertExpectedKind(bytes, 'lorebook');
       const book = guard(() => parseWorldbook(parseJsonBytes(bytes, '世界书')));
       const { entries: _entries, ...meta } = book;
@@ -290,7 +299,11 @@ export function createImporter(db: Db, assets: AssetsService, dataDir: string) {
       return db.transaction((tx) => {
         const row = tx
           .insert(schema.lorebooks)
-          .values({ name: book.name ?? baseName(fileName), scope: 'global', settings })
+          .values({
+            name: options.name ?? book.name ?? baseName(fileName),
+            scope: 'global',
+            settings,
+          })
           .returning()
           .get();
         for (const item of items) {
@@ -311,6 +324,17 @@ export function createImporter(db: Db, assets: AssetsService, dataDir: string) {
         mime: 'application/json',
         bytes: new TextEncoder().encode(serializeWorldbook(worldbookFromTable(db, book))),
       };
+    },
+
+    /** SillyTavern 聊天记录 jsonl → 一段新对话（契约 M4 §2.2） */
+    importChat(input: ImportStChatInput): ImportStChatResult {
+      assertExpectedKind(input.bytes, 'chat');
+      try {
+        return importStChat(db, assets, input);
+      } catch (e) {
+        if (e instanceof ChatTransferError) throw new ImportError(e.message);
+        throw e;
+      }
     },
 
     /** ST 正则脚本 JSON（单条或数组）→ regex_scripts 表（scope='global'，契约 §3.2） */

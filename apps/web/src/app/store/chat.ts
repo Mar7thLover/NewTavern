@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-import type { GenerateBody, GenerationError } from '../../lib/api';
+import type { GenerateBody, GenerationError, ImagePart } from '../../lib/api';
 
 /** 单个助手节点的流式缓冲；持久数据始终在 TanStack Query 缓存里 */
 export interface StreamBuffer {
@@ -8,6 +8,8 @@ export interface StreamBuffer {
   reasoning: string;
   /** 推理区是否已被用户手动展开（未展开时正文出现后自动折叠） */
   reasoningPinned: boolean;
+  /** 流式中收到的图片（SSE `image`），显示在正文之后；`done` 后以节点 parts 的最终顺序为准 */
+  images: ImagePart[];
 }
 
 export interface ChatRun {
@@ -27,13 +29,14 @@ interface ChatStreamState {
   startRun: (chatId: string, body: GenerateBody) => void;
   attachNode: (chatId: string, nodeId: string) => void;
   appendDelta: (nodeId: string, field: 'text' | 'reasoning', text: string) => void;
+  appendImage: (nodeId: string, part: ImagePart) => void;
   pinReasoning: (nodeId: string, pinned: boolean) => void;
   failRun: (chatId: string, error: GenerationError & { retryable: boolean }) => void;
   endRun: (chatId: string, nodeIds?: string[]) => void;
   clearError: (chatId: string) => void;
 }
 
-const EMPTY_BUFFER: StreamBuffer = { text: '', reasoning: '', reasoningPinned: false };
+const EMPTY_BUFFER: StreamBuffer = { text: '', reasoning: '', reasoningPinned: false, images: [] };
 
 function withoutKeys<T>(record: Record<string, T>, keys: readonly string[]): Record<string, T> {
   if (keys.length === 0) return record;
@@ -70,6 +73,19 @@ export const useChatStore = create<ChatStreamState>()((set) => ({
       const buffer = state.streaming[nodeId] ?? EMPTY_BUFFER;
       return {
         streaming: { ...state.streaming, [nodeId]: { ...buffer, [field]: buffer[field] + text } },
+      };
+    }),
+
+  appendImage: (nodeId, part) =>
+    set((state) => {
+      const buffer = state.streaming[nodeId] ?? EMPTY_BUFFER;
+      // 同一资产重复推送（重连、重放）只留一份
+      if (buffer.images.some((image) => image.assetId === part.assetId)) return state;
+      return {
+        streaming: {
+          ...state.streaming,
+          [nodeId]: { ...buffer, images: [...buffer.images, part] },
+        },
       };
     }),
 

@@ -15,6 +15,32 @@
     "settings": "Settings",
     "migration": "Migration"
   },
+  "palette": {
+    "title": "Command palette",
+    "open": "Search and jump",
+    "placeholder": "Search chats, characters, pages or worlds",
+    "empty": "Nothing matches “{{query}}”",
+    "groups": {
+      "actions": "This chat",
+      "chats": "Recent chats",
+      "pages": "Pages",
+      "characters": "Characters",
+      "themes": "Worlds"
+    },
+    "actions": {
+      "inspector": "Open the inspector",
+      "session": "Open the session panel"
+    },
+    "newChat": "New chat",
+    "current": "Current",
+    "settingsSection": "Settings · {{name}}",
+    "mode": "Mode · {{name}}",
+    "hints": {
+      "move": "Move",
+      "run": "Open"
+    },
+    "failed": "Couldn't finish: {{message}}"
+  },
   "common": {
     "language": "Language",
     "save": "Save",
@@ -73,7 +99,16 @@
       "regex": "Regex scripts"
     },
     "developerMode": "Developer mode",
-    "developerModeHint": "Show tools for development and debugging, such as the ST diff in the inspector."
+    "developerModeHint": "Show tools for development and debugging, such as the ST diff in the inspector.",
+    "storage": {
+      "title": "Storage",
+      "hint": "Uploads that no message, character or persona uses anymore, and generated images whose messages were deleted, stay on disk. This clears the ones older than a day.",
+      "clean": "Clean up unused files",
+      "cleaning": "Cleaning up…",
+      "result": "Removed {{total}} files, freed {{size}}.",
+      "nothing": "Nothing to clean up.",
+      "failed": "Couldn't clean up: {{message}}"
+    }
   },
   "appearance": {
     "world": "World",
@@ -334,6 +369,28 @@
     "emptyTitle": "Start the conversation",
     "emptyWithCharacterHint": "This card has no first message. Send something to begin.",
     "emptyBlankHint": "A blank chat has no character. Just type what you want to say.",
+    "transfer": {
+      "import": "Import chat log",
+      "importTitle": "Import a SillyTavern chat",
+      "character": "Character",
+      "noCharacter": "No character",
+      "matched": "Picked by the name “{{name}}” in the file.",
+      "unmatched": "The file names “{{name}}”, which isn't in your library.",
+      "unreadable": "Couldn't read the start of this file. You can still try importing it.",
+      "submit": "Import",
+      "importing": "Importing…",
+      "importFailed": "Import failed: {{message}}",
+      "doneTitle": "Imported",
+      "doneSummary": "{{messages}} messages, {{nodes}} nodes.",
+      "warnings": "A few things didn't come over completely:",
+      "open": "Open chat",
+      "export": "Export as SillyTavern chat",
+      "exporting": "Exporting…",
+      "exportFailed": "Export failed: {{message}}",
+      "exportedTitle": "Exported",
+      "droppedBranches": "{{count}} branches aren't on the current path and were left out.",
+      "skippedAttachments": "{{count}} attachments weren't written to the file; SillyTavern can't read files uploaded here."
+    },
     "list": {
       "title": "Chats",
       "new": "New chat",
@@ -360,6 +417,37 @@
       "send": "Send",
       "stop": "Stop generating",
       "hint": "Enter to send, Shift+Enter for a new line"
+    },
+    "attach": {
+      "add": "Add images or files",
+      "trayLabel": "Attachments to send",
+      "remove": "Remove “{{name}}”",
+      "retry": "Upload “{{name}}” again",
+      "uploading": "Uploading {{percent}}%",
+      "pdfMeta": "PDF · {{pages}} pp · {{size}}",
+      "errors": {
+        "unsupported": "can't be sent",
+        "tooLarge": "is over 20 MB",
+        "failed": "didn't upload"
+      },
+      "blockedRetry": "“{{name}}” didn't upload. Retry or remove it to send.",
+      "blockedRemove": "“{{name}}” {{reason}}. Remove it to send.",
+      "blockedMany": "{{total}} files didn't upload. Sort them out to send.",
+      "imageDropped": "This model can't see images; they'll be dropped when you send.",
+      "pdfAsText": "This model can't read PDFs; they'll be sent as text.",
+      "pdfDropped": "This model can't read PDFs; they'll be dropped when you send.",
+      "dropTitle": "Let go to attach",
+      "dropHint": "Images, PDFs or text files, up to 20 MB each",
+      "openImage": "View “{{name}}”",
+      "openImageIndex": "View image {{index}} of {{total}}",
+      "kindPdf": "PDF document",
+      "kindText": "{{ext}} text",
+      "editLabel": "Attachments on this message",
+      "image": "Image",
+      "document": "File",
+      "imageOutput": "Let the model output images",
+      "imageOutputHint": "Replies can include pictures the model draws.",
+      "imageOutputHintTool": "Gives the model an image tool; each image is billed separately."
     },
     "message": {
       "copy": "Copy",
@@ -436,6 +524,93 @@
         "cacheWrite": "Cache write",
         "reasoning": "Reasoning"
       }
+    }
+  },
+  "lightbox": {
+    "title": "Image",
+    "close": "Close",
+    "prev": "Previous",
+    "next": "Next",
+    "download": "Download original",
+    "counter": "{{current}} / {{total}}",
+    "loadFailed": "This image won't open"
+  },
+  "gallery": {
+    "title": "Images",
+    "count": "{{total}}",
+    "empty": "No images in this chat yet.",
+    "showAll": "Show all {{total}}",
+    "showLess": "Show less"
+  },
+  "migration": {
+    "title": "Move in from SillyTavern",
+    "subtitle": "Bring characters, chats, presets, lorebooks and personas over in one go. Files over there are only read, never changed.",
+    "forbiddenTitle": "Migration only works on the computer running the server",
+    "steps": {
+      "label": "Migration steps",
+      "source": "Folder",
+      "review": "Pick",
+      "run": "Migrate"
+    },
+    "source": {
+      "label": "SillyTavern folder",
+      "placeholder": "D:\\SillyTavern",
+      "hint": "The install folder (e.g. D:\\SillyTavern), its data folder, or a single user folder (…\\data\\default-user).",
+      "scan": "Scan",
+      "scanning": "Scanning…",
+      "users": "There are {{count}} users here. Pick one:"
+    },
+    "review": {
+      "from": "From {{path}}",
+      "selectAll": "Select all",
+      "selected": "{{selected}} / {{total}}",
+      "exists": "Already in library",
+      "unreadable": "Unreadable",
+      "chatCount": "{{count}} chats",
+      "entryCount": "{{count}} entries",
+      "noCharacter": "No matching character card",
+      "none": "None",
+      "categories": {
+        "characters": "Characters",
+        "chats": "Chats",
+        "presets": "Presets",
+        "lorebooks": "Lorebooks",
+        "personas": "Personas",
+        "settings": "Settings & regex"
+      },
+      "regex": "Global regex scripts",
+      "regexHint": "{{newCount}} new of {{count}}; ones already in your library are skipped.",
+      "worldInfo": "Lorebook global settings",
+      "worldInfoHint": "Scan depth, budget, recursion and the globally active books: {{books}}",
+      "worldInfoNoBooks": "Scan depth, budget and recursion; no globally active books.",
+      "defaultPersona": "Default persona",
+      "defaultPersonaHint": "Make “{{name}}” the persona new chats start with.",
+      "skipped": "Not migrated in this version: backgrounds {{backgrounds}} · instruct templates {{instruct}} · context templates {{contextTemplates}} · themes {{themes}} · quick replies {{quickReplies}} · group chats {{groupChats}}",
+      "start": "Migrate {{count}} items",
+      "nothing": "Nothing selected yet",
+      "back": "Choose another folder"
+    },
+    "run": {
+      "running": "Migrating {{done}} / {{total}}",
+      "done": "Migration finished",
+      "interrupted": "The connection dropped. Everything finished so far is in your library; scan again to continue.",
+      "failed": "Migration couldn't start: {{message}}",
+      "summary": "Imported {{imported}} · skipped {{skipped}} · failed {{failed}}",
+      "status": {
+        "imported": "Imported",
+        "skipped": "Skipped",
+        "failed": "Failed"
+      },
+      "settingsItems": {
+        "worldInfo": "Lorebook global settings",
+        "defaultPersona": "Default persona"
+      },
+      "warnings": "Worth a look",
+      "goCharacters": "Characters",
+      "goPresets": "Presets",
+      "goLorebooks": "Lorebooks",
+      "goChats": "Chats",
+      "again": "Scan again"
     }
   },
   "connections": {

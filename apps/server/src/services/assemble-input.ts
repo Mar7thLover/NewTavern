@@ -19,8 +19,10 @@ import {
   type ChatRow,
   type NodeRow,
 } from './chat-tree.js';
+import type { AssetsService } from './assets.js';
 import type { LayoutMode } from './generation-context.js';
 import { resolveGlobalSystemPrompt } from './global-system-prompt.js';
+import { inlineDocumentParts } from './media-inline.js';
 import { characterRegexScripts, toRegexScript } from './regex-map.js';
 import { readGlobalVariables } from './variables.js';
 import { loadWIBooks, mapCharacterDepthPrompt } from './wi-map.js';
@@ -57,6 +59,11 @@ export interface BuildAssembleInputContext {
   model: string;
   layoutMode: LayoutMode;
   caps: ModelCapabilities;
+  /**
+   * 资产服务：提供时历史里的文档附件按 M4 §3.3 在组装前内联成文本（`media-inline.ts`）。
+   * 缺省时文档 part 原样交给适配器（检查器预览显示占位）。
+   */
+  assets?: AssetsService;
   /** 检查器预览：不推进 WI 时间态、不产生变量副作用 */
   dryRun?: boolean;
   /** 本轮新节点的兄弟序号；缺省按父节点下一个 */
@@ -160,7 +167,13 @@ export function buildAssembleInput(db: Db, ctx: BuildAssembleInputContext): Asse
     id: node.id,
     role: node.role,
     name: node.name,
-    parts: (node.parts as AssembleHistoryNode['parts'] | null) ?? [],
+    // 文本类文档与（模型不收 PDF 时）有抽取文本的 PDF 内联进正文，见 media-inline.ts
+    parts: ctx.assets
+      ? inlineDocumentParts((node.parts as AssembleHistoryNode['parts'] | null) ?? [], {
+          caps: ctx.caps,
+          assets: ctx.assets,
+        })
+      : ((node.parts as AssembleHistoryNode['parts'] | null) ?? []),
     // reasoning.opaque 里 provider/model 不匹配的块由 assemblePrompt 负责丢弃
     reasoning: (node.reasoning as AssembleHistoryNode['reasoning']) ?? null,
     // AS-14：isHidden（ST `is_system`）的消息由组装器整条剔除

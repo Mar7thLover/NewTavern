@@ -2,6 +2,7 @@ import type { Part, PromptIR, Role, Segment } from '@newtavern/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { HttpError } from '../http.js';
+import { PDF_DATA_URL, PNG_DATA_URL, resolveAsset } from '../test-media.js';
 import type { Connection, GenEvent } from '../types.js';
 import { openaiResponsesAdapter } from './openai-responses.js';
 
@@ -111,10 +112,8 @@ describe('openai-responses buildRequest', () => {
         },
       ],
     });
-    expect(req.warnings).toEqual([
-      '图片 a1 以 asset: 占位 URL 渲染，需由服务端替换为 data URL',
-      'Responses 不支持 top_k，已丢弃',
-    ]);
+    // 没有 resolver 就是预览：占位本身不告警
+    expect(req.warnings).toEqual(['Responses 不支持 top_k，已丢弃']);
   });
 
   it('中途 system 段降级为 developer 角色', () => {
@@ -287,14 +286,17 @@ describe('openai-responses buildRequest', () => {
     expect(req.warnings).toContain('推理块来自 anthropic/claude-opus-5，与当前模型不符，已丢弃');
   });
 
-  it('文档 part 以 input_file 占位并 warning', () => {
-    const ir = makeIr([
-      seg('h1', 'user', [{ type: 'document', assetId: 'd1', mime: 'application/pdf' }]),
-    ]);
+  it('没有 resolver 时 PDF 以 input_file.file_data 占位，不告警', () => {
+    const ir = makeIr(
+      [seg('h1', 'user', [{ type: 'document', assetId: 'd1', mime: 'application/pdf' }])],
+      { sampling: {} },
+    );
     const req = openaiResponsesAdapter.buildRequest(ir, conn, 'gpt-4.1');
     const body = req.body as { input: { content: unknown[] }[] };
-    expect(body.input[0]?.content).toEqual([{ type: 'input_file', file_id: 'asset:d1' }]);
-    expect(req.warnings).toContain('文档 d1 以 asset: 占位 file_id 渲染，需由服务端上传后替换');
+    expect(body.input[0]?.content).toEqual([
+      { type: 'input_file', filename: 'd1.pdf', file_data: 'asset:d1' },
+    ]);
+    expect(req.warnings).toBeUndefined();
   });
 
   it('末尾是 assistant 时补一条 user 占位', () => {
@@ -661,5 +663,149 @@ describe('openai-responses listModels / normalizeError / capabilities', () => {
       modelOverrides: { 'gpt-5': { maxOutput: 1024 } },
     });
     expect(overridden.maxOutput).toBe(1024);
+  });
+});
+
+describe('openai-responses 多模态', () => {
+  const plainIr = (segments: Segment[]) => makeIr(segments, { sampling: {} });
+  type Item = { role?: string; content?: unknown[]; type?: string };
+  const inputOf = (req: { body: unknown }) => (req.body as { input: Item[] }).input;
+
+  it('有 resolver：input_image data URL、input_file filename + file_data，保持顺序', () => {
+    const ir = plainIr([
+      seg('h1', 'user', [
+        { type: 'text', text: '看看' },
+        { type: 'image', assetId: 'img1', mime: 'image/png' },
+        { type: 'document', assetId: 'doc1', mime: 'application/pdf', name: '旧名.pdf' },
+      ]),
+    ]);
+    const req = openaiResponsesAdapter.buildRequest(ir, conn, 'gpt-4.1', { resolveAsset });
+    expect(inputOf(req)[0]?.content).toEqual([
+      { type: 'input_text', text: '看看' },
+      { type: 'input_image', image_url: PNG_DATA_URL },
+      // 文件名以服务端读出的资产为准
+      { type: 'input_file', filename: '设定集.pdf', file_data: PDF_DATA_URL },
+    ]);
+    expect(req.warnings).toBeUndefined();
+  });
+
+  it('没有 resolver：占位且不告警；PDF 用 part.name 作文件名', () => {
+    const ir = plainIr([
+      seg('h1', 'user', [
+        { type: 'image', assetId: 'img1', mime: 'image/png' },
+        { type: 'document', assetId: 'doc1', mime: 'application/pdf', name: '旧名.pdf' },
+      ]),
+    ]);
+    const req = openaiResponsesAdapter.buildRequest(ir, conn, 'gpt-4.1');
+    expect(inputOf(req)[0]?.content).toEqual([
+      { type: 'input_image', image_url: 'asset:img1' },
+      { type: 'input_file', filename: '旧名.pdf', file_data: 'asset:doc1' },
+    ]);
+    expect(req.warnings).toBeUndefined();
+  });
+
+  it('imageIn / documentIn 为 false（o3-mini）：图片与 PDF 全部丢弃并汇总告警', () => {
+    const ir = plainIr([
+      seg('h1', 'user', [
+        { type: 'text', text: '读图读文档' },
+        { type: 'image', assetId: 'img1', mime: 'image/png' },
+        { type: 'document', assetId: 'doc1', mime: 'application/pdf' },
+      ]),
+    ]);
+    const req = openaiResponsesAdapter.buildRequest(ir, conn, 'o3-mini', { resolveAsset });
+    expect(inputOf(req)[0]?.content).toEqual([{ type: 'input_text', text: '读图读文档' }]);
+    expect(req.warnings).toEqual([
+      '模型不支持图片输入，已丢弃 1 张图片',
+      '模型不支持 PDF 输入，已丢弃 1 个 PDF',
+    ]);
+  });
+
+  it('assistant 消息里的图片丢弃并告警；只剩图片的 assistant 消息整条不出现（Responses 允许相邻 user 项）', () => {
+    const ir = plainIr([
+      text('h1', 'user', '画'),
+      seg('h2', 'assistant', [
+        { type: 'text', text: '好了' },
+        { type: 'image', assetId: 'img1', mime: 'image/png' },
+      ]),
+      text('h3', 'user', '再画'),
+      seg('h4', 'assistant', [{ type: 'image', assetId: 'img2', mime: 'image/png' }]),
+      text('h5', 'user', '谢谢'),
+    ]);
+    const req = openaiResponsesAdapter.buildRequest(ir, conn, 'gpt-4.1', { resolveAsset });
+    expect(inputOf(req)).toEqual([
+      { role: 'user', content: [{ type: 'input_text', text: '画' }] },
+      { role: 'assistant', content: [{ type: 'output_text', text: '好了' }] },
+      { role: 'user', content: [{ type: 'input_text', text: '再画' }] },
+      { role: 'user', content: [{ type: 'input_text', text: '谢谢' }] },
+    ]);
+    expect(req.warnings).toEqual(['Responses 的 assistant 消息不接受图片 / PDF，已丢弃 2 个']);
+  });
+
+  it('resolver 找不到资产：丢弃并告警', () => {
+    const ir = plainIr([
+      seg('h1', 'user', [
+        { type: 'text', text: 'x' },
+        { type: 'document', assetId: 'nope', mime: 'application/pdf' },
+      ]),
+    ]);
+    const req = openaiResponsesAdapter.buildRequest(ir, conn, 'gpt-4.1', { resolveAsset });
+    expect(inputOf(req)[0]?.content).toEqual([{ type: 'input_text', text: 'x' }]);
+    expect(req.warnings).toEqual(['找不到资产 nope，已丢弃']);
+  });
+
+  it('imageOutput：缺省不挂工具；显式 true 追加 image_generation；目录未标注时告警', () => {
+    const ir = plainIr([text('h1', 'user', '画一只猫')]);
+    const plain = openaiResponsesAdapter.buildRequest(ir, conn, 'gpt-5');
+    expect((plain.body as Record<string, unknown>).tools).toBeUndefined();
+
+    const on = openaiResponsesAdapter.buildRequest(ir, conn, 'gpt-5', { imageOutput: true });
+    expect((on.body as Record<string, unknown>).tools).toEqual([{ type: 'image_generation' }]);
+    expect(on.warnings ?? []).not.toContain(expect.stringContaining('图片输出'));
+
+    const off = openaiResponsesAdapter.buildRequest(ir, conn, 'gpt-5', { imageOutput: false });
+    expect((off.body as Record<string, unknown>).tools).toBeUndefined();
+
+    const unknown = openaiResponsesAdapter.buildRequest(ir, conn, 'gpt-6', { imageOutput: true });
+    expect((unknown.body as Record<string, unknown>).tools).toEqual([{ type: 'image_generation' }]);
+    expect(unknown.warnings).toContain('目录没有标注 gpt-6 支持图片输出，仍按请求开启');
+  });
+
+  it('回放 image_generation_call：output_format 决定 mime，文本与图片按到达顺序', async () => {
+    const body = sse([
+      { type: 'response.output_text.delta', delta: '这是你要的图' },
+      {
+        type: 'response.image_generation_call.partial_image',
+        partial_image_b64: 'PARTIAL',
+        partial_image_index: 0,
+      },
+      {
+        type: 'response.output_item.done',
+        item: {
+          type: 'image_generation_call',
+          id: 'ig_1',
+          status: 'completed',
+          output_format: 'webp',
+          revised_prompt: '一只猫',
+          result: 'UklGRg==',
+        },
+      },
+      { type: 'response.completed', response: {} },
+    ]);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve(sseResponse(body))),
+    );
+    const events = await drain(
+      openaiResponsesAdapter.stream(
+        conn,
+        { method: 'POST', url: 'https://api.openai.com/v1/responses', headers: {}, body: {} },
+        new AbortController().signal,
+      ),
+    );
+    expect(events).toEqual([
+      { type: 'text.delta', text: '这是你要的图' },
+      { type: 'image', mime: 'image/webp', data: 'UklGRg==' },
+      { type: 'stop', reason: 'end' },
+    ]);
   });
 });

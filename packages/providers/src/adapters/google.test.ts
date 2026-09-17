@@ -2,7 +2,8 @@ import type { Part, PromptIR, Role, Segment } from '@newtavern/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { HttpError } from '../http.js';
-import type { Connection, GenEvent } from '../types.js';
+import { PDF_B64, PNG_B64, resolveAsset } from '../test-media.js';
+import type { Connection, GenEvent, ResolvedAsset } from '../types.js';
 import { googleAdapter } from './google.js';
 
 /** 默认测试模型：gemini-3* → thinking='level' */
@@ -250,7 +251,7 @@ describe('google buildRequest', () => {
     expect(req.warnings).toContain('Gemini 不支持 repetition_penalty，已丢弃');
   });
 
-  it('图片 / 文档 part 渲染为 asset: 占位文本并告警', () => {
+  it('没有 resolver 时图片 / 文档 part 渲染为 asset: 占位文本，不告警', () => {
     const ir = makeIr([
       seg('h1', 'user', [
         { type: 'text', text: '看图' },
@@ -264,10 +265,7 @@ describe('google buildRequest', () => {
       { text: 'asset:img1' },
       { text: 'asset:doc1' },
     ]);
-    expect(req.warnings).toEqual([
-      '图片 img1 以 asset: 占位文本渲染，需由服务端替换为 inlineData',
-      '文档 doc1 以 asset: 占位文本渲染，需由服务端替换为 inlineData',
-    ]);
+    expect(req.warnings).toBeUndefined();
   });
 
   it('历史里的 reasoning_opaque：thoughtSignature 附着到该 model content 的文本 part 上', () => {
@@ -324,7 +322,7 @@ describe('google buildRequest', () => {
     ]);
     const { req, body: b } = body(ir);
     expect(b.contents[1]).toEqual({ role: 'model', parts: [] });
-    expect(req.warnings?.some((w) => w.includes('没有可附着的文本 part'))).toBe(true);
+    expect(req.warnings?.some((w) => w.includes('没有可附着的文本 / 图片 part'))).toBe(true);
   });
 
   it('ir.sampling.thinking 与 opts.thinking 都能提供 effort（opts 优先）', () => {
@@ -442,7 +440,13 @@ describe('google stream', () => {
         type: 'reasoning.opaque',
         provider: 'google',
         model: LEVEL_MODEL,
-        payload: { type: 'thoughtSignature', thoughtSignature: 'SIG-A', partIndex: 0 },
+        payload: {
+          type: 'thoughtSignature',
+          thoughtSignature: 'SIG-A',
+          partIndex: 0,
+          target: 'text',
+          ordinal: 0,
+        },
       },
       { type: 'usage', input: 70, output: 12, cacheRead: 30, cacheWrite: 0, reasoning: 7 },
       { type: 'stop', reason: 'end' },
@@ -696,5 +700,253 @@ describe('google listModels / normalizeError', () => {
         modelOverrides: { [LEVEL_MODEL]: { maxOutput: 1024 } },
       }).maxOutput,
     ).toBe(1024);
+  });
+});
+
+describe('google 多模态', () => {
+  const IMAGE_MODEL = 'gemini-3-pro-image-preview';
+
+  type Content = { role: string; parts: Record<string, unknown>[] };
+  const contentsOf = (b: Body) => b.contents as unknown as Content[];
+
+  it('有 resolver：user 的图片与 PDF → inlineData；model 角色里的图片保留为 inlineData', () => {
+    const ir = makeIr([
+      seg('h1', 'user', [
+        { type: 'text', text: '看图' },
+        { type: 'image', assetId: 'img1', mime: 'image/png' },
+        { type: 'document', assetId: 'doc1', mime: 'application/pdf' },
+      ]),
+      seg('h2', 'assistant', [
+        { type: 'text', text: '画好了' },
+        { type: 'image', assetId: 'img2', mime: 'image/jpeg' },
+      ]),
+      text('h3', 'user', '再来'),
+    ]);
+    const { req, body: b } = body(ir, LEVEL_MODEL, { resolveAsset });
+    expect(contentsOf(b)).toEqual([
+      {
+        role: 'user',
+        parts: [
+          { text: '看图' },
+          { inlineData: { mimeType: 'image/png', data: PNG_B64 } },
+          { inlineData: { mimeType: 'application/pdf', data: PDF_B64 } },
+        ],
+      },
+      {
+        role: 'model',
+        parts: [{ text: '画好了' }, { inlineData: { mimeType: 'image/jpeg', data: PNG_B64 } }],
+      },
+      { role: 'user', parts: [{ text: '再来' }] },
+    ]);
+    expect(req.warnings).toBeUndefined();
+  });
+
+  it('imageIn / documentIn 为 false：丢弃并汇总告警；只有媒体的 content 用零宽空格占位', () => {
+    const noMedia: Connection = {
+      ...conn,
+      modelOverrides: { [LEVEL_MODEL]: { imageIn: false, documentIn: false } },
+    };
+    const ir = makeIr([
+      seg('h1', 'user', [
+        { type: 'image', assetId: 'img1', mime: 'image/png' },
+        { type: 'image', assetId: 'img2', mime: 'image/png' },
+        { type: 'document', assetId: 'doc1', mime: 'application/pdf' },
+      ]),
+    ]);
+    for (const opts of [{ resolveAsset }, undefined]) {
+      const req = googleAdapter.buildRequest(ir, noMedia, LEVEL_MODEL, opts);
+      expect((req.body as Body).contents).toEqual([{ role: 'user', parts: [{ text: '​' }] }]);
+      expect(req.warnings).toEqual([
+        '模型不支持图片输入，已丢弃 2 张图片',
+        '模型不支持 PDF 输入，已丢弃 1 个 PDF',
+      ]);
+    }
+  });
+
+  it('systemInstruction 只收文本：里面的图片丢弃并告警；找不到的资产丢弃并告警', () => {
+    const ir = makeIr([
+      seg(
+        's1',
+        'system',
+        [
+          { type: 'text', text: 'SYS' },
+          { type: 'image', assetId: 'img1', mime: 'image/png' },
+        ],
+        'system',
+      ),
+      seg('h1', 'user', [
+        { type: 'text', text: 'u' },
+        { type: 'image', assetId: 'lost', mime: 'image/png' },
+      ]),
+    ]);
+    const { req, body: b } = body(ir, LEVEL_MODEL, { resolveAsset });
+    expect(b.systemInstruction).toEqual({ parts: [{ text: 'SYS' }] });
+    expect(b.contents).toEqual([{ role: 'user', parts: [{ text: 'u' }] }]);
+    expect(req.warnings).toEqual([
+      '找不到资产 lost，已丢弃',
+      'Gemini 的 systemInstruction 消息不接受图片 / PDF，已丢弃 1 个',
+    ]);
+  });
+
+  it('imageOutput：生图模型缺省 responseModalities TEXT+IMAGE，显式关闭只要 TEXT；文本模型缺省不带', () => {
+    const ir = makeIr([text('h1', 'user', '画一只猫')]);
+    const image = body(ir, IMAGE_MODEL);
+    expect(image.body.generationConfig.responseModalities).toEqual(['TEXT', 'IMAGE']);
+    // 生图模型 thinking='none'：不带 thinkingConfig
+    expect(image.body.generationConfig.thinkingConfig).toBeUndefined();
+
+    const off = body(ir, IMAGE_MODEL, { imageOutput: false });
+    expect(off.body.generationConfig.responseModalities).toEqual(['TEXT']);
+
+    const textModel = body(ir, LEVEL_MODEL);
+    expect(textModel.body.generationConfig.responseModalities).toBeUndefined();
+    expect(
+      body(ir, LEVEL_MODEL, { imageOutput: false }).body.generationConfig.responseModalities,
+    ).toBeUndefined();
+
+    const forced = body(ir, LEVEL_MODEL, { imageOutput: true });
+    expect(forced.body.generationConfig.responseModalities).toEqual(['TEXT', 'IMAGE']);
+    expect(forced.req.warnings).toContain(`目录没有标注 ${LEVEL_MODEL} 支持图片输出，仍按请求开启`);
+  });
+
+  it('回放生图流：thought 草图不输出，签名记下挂在第几个文本段 / 第几张图', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(
+            [
+              'data: {"candidates":[{"content":{"role":"model","parts":[{"text":"构图中","thought":true},{"inlineData":{"mimeType":"image/png","data":"DRAFT"},"thought":true}]}}]}',
+              '',
+              'data: {"candidates":[{"content":{"role":"model","parts":[{"text":"这是","thoughtSignature":"SIG-T"}]}}]}',
+              '',
+              'data: {"candidates":[{"content":{"role":"model","parts":[{"text":"第一张"}]}}]}',
+              '',
+              'data: {"candidates":[{"content":{"role":"model","parts":[{"inlineData":{"mimeType":"image/png","data":"IMG1"},"thoughtSignature":"SIG-I1"}]}}]}',
+              '',
+              'data: {"candidates":[{"content":{"role":"model","parts":[{"text":"第二张："},{"inlineData":{"mimeType":"image/jpeg","data":"IMG2"},"thoughtSignature":"SIG-I2"}]},"finishReason":"STOP"}]}',
+              '',
+              '',
+            ].join('\n'),
+            { status: 200, headers: { 'content-type': 'text/event-stream' } },
+          ),
+        ),
+      ),
+    );
+    const req = {
+      method: 'POST' as const,
+      url: `https://x/v1beta/models/${IMAGE_MODEL}:streamGenerateContent?alt=sse`,
+      headers: {},
+      body: {},
+    };
+    const events = await drain(googleAdapter.stream(conn, req, new AbortController().signal));
+    const opaque = (
+      thoughtSignature: string,
+      partIndex: number,
+      target: string,
+      ordinal: number,
+    ) => ({
+      type: 'reasoning.opaque',
+      provider: 'google',
+      model: IMAGE_MODEL,
+      payload: { type: 'thoughtSignature', thoughtSignature, partIndex, target, ordinal },
+    });
+    expect(events).toEqual([
+      { type: 'reasoning.delta', text: '构图中' },
+      { type: 'text.delta', text: '这是' },
+      { type: 'text.delta', text: '第一张' },
+      { type: 'image', mime: 'image/png', data: 'IMG1' },
+      { type: 'text.delta', text: '第二张：' },
+      { type: 'image', mime: 'image/jpeg', data: 'IMG2' },
+      opaque('SIG-T', 0, 'text', 0),
+      opaque('SIG-I1', 0, 'image', 0),
+      opaque('SIG-I2', 1, 'image', 1),
+      { type: 'stop', reason: 'end' },
+    ]);
+  });
+
+  it('往返：流里记下的签名回传时挂回同一个文本段与同一张图', () => {
+    const generated: Record<string, ResolvedAsset> = {
+      g1: { mime: 'image/png', base64: 'IMG1' },
+      g2: { mime: 'image/jpeg', base64: 'IMG2' },
+    };
+    const sig = (thoughtSignature: string, target: string, ordinal: number): Part => ({
+      type: 'reasoning_opaque',
+      provider: 'google',
+      model: IMAGE_MODEL,
+      payload: { type: 'thoughtSignature', thoughtSignature, partIndex: 0, target, ordinal },
+    });
+    // 服务端落库形态：推理块在前，文本段与图片按到达顺序交错
+    const ir = makeIr([
+      text('h1', 'user', '画两张'),
+      seg('h2', 'assistant', [
+        sig('SIG-T', 'text', 0),
+        sig('SIG-I1', 'image', 0),
+        sig('SIG-I2', 'image', 1),
+        { type: 'text', text: '这是第一张' },
+        { type: 'image', assetId: 'g1', mime: 'image/png' },
+        { type: 'text', text: '第二张：' },
+        { type: 'image', assetId: 'g2', mime: 'image/jpeg' },
+      ]),
+      text('h3', 'user', '把第二张改成夜景'),
+    ]);
+    const { req, body: b } = body(ir, IMAGE_MODEL, { resolveAsset: (id) => generated[id] });
+    expect(contentsOf(b)[1]).toEqual({
+      role: 'model',
+      parts: [
+        { text: '这是第一张', thoughtSignature: 'SIG-T' },
+        { inlineData: { mimeType: 'image/png', data: 'IMG1' }, thoughtSignature: 'SIG-I1' },
+        { text: '第二张：' },
+        { inlineData: { mimeType: 'image/jpeg', data: 'IMG2' }, thoughtSignature: 'SIG-I2' },
+      ],
+    });
+    expect(req.warnings).toBeUndefined();
+  });
+
+  it('相邻 model 节点合并后，每个节点的签名序号从自己的推理块之后算起', () => {
+    const sig = (thoughtSignature: string): Part => ({
+      type: 'reasoning_opaque',
+      provider: 'google',
+      model: IMAGE_MODEL,
+      payload: { thoughtSignature, target: 'image', ordinal: 0 },
+    });
+    const ir = makeIr([
+      text('h1', 'user', '画'),
+      seg('h2', 'assistant', [sig('SA'), { type: 'image', assetId: 'img1', mime: 'image/png' }]),
+      seg('h3', 'assistant', [sig('SB'), { type: 'image', assetId: 'img2', mime: 'image/jpeg' }]),
+      text('h4', 'user', '好'),
+    ]);
+    const { body: b } = body(ir, IMAGE_MODEL, { resolveAsset });
+    expect(contentsOf(b)[1]?.parts).toEqual([
+      { inlineData: { mimeType: 'image/png', data: PNG_B64 }, thoughtSignature: 'SA' },
+      { inlineData: { mimeType: 'image/jpeg', data: PNG_B64 }, thoughtSignature: 'SB' },
+    ]);
+  });
+
+  it('签名的目标不存在（空文本段 / 图片被丢弃）时退而挂到第一个还没签名的 part', () => {
+    const ir = makeIr([
+      text('h1', 'user', '画'),
+      seg('h2', 'assistant', [
+        {
+          type: 'reasoning_opaque',
+          provider: 'google',
+          model: IMAGE_MODEL,
+          payload: { thoughtSignature: 'S-TEXT', target: 'text', ordinal: 0 },
+        },
+        {
+          type: 'reasoning_opaque',
+          provider: 'google',
+          model: IMAGE_MODEL,
+          payload: { thoughtSignature: 'S-LOST', target: 'image', ordinal: 1 },
+        },
+        { type: 'image', assetId: 'img1', mime: 'image/png' },
+      ]),
+      text('h3', 'user', '好'),
+    ]);
+    const { req, body: b } = body(ir, IMAGE_MODEL, { resolveAsset });
+    expect(contentsOf(b)[1]?.parts).toEqual([
+      { inlineData: { mimeType: 'image/png', data: PNG_B64 }, thoughtSignature: 'S-TEXT' },
+    ]);
+    expect(req.warnings).toEqual(['有 1 个 thoughtSignature 没有可附着的文本 / 图片 part，已丢弃']);
   });
 });

@@ -9,6 +9,13 @@ import {
   normalizeUnknownError,
 } from '../errors.js';
 import { providerFetch, providerGet, trimTrailingSlash } from '../http.js';
+import {
+  createMediaRenderer,
+  EMPTY_TEXT_PLACEHOLDER,
+  isMediaPart,
+  resolveImageOutput,
+  type MediaRenderer,
+} from '../media.js';
 import { irToChatMessages, mergeAdjacentSameRole, type ChatMessage } from '../messages.js';
 import { parseSseStream } from '../sse.js';
 import { canDisableThinking, resolveThinking, stEffortToGoogle } from '../thinking.js';
@@ -106,6 +113,8 @@ interface GoogleGenerationConfig {
   frequencyPenalty?: number;
   stopSequences?: string[];
   thinkingConfig?: GoogleThinkingConfig;
+  /** 生图模型：`['TEXT','IMAGE']` 允许输出图片 */
+  responseModalities?: string[];
 }
 
 interface GoogleBody {
@@ -115,34 +124,92 @@ interface GoogleBody {
   systemInstruction?: { parts: GooglePart[] };
 }
 
-/** 从 `reasoning_opaque.payload` 里取签名：兼容 `{ thoughtSignature }` 与裸字符串 */
-function extractSignature(payload: unknown): string | undefined {
-  if (typeof payload === 'string') return payload === '' ? undefined : payload;
+/** 签名附着的目标种类：模型输出里的文本段 / 图片 */
+type SignatureTarget = 'text' | 'image';
+
+/**
+ * 历史里的一个签名。
+ * - 新格式（M4 起流式解析写入）：`target` + `ordinal` = 该签名在那次响应里挂在第几个文本段 / 第几张图片上；
+ * - 旧格式（只有 `thoughtSignature` 或裸字符串）：按出现顺序附着到文本 part。
+ */
+interface PendingSignature {
+  signature: string;
+  target?: SignatureTarget;
+  ordinal?: number;
+  /** 该签名所属节点在本条（可能已合并的）消息里的起点：此前已有的文本 / 图片 part 数 */
+  base: Record<SignatureTarget, number>;
+}
+
+/** 从 `reasoning_opaque.payload` 里取签名：兼容 `{ thoughtSignature, target, ordinal }` 与裸字符串 */
+function extractSignature(
+  payload: unknown,
+): Pick<PendingSignature, 'signature' | 'target' | 'ordinal'> | undefined {
+  if (typeof payload === 'string') return payload === '' ? undefined : { signature: payload };
   if (typeof payload === 'object' && payload !== null) {
-    const v = (payload as { thoughtSignature?: unknown }).thoughtSignature;
-    if (typeof v === 'string' && v !== '') return v;
+    const p = payload as { thoughtSignature?: unknown; target?: unknown; ordinal?: unknown };
+    if (typeof p.thoughtSignature !== 'string' || p.thoughtSignature === '') return undefined;
+    const target = p.target === 'text' || p.target === 'image' ? p.target : undefined;
+    const ordinal =
+      typeof p.ordinal === 'number' && Number.isInteger(p.ordinal) && p.ordinal >= 0
+        ? p.ordinal
+        : undefined;
+    return {
+      signature: p.thoughtSignature,
+      ...(target !== undefined && ordinal !== undefined ? { target, ordinal } : {}),
+    };
   }
   return undefined;
 }
 
-function renderParts(parts: readonly Part[], model: string, warnings: string[]): GooglePart[] {
+/**
+ * 渲染一段 parts。`role`：'user' / 'model' 进 contents（都可带 inlineData），
+ * 'systemInstruction' 只收文本，媒体丢弃并告警。
+ */
+function renderParts(
+  parts: readonly Part[],
+  role: 'user' | 'model' | 'systemInstruction',
+  model: string,
+  media: MediaRenderer,
+  warnings: string[],
+): GooglePart[] {
   const out: GooglePart[] = [];
-  const signatures: string[] = [];
+  const roleCtx = { accepts: role !== 'systemInstruction', role };
+  /** IR 里第 n 个文本 / 图片 part 渲染到了 out 的哪个下标（被丢弃的为 -1） */
+  const slots: Record<SignatureTarget, number[]> = { text: [], image: [] };
+  const signatures: PendingSignature[] = [];
+  let prevOpaque = false;
+  let groupBase: Record<SignatureTarget, number> = { text: 0, image: 0 };
 
   for (const part of parts) {
+    const isOpaque = part.type === 'reasoning_opaque';
+    // 组装器把每个节点的推理块放在该节点 parts 开头；合并过的消息里，签名的序号从这一组推理块之后算起
+    if (isOpaque && !prevOpaque) groupBase = { text: slots.text.length, image: slots.image.length };
+    prevOpaque = isOpaque;
+
     switch (part.type) {
       case 'text':
+        slots.text.push(out.length);
         out.push({ text: part.text });
         break;
       case 'image':
-        // assetId 占位，由服务端在 M4 替换为 inlineData { mimeType, data }
-        out.push({ text: `asset:${part.assetId}` });
-        warnings.push(`图片 ${part.assetId} 以 asset: 占位文本渲染，需由服务端替换为 inlineData`);
+      case 'document': {
+        const rendered = media.render(part, roleCtx);
+        const isImage = part.type === 'image';
+        if (!rendered) {
+          if (isImage) slots.image.push(-1);
+          break;
+        }
+        if (isImage) slots.image.push(out.length);
+        if (rendered.kind === 'text') {
+          out.push({ text: rendered.text });
+        } else if (rendered.source.type === 'inline') {
+          out.push({ inlineData: { mimeType: rendered.mime, data: rendered.source.base64 } });
+        } else {
+          // 预览（没有 resolver）：占位文本
+          out.push({ text: rendered.source.url });
+        }
         break;
-      case 'document':
-        out.push({ text: `asset:${part.assetId}` });
-        warnings.push(`文档 ${part.assetId} 以 asset: 占位文本渲染，需由服务端替换为 inlineData`);
-        break;
+      }
       case 'reasoning_opaque': {
         if (part.provider !== 'google' || part.model !== model) {
           warnings.push(`推理块来自 ${part.provider}/${part.model}，与当前模型不符，已丢弃`);
@@ -153,28 +220,58 @@ function renderParts(parts: readonly Part[], model: string, warnings: string[]):
           warnings.push('推理块里没有 thoughtSignature，已丢弃');
           break;
         }
-        signatures.push(sig);
+        signatures.push({ ...sig, base: groupBase });
         break;
       }
     }
   }
 
-  // 签名按出现顺序附着到文本 part 上（Gemini 不接受独立的推理块）
-  let used = 0;
-  for (const p of out) {
-    if (used >= signatures.length) break;
-    if (typeof p.text !== 'string') continue;
-    const sig = signatures[used];
-    used += 1;
-    if (sig !== undefined) p.thoughtSignature = sig;
-  }
-  if (used < signatures.length) {
-    warnings.push(
-      `有 ${signatures.length - used} 个 thoughtSignature 没有可附着的文本 part，已丢弃`,
-    );
+  attachSignatures(out, slots, signatures, warnings);
+  return out;
+}
+
+/**
+ * 签名附着（Gemini 不接受独立的推理块，签名必须挂在 part 上；生图模型的签名也挂在 inlineData part 上）：
+ * 1. 带 target/ordinal 的签名挂到对应的文本段 / 图片；
+ * 2. 旧格式签名按顺序挂到还没有签名的文本 part；
+ * 3. 目标不存在（被丢弃、或那次响应里是空文本）的签名，退而挂到第一个还没有签名的文本 / 图片 part。
+ */
+function attachSignatures(
+  out: GooglePart[],
+  slots: Record<SignatureTarget, number[]>,
+  signatures: readonly PendingSignature[],
+  warnings: string[],
+): void {
+  const unplaced: string[] = [];
+  const legacy: string[] = [];
+  for (const sig of signatures) {
+    if (sig.target === undefined || sig.ordinal === undefined) {
+      legacy.push(sig.signature);
+      continue;
+    }
+    const idx = slots[sig.target][sig.base[sig.target] + sig.ordinal];
+    const part = idx === undefined || idx < 0 ? undefined : out[idx];
+    if (part && part.thoughtSignature === undefined) part.thoughtSignature = sig.signature;
+    else unplaced.push(sig.signature);
   }
 
-  return out;
+  const place = (signature: string, allowImage: boolean): boolean => {
+    const part = out.find(
+      (p) =>
+        p.thoughtSignature === undefined &&
+        (typeof p.text === 'string' || (allowImage && p.inlineData !== undefined)),
+    );
+    if (!part) return false;
+    part.thoughtSignature = signature;
+    return true;
+  };
+
+  let dropped = 0;
+  for (const s of legacy) if (!place(s, false)) dropped += 1;
+  for (const s of unplaced) if (!place(s, true)) dropped += 1;
+  if (dropped > 0) {
+    warnings.push(`有 ${dropped} 个 thoughtSignature 没有可附着的文本 / 图片 part，已丢弃`);
+  }
 }
 
 /** `ir.sampling` 上的扩展字段（core 目前未声明，按可选读取） */
@@ -218,10 +315,25 @@ function buildRequest(
   const tail = working[working.length - 1];
   if (tail && tail.role !== 'user') working.push(placeholder(CONTINUE_PLACEHOLDER));
 
-  const contents: GoogleContent[] = working.map((msg) => ({
-    role: msg.role === 'assistant' ? 'model' : 'user',
-    parts: renderParts(msg.parts, model, warnings),
-  }));
+  const media = createMediaRenderer({
+    caps,
+    resolveAsset: opts?.resolveAsset,
+    label: 'Gemini',
+    warnings,
+  });
+  const contents: GoogleContent[] = working.map((msg) => {
+    const role = msg.role === 'assistant' ? 'model' : 'user';
+    const parts = renderParts(msg.parts, role, model, media, warnings);
+    // 只有媒体、且媒体全被丢弃时 parts 为空（API 会 400）：零宽空格占位
+    if (parts.length === 0 && msg.parts.some(isMediaPart)) {
+      parts.push({ text: EMPTY_TEXT_PLACEHOLDER });
+    }
+    return { role, parts };
+  });
+  const systemParts = systemBlocks.flatMap((b) =>
+    renderParts(b.parts, 'systemInstruction', model, media, warnings),
+  );
+  media.flush();
 
   const s = ir.sampling;
   const generationConfig: GoogleGenerationConfig = {
@@ -275,13 +387,20 @@ function buildRequest(
     warnings.push(`模型 ${model} 不支持推理参数，thinking 配置已丢弃`);
   }
 
+  // 5. 生图：缺省在 caps.imageOut 时开；显式关闭生图模型时只要文本
+  const imageOutput = resolveImageOutput(opts, caps, caps.imageOut, model, warnings);
+  if (imageOutput) {
+    generationConfig.responseModalities = ['TEXT', 'IMAGE'];
+  } else if (opts?.imageOutput === false && caps.imageOut) {
+    generationConfig.responseModalities = ['TEXT'];
+  }
+
   const body: GoogleBody = {
     contents,
     safetySettings: safetySettings(),
     generationConfig,
   };
 
-  const systemParts = systemBlocks.flatMap((b) => renderParts(b.parts, model, warnings));
   if (systemParts.length > 0) body.systemInstruction = { parts: systemParts };
 
   return {
@@ -457,7 +576,17 @@ async function* stream(
   let usage: Extract<GenEvent, { type: 'usage' }> | undefined;
   let stopEvent: Extract<GenEvent, { type: 'stop' }> | undefined;
   /** thoughtSignature 通常只出现在最后一个 chunk；按值去重后在流末统一 yield */
-  const signatures = new Map<string, number>();
+  const signatures = new Map<
+    string,
+    { partIndex: number; target: SignatureTarget; ordinal: number }
+  >();
+  /**
+   * 输出位置计数，与服务端落库的 parts 对齐（连续文本增量合并为一个 text part、图片按到达顺序交错）：
+   * textRuns = 已开始的文本段数（被图片隔开算新的一段），images = 已输出的图片数。
+   */
+  let textRuns = 0;
+  let images = 0;
+  let lastOutput: SignatureTarget | null = null;
 
   try {
     const res = await providerFetch(conn, req, signal);
@@ -507,20 +636,40 @@ async function* stream(
       const parts: unknown[] = Array.isArray(rawParts) ? rawParts : [];
       for (const [i, rawPart] of parts.entries()) {
         const part = (typeof rawPart === 'object' && rawPart !== null ? rawPart : {}) as GooglePart;
-        if (typeof part.thoughtSignature === 'string' && part.thoughtSignature !== '') {
-          if (!signatures.has(part.thoughtSignature)) signatures.set(part.thoughtSignature, i);
-        }
-        if (typeof part.text === 'string' && part.text !== '') {
-          if (part.thought === true) yield { type: 'reasoning.delta', text: part.text };
-          else yield { type: 'text.delta', text: part.text };
-        }
         const inline = part.inlineData;
-        if (inline && typeof inline.data === 'string') {
+        // 签名挂在哪：图片 part → 这张图；其余（文本、空文本、thought 文本）→ 当前文本段（还没有就是第一段）
+        let target: SignatureTarget = 'text';
+        let ordinal = Math.max(0, textRuns - 1);
+
+        if (typeof part.text === 'string' && part.text !== '') {
+          if (part.thought === true) {
+            yield { type: 'reasoning.delta', text: part.text };
+          } else {
+            if (lastOutput !== 'text') {
+              textRuns += 1;
+              lastOutput = 'text';
+            }
+            ordinal = textRuns - 1;
+            yield { type: 'text.delta', text: part.text };
+          }
+        }
+        // thought 图片是推理过程中的草图，不作为输出
+        if (inline && typeof inline.data === 'string' && part.thought !== true) {
+          target = 'image';
+          ordinal = images;
+          images += 1;
+          lastOutput = 'image';
           yield {
             type: 'image',
             mime: typeof inline.mimeType === 'string' ? inline.mimeType : 'image/png',
             data: inline.data,
           };
+        }
+
+        if (typeof part.thoughtSignature === 'string' && part.thoughtSignature !== '') {
+          if (!signatures.has(part.thoughtSignature)) {
+            signatures.set(part.thoughtSignature, { partIndex: i, target, ordinal });
+          }
         }
       }
 
@@ -538,12 +687,13 @@ async function* stream(
     return;
   }
 
-  for (const [thoughtSignature, partIndex] of signatures) {
+  for (const [thoughtSignature, where] of signatures) {
     yield {
       type: 'reasoning.opaque',
       provider: 'google',
       model,
-      payload: { type: 'thoughtSignature', thoughtSignature, partIndex },
+      // target + ordinal 让回传时能挂回同一个文本段 / 同一张图（见 renderParts）
+      payload: { type: 'thoughtSignature', thoughtSignature, ...where },
     };
   }
   if (usage) yield usage;

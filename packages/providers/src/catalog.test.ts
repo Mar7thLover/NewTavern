@@ -99,6 +99,63 @@ describe('lookupCapabilities', () => {
     expect(defaultMaxTokens({ ...loadCatalog().defaults, maxOutput: 1024 })).toBe(1024);
   });
 
+  it('多模态能力（M4 核对）：imageIn / documentIn', () => {
+    const io = (provider: string, model: string) => {
+      const c = lookupCapabilities(provider, model);
+      return [c.imageIn, c.documentIn];
+    };
+    for (const model of ['gpt-4o', 'gpt-4.1-mini', 'gpt-5', 'gpt-6', 'o1', 'o3', 'o4-mini']) {
+      expect(io('openai-chat', model), model).toEqual([true, true]);
+    }
+    for (const model of ['o1-mini', 'o1-preview', 'o3-mini']) {
+      expect(io('openai-chat', model), model).toEqual([false, false]);
+      expect(io('openai-responses', model), model).toEqual([false, false]);
+    }
+    expect(io('openai-responses', 'gpt-5')).toEqual([true, true]);
+    for (const model of ['claude-opus-5', 'claude-haiku-4-5', 'claude-3-opus']) {
+      expect(io('anthropic', model), model).toEqual([true, true]);
+    }
+    for (const model of ['gemini-3-pro-preview', 'gemini-2.5-flash', 'gemini-2.5-flash-image']) {
+      expect(io('google', model), model).toEqual([true, true]);
+    }
+    // GLM 文本模型与 DeepSeek
+    expect(io('openai-chat', 'glm-5.3-flash')).toEqual([false, false]);
+    expect(io('anthropic', 'glm-5.3-flash')).toEqual([false, false]);
+    expect(io('openai-chat', 'deepseek-chat')).toEqual([false, false]);
+    expect(io('openai-chat', 'deepseek-reasoner')).toEqual([false, false]);
+    // GLM 视觉模型
+    expect(lookupCapabilities('openai-chat', 'glm-4.6v').imageIn).toBe(true);
+    expect(lookupCapabilities('openai-chat', 'glm-4.6v-flash').imageIn).toBe(true);
+  });
+
+  it('多模态能力（M4 核对）：imageOut', () => {
+    const out = (provider: string, model: string) => lookupCapabilities(provider, model).imageOut;
+    for (const model of [
+      'gemini-2.0-flash-preview-image-generation',
+      'gemini-2.5-flash-image',
+      'gemini-2.5-flash-image-preview',
+      'gemini-3-pro-image-preview',
+      'gemini-3.1-flash-image',
+      'gemini-3.1-flash-lite-image',
+      'gemini-9-ultra-image',
+    ]) {
+      expect(out('google', model), model).toBe(true);
+      expect(lookupCapabilities('google', model).thinking, model).toBe('none');
+    }
+    expect(out('google', 'gemini-3-pro-preview')).toBe(false);
+    expect(out('google', 'gemini-2.5-flash')).toBe(false);
+    expect(out('openai-chat', 'google/gemini-2.5-flash-image')).toBe(true);
+    expect(out('openai-chat', 'openai/gpt-5-image-mini')).toBe(true);
+    expect(out('openai-chat', 'gpt-5')).toBe(false);
+    for (const model of ['gpt-4o', 'gpt-4.1', 'gpt-5', 'gpt-5.1', 'o3']) {
+      expect(out('openai-responses', model), model).toBe(true);
+    }
+    expect(out('openai-responses', 'o3-mini')).toBe(false);
+    expect(out('openai-responses', 'gpt-6')).toBe(false);
+    expect(out('anthropic', 'claude-opus-5')).toBe(false);
+    expect(catalogModels('openai-responses').some((m) => m.match === 'gpt-image-*')).toBe(false);
+  });
+
   it('catalogModels 可按 provider 过滤', () => {
     const all = catalogModels();
     const anthropic = catalogModels('anthropic');

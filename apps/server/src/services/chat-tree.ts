@@ -47,6 +47,8 @@ export type ChatOverrides = {
   sampling?: Record<string, unknown>;
   /** 推理控制，形状同 providers `ThinkingOptions`；`enabled:false` = 关闭；缺省 = 跟随预设 */
   thinking?: { enabled?: boolean; effort?: string; budgetTokens?: number };
+  /** 请求模型输出图片（M4 §1.3）；缺省 = 按适配器默认 */
+  imageOutput?: boolean;
   layoutMode?: 'strict' | 'cache-aware';
   /** 全局系统提示词的会话覆盖（契约 §3.4） */
   globalSystemPrompt?: {
@@ -83,6 +85,23 @@ export interface ChatDetail extends ChatSummary {
 
 const PREVIEW_LENGTH = 120;
 
+/**
+ * 只在库里保留、不下发给前端的 `extra` 字段（契约 M4 §4「载荷瘦身」）：
+ * - `request`：发给提供商的完整请求体（最大 200 KB，长对话里每个助手节点都带一份）
+ * - `layout` / `activations`：组装报告与世界书激活摘要
+ * - `st`：从 SillyTavern 导入时原样保留的消息字段（导出时读行）
+ * 检查器走 inspect 端点、导出直接读行，都不经过这里。
+ */
+const SERVER_ONLY_EXTRA_KEYS = ['request', 'layout', 'activations', 'st'] as const;
+
+function publicExtra(extra: Record<string, unknown> | null): Record<string, unknown> | null {
+  if (!extra) return null;
+  if (!SERVER_ONLY_EXTRA_KEYS.some((key) => key in extra)) return extra;
+  const rest = { ...extra };
+  for (const key of SERVER_ONLY_EXTRA_KEYS) delete rest[key];
+  return rest;
+}
+
 export function toMessageNode(row: NodeRow): MessageNode {
   return {
     id: row.id,
@@ -97,7 +116,7 @@ export function toMessageNode(row: NodeRow): MessageNode {
     provider: row.provider,
     model: row.model,
     isHidden: row.isHidden,
-    extra: row.extra ?? null,
+    extra: publicExtra(row.extra ?? null),
     createdAt: row.createdAt,
   };
 }
@@ -177,6 +196,15 @@ export function setChatLorebooks(db: Db, chatId: string, bookIds: readonly strin
   return unique;
 }
 
+function omitStMetadata(
+  metadata: Record<string, unknown> | null | undefined,
+): Record<string, unknown> | null {
+  if (!metadata) return null;
+  if (!('st' in metadata)) return metadata;
+  const { st: _st, ...rest } = metadata;
+  return rest;
+}
+
 export function toChatSummary(db: Db, chat: ChatRow, nodes?: readonly NodeRow[]): ChatSummary {
   const all = nodes ?? loadNodes(db, chat.id);
   const head = chat.headNodeId ? all.find((node) => node.id === chat.headNodeId) : undefined;
@@ -199,7 +227,8 @@ export function toChatSummary(db: Db, chat: ChatRow, nodes?: readonly NodeRow[])
     overrides: (chat.overrides as ChatOverrides | null) ?? null,
     rootNodeId: chat.rootNodeId,
     headNodeId: chat.headNodeId,
-    metadata: chat.metadata ?? null,
+    // metadata.st 是 ST 导入时原样保留的 header（含 MVU 变量，可达十几 KB），只有导出用得到，不下发
+    metadata: omitStMetadata(chat.metadata),
     createdAt: chat.createdAt,
     updatedAt: chat.updatedAt,
     character: characterRow

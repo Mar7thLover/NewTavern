@@ -794,7 +794,8 @@
 
   /* ---------------- 浮层：最上面的一张纸 ---------------- */
 
-  [data-part='modal'] {
+  [data-part='modal'],
+  [data-part='command-palette'] {
     position: relative;
     border: 2px solid var(--edge-strong);
     outline: 1px solid var(--edge-strong);
@@ -802,13 +803,15 @@
     border-radius: 0;
   }
 
-  [data-part='modal'] > .border-b {
+  [data-part='modal'] > .border-b,
+  [data-part='command-palette'] > .border-b {
     border-bottom-color: transparent;
     background: linear-gradient(var(--edge), var(--edge)) no-repeat center bottom / calc(100% - 6px)
       1px;
   }
 
-  [data-part='modal'] > .border-t {
+  [data-part='modal'] > .border-t,
+  [data-part='command-palette'] > .border-t {
     border-top-color: transparent;
     background: linear-gradient(var(--edge), var(--edge)) no-repeat center top / calc(100% - 6px)
       1px;
@@ -1157,5 +1160,73 @@
     .sz-seal::before {
       transition: none;
     }
+  }
+}
+
+/* ================================================================== */
+/* 附件（M4 多模态）：裱在纸上的画、夹在书里的纸签                        */
+/* ================================================================== */
+
+@scope ([data-theme='shuzhai']) to ([data-theme]) {
+  /* 图是裱起来的：一圈上层纸的白边，外缘一条纸叠放的暗线；不投影、不圆角 */
+  [data-part='attachment'][data-kind='image'],
+  [data-part='gallery-item'] {
+    padding: 3px;
+    border: 1px solid var(--sz-sheet-edge);
+    border-radius: 0;
+    background-color: var(--raised);
+    box-shadow: none;
+  }
+
+  [data-part='attachment'][data-kind='image'] img,
+  [data-part='gallery-item'] img {
+    border-radius: 0;
+  }
+
+  [data-part='attachment'][data-kind='image'][data-context='message'] {
+    padding: 5px;
+  }
+
+  /* 文档：一张夹在书里的纸签 */
+  [data-part='attachment']:not([data-kind='image']) {
+    border-color: var(--sz-sheet-edge);
+    border-radius: 0;
+    background-color: var(--raised);
+    background-image: var(--sz-fiber);
+    background-size: 200px 200px;
+  }
+
+  [data-part='attachment'][data-status='error'] {
+    border-color: var(--danger);
+  }
+
+  [data-part='attachment-ext'] {
+    border-color: var(--edge-strong);
+    border-radius: 0;
+    font-family: var(--font-ui);
+    font-weight: 400;
+    letter-spacing: 0.08em;
+  }
+
+  [data-part='attachment-button'],
+  [data-part='lightbox-button'] {
+    border-radius: var(--r-control);
+    box-shadow: none;
+  }
+
+  /* 拖入：版框的双线（外粗内细） */
+  [data-part='attachment-drop-frame'] {
+    border: 2px solid var(--edge-strong);
+    border-radius: 0;
+    outline: 1px solid var(--edge-strong);
+    outline-offset: -6px;
+  }
+
+  [data-part='lightbox-image'] {
+    padding: 8px;
+    border: 1px solid var(--sz-sheet-edge);
+    border-radius: 0;
+    background-color: var(--raised);
+    box-shadow: none;
   }
 }

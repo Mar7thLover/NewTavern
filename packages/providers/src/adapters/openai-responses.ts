@@ -3,6 +3,12 @@ import type { PromptIR } from '@newtavern/core';
 import { defaultMaxTokens, lookupCapabilities } from '../catalog.js';
 import { errorTypeToKind, isAbortError, normalizeUnknownError } from '../errors.js';
 import { providerFetch, providerGet, trimTrailingSlash } from '../http.js';
+import {
+  createMediaRenderer,
+  resolveImageOutput,
+  sourceUrl,
+  type MediaRenderer,
+} from '../media.js';
 import { irToChatMessages, partsToText, type ChatMessage } from '../messages.js';
 import { parseSseStream } from '../sse.js';
 import { canDisableThinking, resolveThinking, stEffortToOpenAI } from '../thinking.js';
@@ -51,7 +57,8 @@ type ResponsesContent =
   | { type: 'input_text'; text: string }
   | { type: 'output_text'; text: string }
   | { type: 'input_image'; image_url: string }
-  | { type: 'input_file'; file_id: string };
+  /** PDF：`file_data` 是 data URL（无需先上传拿 file_id） */
+  | { type: 'input_file'; filename: string; file_data: string };
 
 interface ResponsesMessageItem {
   role: ResponsesRole;
@@ -73,32 +80,40 @@ function mapRole(role: ChatMessage['role']): ResponsesRole {
 function renderMessage(
   msg: ChatMessage,
   model: string,
+  media: MediaRenderer,
   warnings: string[],
 ): { leading: ResponsesInputItem[]; content: ResponsesContent[] } {
   const role = mapRole(msg.role);
   const leading: ResponsesInputItem[] = [];
   const content: ResponsesContent[] = [];
+  // 图片 / PDF 只放进 user 消息：assistant 只能是 output_text，developer 按保守处理
+  const roleCtx = { accepts: role === 'user', role };
+  // assistant 的文本是模型的历史输出，必须用 output_text；user/developer 用 input_text
+  const textBlock = (text: string): ResponsesContent =>
+    role === 'assistant' ? { type: 'output_text', text } : { type: 'input_text', text };
 
   for (const part of msg.parts) {
     switch (part.type) {
       case 'text':
-        // assistant 的文本是模型的历史输出，必须用 output_text；user/developer 用 input_text
-        content.push(
-          role === 'assistant'
-            ? { type: 'output_text', text: part.text }
-            : { type: 'input_text', text: part.text },
-        );
+        content.push(textBlock(part.text));
         break;
       case 'image':
-        // assetId 占位，由服务端在 M4 替换为 data URL / 可公开访问的 URL
-        content.push({ type: 'input_image', image_url: `asset:${part.assetId}` });
-        warnings.push(`图片 ${part.assetId} 以 asset: 占位 URL 渲染，需由服务端替换为 data URL`);
+      case 'document': {
+        const rendered = media.render(part, roleCtx);
+        if (!rendered) break;
+        if (rendered.kind === 'text') {
+          content.push(textBlock(rendered.text));
+        } else if (rendered.kind === 'image') {
+          content.push({ type: 'input_image', image_url: sourceUrl(rendered.source) });
+        } else {
+          content.push({
+            type: 'input_file',
+            filename: rendered.filename,
+            file_data: sourceUrl(rendered.source),
+          });
+        }
         break;
-      case 'document':
-        // Responses 的 input_file 需要先上传拿 file_id；这里同样占位
-        content.push({ type: 'input_file', file_id: `asset:${part.assetId}` });
-        warnings.push(`文档 ${part.assetId} 以 asset: 占位 file_id 渲染，需由服务端上传后替换`);
-        break;
+      }
       case 'reasoning_opaque': {
         if (part.provider !== 'openai-responses' || part.model !== model) {
           warnings.push(`推理块来自 ${part.provider}/${part.model}，与当前模型不符，已丢弃`);
@@ -176,12 +191,19 @@ function buildRequest(
     .filter((t) => t !== '')
     .join('\n\n');
 
+  const media = createMediaRenderer({
+    caps,
+    resolveAsset: opts?.resolveAsset,
+    label: 'Responses',
+    warnings,
+  });
   const input: ResponsesInputItem[] = [];
   for (const msg of working) {
-    const { leading, content } = renderMessage(msg, model, warnings);
+    const { leading, content } = renderMessage(msg, model, media, warnings);
     input.push(...leading);
     if (content.length > 0) input.push({ role: mapRole(msg.role), content });
   }
+  media.flush();
 
   const s = ir.sampling;
   const body: ResponsesBody = {
@@ -232,6 +254,12 @@ function buildRequest(
     }
   } else if (thinkingOpt.effort !== undefined || thinkingOpt.budgetTokens !== undefined) {
     warnings.push(`模型 ${model} 不支持推理参数，thinking 配置已丢弃`);
+  }
+
+  // 生图：image_generation 工具单独计费，缺省关，只在显式开启时追加（与已有 tools 合并）
+  if (resolveImageOutput(opts, caps, false, model, warnings)) {
+    const existing = Array.isArray(body.tools) ? (body.tools as unknown[]) : [];
+    body.tools = [...existing, { type: 'image_generation' }];
   }
 
   // Responses 没有 stop / seed / penalty / top_k / min_p
@@ -361,6 +389,19 @@ function mapIncompleteReason(reason: string | undefined): Extract<GenEvent, { ty
   }
 }
 
+/** image_generation_call.output_format → mime（缺省 png） */
+function imageMimeOf(format: unknown): string {
+  switch (typeof format === 'string' ? format.toLowerCase() : '') {
+    case 'jpeg':
+    case 'jpg':
+      return 'image/jpeg';
+    case 'webp':
+      return 'image/webp';
+    default:
+      return 'image/png';
+  }
+}
+
 /** 从 message 输出项里捞 refusal 文本（非流式 refusal 的情形） */
 function refusalOf(item: Record<string, unknown>): string {
   const content = item.content;
@@ -450,8 +491,8 @@ async function* stream(
           } else if (item.type === 'image_generation_call') {
             const result = item.result;
             if (typeof result === 'string' && result !== '') {
-              // Responses 的 image_generation 工具返回 base64 PNG
-              yield { type: 'image', mime: 'image/png', data: result };
+              // image_generation 工具的 result 是 base64；output_format（png/jpeg/webp）缺省为 png
+              yield { type: 'image', mime: imageMimeOf(item.output_format), data: result };
             }
           } else if (item.type === 'message') {
             const text = refusalOf(item);

@@ -370,6 +370,8 @@ export interface ChatOverrides {
   layoutMode?: LayoutMode;
   /** 全局系统提示词的按会话覆盖（M3 契约 §3.4），`null` = 不覆盖 */
   globalSystemPrompt?: GlobalSystemPromptOverride | null;
+  /** 允许模型输出图片（M4 契约 §1.3）；缺省 = 按提供商默认，`null` = 删键回到默认 */
+  imageOutput?: boolean | null;
 }
 
 export type LayoutMode = 'strict' | 'cache-aware';
@@ -455,11 +457,21 @@ export interface PatchNodeInput {
   text?: string;
   isHidden?: boolean;
   name?: string;
+  /** 替换该节点全部 image / document part（按顺序的 assetId；M4 契约 §3.3） */
+  attachments?: string[];
 }
 
 /** `POST /api/chats/:id/generate` 的请求体 */
 export interface GenerateBody {
-  userMessage?: { text: string; name?: string } | null;
+  /**
+   * attachments：已上传资产，按顺序（M4 契约 §1.3）。元素可以是 id，也可以是 `{ id, name }`
+   * （同内容换名重传时，part 的名字以这次为准；§9 MSS 修正 3）
+   */
+  userMessage?: {
+    text: string;
+    name?: string;
+    attachments?: (string | { id: string; name?: string })[];
+  } | null;
   parentId?: string | null;
   connectionId?: string;
   model?: string;
@@ -1355,4 +1367,115 @@ export function mergeNode(detail: ChatDetail, node: MessageNode, chat?: ChatSumm
       ? [...detail.nodes, node]
       : detail.nodes.map((item, i) => (i === index ? node : item));
   return { ...detail, ...(chat ?? {}), nodes };
+}
+
+/* ------------------------------------------------------------------ */
+/* M4 多模态：上传、附件 part、存储清理（契约 §3.3 / §3.4，MSW）         */
+/* ------------------------------------------------------------------ */
+
+export type ImagePart = Extract<Part, { type: 'image' }>;
+export type DocumentPart = Extract<Part, { type: 'document' }>;
+export type MediaPart = ImagePart | DocumentPart;
+
+export function isMediaPart(part: Part): part is MediaPart {
+  return part.type === 'image' || part.type === 'document';
+}
+
+/** 节点里的图片 / 文档 part（保持原顺序） */
+export function nodeMedia(node: Pick<MessageNode, 'parts'>): MediaPart[] {
+  return node.parts.filter(isMediaPart);
+}
+
+function parseJsonObject(text: string): Record<string, unknown> | null {
+  try {
+    const parsed: unknown = text ? JSON.parse(text) : null;
+    return typeof parsed === 'object' && parsed !== null
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/** `POST /api/assets` 的响应 */
+export interface UploadedAsset {
+  id: string;
+  kind: 'upload';
+  mime: string;
+  name: string;
+  size: number;
+  width?: number;
+  height?: number;
+  /** PDF 页数 */
+  pages?: number;
+  /** PDF 抽取出的文本长度；0 / 缺省 = 没抽到文本 */
+  textLength?: number;
+}
+
+/**
+ * 上传一个附件（multipart `file`）。用 XHR 而不是 fetch：fetch 拿不到上传进度。
+ * 失败时抛 `ApiError`（413 过大 / 415 类型不支持 / 网络错误 status=0）；中止时抛 `DOMException('AbortError')`。
+ */
+export function uploadAsset(
+  file: File,
+  options: { onProgress?: (fraction: number) => void; signal?: AbortSignal } = {},
+): Promise<UploadedAsset> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const url = '/api/assets';
+    const abort = () => xhr.abort();
+    const cleanup = () => options.signal?.removeEventListener('abort', abort);
+
+    xhr.open('POST', url);
+    xhr.responseType = 'text';
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable && event.total > 0) {
+        options.onProgress?.(event.loaded / event.total);
+      }
+    };
+    xhr.onload = () => {
+      cleanup();
+      const body = parseJsonObject(xhr.responseText);
+      if (xhr.status >= 200 && xhr.status < 300 && typeof body?.id === 'string') {
+        resolve(body as unknown as UploadedAsset);
+        return;
+      }
+      const code = typeof body?.error === 'string' ? body.error : undefined;
+      const message =
+        typeof body?.message === 'string' && body.message
+          ? body.message
+          : (code ?? `${url} -> ${xhr.status}`);
+      reject(new ApiError(message, xhr.status, code));
+    };
+    xhr.onerror = () => {
+      cleanup();
+      reject(new ApiError('network', 0, 'network'));
+    };
+    xhr.onabort = () => {
+      cleanup();
+      reject(new DOMException('上传已取消', 'AbortError'));
+    };
+
+    if (options.signal?.aborted) {
+      reject(new DOMException('上传已取消', 'AbortError'));
+      return;
+    }
+    options.signal?.addEventListener('abort', abort, { once: true });
+    const form = new FormData();
+    form.append('file', file, file.name);
+    xhr.send(form);
+  });
+}
+
+/** `POST /api/assets/gc` 的响应 */
+export interface AssetsGcResult {
+  removed: number;
+  freedBytes: number;
+}
+
+/** 清理未被引用的上传 / 生成 / 头像资产（创建超过 24 小时的） */
+export function useAssetsGc() {
+  return useMutation({
+    mutationFn: () => mutate<AssetsGcResult>('/api/assets/gc', 'POST'),
+  });
 }

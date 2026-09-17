@@ -9,11 +9,13 @@ import { logger } from 'hono/logger';
 import type { Db } from './db/client.js';
 import { createAssetsRoutes } from './routes/assets.js';
 import { createCharactersRoutes } from './routes/characters.js';
+import { createChatTransferRoutes } from './routes/chat-transfer.js';
 import { createChatsRoutes } from './routes/chats.js';
 import { createConnectionsRoutes } from './routes/connections.js';
 import { createImportRoutes } from './routes/import.js';
 import { createInspectRoutes } from './routes/inspect.js';
 import { createLorebooksRoutes } from './routes/lorebooks.js';
+import { createMigrationRoutes } from './routes/migration.js';
 import { createModelsRoutes } from './routes/models.js';
 import { createPersonasRoutes } from './routes/personas.js';
 import { createPresetsRoutes } from './routes/presets.js';
@@ -53,9 +55,12 @@ export function createApp({ db, dataDir, webDist }: AppOptions) {
     .route('/lorebooks', createLorebooksRoutes(db, importer))
     .route('/regex', createRegexRoutes(db))
     .route('/import', createImportRoutes(importer))
-    .route('/assets', createAssetsRoutes(assets))
+    .route('/assets', createAssetsRoutes(db, assets))
     .route('/connections', createConnectionsRoutes(db, secrets, providers))
-    .route('/chats', createChatsRoutes(db, providers))
+    .route('/chats', createChatsRoutes(db, providers, assets))
+    // 聊天导出为 ST jsonl（M4 §2.2）：独立文件，第二次挂到 /chats
+    .route('/chats', createChatTransferRoutes(db))
+    .route('/migration', createMigrationRoutes(db, assets, importer))
     .route('/inspect', createInspectRoutes(db, providers))
     .route('/models', createModelsRoutes());
 

@@ -6,6 +6,18 @@ import { DEFAULT_THEME_ID, type ModeSetting, type ThemeOptionValue } from '../..
 
 export type { ModeSetting };
 
+/** 对话页右栏的两个页签（会话设置 / 提示词检查器） */
+export type ChatPanelTab = 'session' | 'inspector';
+
+/**
+ * 跨组件的一次性请求（命令面板 → 对话页）：`nonce` 每次递增，
+ * 响应方按 nonce 判断是否是新请求，处理完调 `clearChatPanelRequest`。不持久化。
+ */
+export interface ChatPanelRequest {
+  tab: ChatPanelTab;
+  nonce: number;
+}
+
 interface UiState {
   language: Language;
   /** 住进哪个世界（themes/<id>） */
@@ -21,6 +33,13 @@ interface UiState {
   setMode: (mode: ModeSetting) => void;
   setThemeOption: (themeId: string, key: string, value: ThemeOptionValue) => void;
   setDeveloperMode: (developerMode: boolean) => void;
+  /** 命令面板是否打开（不持久化） */
+  paletteOpen: boolean;
+  setPaletteOpen: (open: boolean) => void;
+  /** 请求对话页打开右栏的某个页签（不持久化） */
+  chatPanelRequest: ChatPanelRequest | null;
+  requestChatPanel: (tab: ChatPanelTab) => void;
+  clearChatPanelRequest: (nonce: number) => void;
 }
 
 /** v1 只有一个 `theme: 'light' | 'dark' | 'system'` 字段 */
@@ -55,6 +74,17 @@ export const useUiStore = create<UiState>()(
           },
         })),
       setDeveloperMode: (developerMode) => set({ developerMode }),
+      paletteOpen: false,
+      setPaletteOpen: (paletteOpen) => set({ paletteOpen }),
+      chatPanelRequest: null,
+      requestChatPanel: (tab) =>
+        set((state) => ({
+          chatPanelRequest: { tab, nonce: (state.chatPanelRequest?.nonce ?? 0) + 1 },
+        })),
+      clearChatPanelRequest: (nonce) =>
+        set((state) =>
+          state.chatPanelRequest?.nonce === nonce ? { chatPanelRequest: null } : state,
+        ),
     }),
     {
       name: 'newtavern-ui',

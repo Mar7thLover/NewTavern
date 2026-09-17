@@ -1609,3 +1609,96 @@
     }
   }
 }
+
+/* ================================================================== */
+/* 附件（M4 多模态）：软软的小卡片与贴在便签上的照片                      */
+/* ================================================================== */
+
+@scope ([data-theme='nuanfang']) to ([data-theme]) {
+  /* 不画线：卡片靠奶白底与软影成形 */
+  [data-part='attachment'] {
+    border-color: transparent;
+    border-radius: var(--r-control);
+  }
+
+  [data-part='composer-tray'] [data-part='attachment'] {
+    background-color: var(--nf-milk);
+    box-shadow: var(--nf-soft-sm);
+  }
+
+  /* 便签上的文档：一块杏子色的小垫子 */
+  [data-part='message'] [data-part='attachment']:not([data-kind='image']) {
+    background-color: var(--nf-tray);
+    box-shadow: none;
+  }
+
+  [data-part='message'] a[data-part='attachment']:hover {
+    background-color: var(--nf-apricot);
+  }
+
+  [data-part='message'] [data-part='attachment'][data-kind='image'] {
+    border-radius: var(--r-control);
+    box-shadow: var(--nf-soft-sm);
+  }
+
+  [data-part='attachment'][data-status='error'] {
+    border-color: transparent;
+    box-shadow:
+      0 0 0 3px oklch(0.58 0.16 22 / 0.3),
+      var(--nf-soft-sm);
+  }
+
+  /* 类型字：一颗圆圆的糖 */
+  [data-part='attachment-ext'] {
+    border: 0;
+    border-radius: 12px;
+    color: var(--nf-caramel);
+    background-color: var(--nf-apricot-soft);
+    font-family: var(--font-ui);
+    letter-spacing: 0.02em;
+  }
+
+  [data-part='attachment'][data-kind='pdf'] [data-part='attachment-ext'] {
+    color: var(--nf-berry-deep);
+    background-color: var(--nf-berry-milk);
+  }
+
+  /* 移除 / 重试：奶白的小圆扣 */
+  [data-part='attachment-button'] {
+    border-color: transparent;
+    color: var(--ink-2);
+    background-color: var(--nf-milk);
+    box-shadow: var(--nf-soft-sm);
+  }
+
+  [data-part='attachment-button']:hover {
+    color: var(--nf-berry-deep);
+    background-color: var(--nf-berry-milk);
+  }
+
+  [data-part='attachment-progress'] {
+    background-color: var(--nf-cushion);
+  }
+
+  [data-part='attachment-progress'] > span {
+    background: linear-gradient(90deg, var(--nf-apricot-jelly), var(--nf-berry));
+  }
+
+  [data-part='gallery-item'] {
+    border-radius: var(--r-control);
+    box-shadow: var(--nf-soft-sm);
+  }
+
+  /* 拖入：不画虚线框，整块泛起一层草莓牛奶 */
+  [data-part='attachment-drop-frame'] {
+    border-color: transparent;
+    border-radius: var(--r-panel);
+    background-color: oklch(0.955 0.03 15 / 0.45);
+    box-shadow: inset 0 0 0 3px oklch(0.72 0.14 15 / 0.28);
+  }
+
+  [data-part='lightbox-image'] {
+    border-radius: var(--r-card);
+    box-shadow: var(--nf-soft-lift);
+  }
+}

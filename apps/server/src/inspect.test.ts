@@ -177,8 +177,17 @@ describe('generate 接入组装 v2', () => {
     expect(done).toBeDefined();
     const node = done!.node;
 
-    // extra：布局报告 + WI 激活摘要 + 告警
-    const extra = node.extra ?? {};
+    // extra：布局报告 + WI 激活摘要 + 告警。layout / activations / request 只落库、不随节点下发（M4 §4 载荷瘦身），从行里读
+    expect(Array.isArray(node.extra?.warnings)).toBe(true);
+    for (const key of ['layout', 'activations', 'request']) {
+      expect(node.extra && key in node.extra).toBe(false);
+    }
+    const extraRow = db
+      .select()
+      .from(schema.messageNodes)
+      .where(eq(schema.messageNodes.id, node.id))
+      .get();
+    const extra = extraRow?.extra ?? {};
     expect((extra.layout as { mode: string }).mode).toBe('strict');
     expect(Array.isArray((extra.layout as { breakpoints: unknown[] }).breakpoints)).toBe(true);
     const activations = extra.activations as { entryId: string }[];

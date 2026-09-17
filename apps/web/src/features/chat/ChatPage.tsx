@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router';
 
@@ -8,6 +8,7 @@ import { SessionPanel } from './SessionPanel';
 import { StartScreen } from './StartScreen';
 import { pathToHead } from './shared';
 import { useIsGenerating } from '../../app/store/chat';
+import { useUiStore, type ChatPanelTab } from '../../app/store/ui';
 import { Button } from '../../components/ui/button';
 import { Drawer } from '../../components/ui/drawer';
 import { Segmented } from '../../components/ui/segmented';
@@ -21,7 +22,7 @@ const LIST_QUERY = '(min-width: 1024px)';
 const PANEL_QUERY = '(min-width: 1280px)';
 
 /** 右栏两个页签：会话设置 / 提示词检查器 */
-type RightTab = 'session' | 'inspector';
+type RightTab = ChatPanelTab;
 
 export function ChatPage() {
   const { t } = useTranslation();
@@ -60,6 +61,19 @@ export function ChatPage() {
     if (showPanel) setPanelCollapsed(alreadyOpen);
     else setPanelDrawer(!alreadyOpen);
   };
+
+  // 命令面板的「打开检查器 / 会话面板」：只打开、不切换（已经开着就停在那一页）
+  const panelRequest = useUiStore((state) => state.chatPanelRequest);
+  const hasDetail = detail !== null;
+  useEffect(() => {
+    if (!panelRequest) return;
+    if (hasDetail) {
+      setRightTab(panelRequest.tab);
+      if (showPanel) setPanelCollapsed(false);
+      else setPanelDrawer(true);
+    }
+    useUiStore.getState().clearChatPanelRequest(panelRequest.nonce);
+  }, [panelRequest, hasDetail, showPanel]);
 
   const listPane = (onClose?: () => void) => (
     <ChatListPane

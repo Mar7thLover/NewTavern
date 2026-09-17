@@ -24,6 +24,7 @@ import {
   writeCardToPng,
 } from './card.js';
 import { parseChatJsonl, serializeChatJsonl } from './chat-jsonl.js';
+import { exportInputFromDrafts, stChatToTree, treeToStChat } from './chat-tree.js';
 import { readPngTextChunks, removePngTextChunks } from './png-text.js';
 import { parsePreset, serializePreset } from './preset.js';
 import { parseRegexScripts } from './regex.js';
@@ -198,6 +199,31 @@ function registerRealSampleTests(rootDir: string): void {
           .map((line) => JSON.parse(line) as unknown);
 
         const chat = parseChatJsonl(text);
+        const roundTrippedLines = serializeChatJsonl(chat)
+          .split('\n')
+          .map((line) => JSON.parse(line) as unknown);
+        expect(roundTrippedLines).toEqual(expectedLines);
+      },
+    );
+
+    it.each(files.map((f) => [basename(f), f] as const))(
+      '%s：转成消息树再导出 deep-equal（逐行）',
+      (_label, file) => {
+        const text = readFileSync(file, 'utf8');
+        // 去掉开头的 BOM（0xFEFF）：用码点判断，源码里不出现不可见字符
+        const expectedLines = (text.charCodeAt(0) === 0xfeff ? text.slice(1) : text)
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter((line) => line !== '')
+          .map((line) => JSON.parse(line) as unknown);
+
+        const tree = stChatToTree(parseChatJsonl(text));
+        const times = tree.nodes.map((node) => node.createdAt);
+        expect(
+          times.every((time, index) => index === 0 || time > (times[index - 1] as number)),
+        ).toBe(true);
+        const { chat, droppedBranches } = treeToStChat(exportInputFromDrafts(tree));
+        expect(droppedBranches).toBe(0);
         const roundTrippedLines = serializeChatJsonl(chat)
           .split('\n')
           .map((line) => JSON.parse(line) as unknown);

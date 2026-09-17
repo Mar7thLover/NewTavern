@@ -10,7 +10,12 @@
     "- o 系列、DeepSeek 的 maxOutput 取厂商公布值中的较小档。",
     "- Gemini 3.x thinking 视为 'level'，effortLevels 只写已公开的 low/high。",
     "- 任何未列入 models[] 的模型只会拿到 providers[] 的保守默认值（caching 视 provider 而定，thinking='none'）。",
-    "- imageOut 一律 false：M2 不处理原生生图，M4 再开。",
+    "多模态（2026-09-16，M4 核对）：imageIn = 接受 user 消息里的图片；documentIn = 接受 PDF 原生输入（文本类文档由服务端内联，不看这项）；imageOut = 能原生输出图片。",
+    "- Anthropic：Claude 全系 imageIn + documentIn（provider 级默认），无 imageOut；GLM（Anthropic 兼容端点）未见图片 / PDF 支持，保持 false。",
+    "- OpenAI Chat：provider 级 imageIn=true 沿用 M2（该协议是 OpenRouter 等网关的入口，前端暂无 modelOverrides 界面，一刀切 false 会让网关上的视觉模型全部丢图）；已知纯文本模型逐条写 false：o1-mini / o1-preview / o3-mini（官方无 vision）、DeepSeek、GLM 文本模型。documentIn 默认 false（file content part 是 OpenAI 自家形状），只给 GPT-4o / 4.1 / 5 / 6 与 o1 / o3 / o4-mini（官方 PDF 指南：需要 vision 能力的模型）开。GLM 视觉模型（glm-*v、glm-*v-*，Z.AI OpenAI 兼容端点收 image_url）imageIn=true。",
+    "- OpenAI Chat imageOut：只给 OpenRouter 形态的生图模型（google/gemini-*-image*、openai/gpt-5-image*，请求 modalities:['image','text']，响应 message.images / delta.images）；Google 自家 OpenAI 兼容端点是否支持 modalities 未核实，不开。",
+    "- OpenAI Responses：provider 级 imageIn + documentIn=true（input_image / input_file）；o1-mini / o1-preview / o3-mini 为 false。imageOut 表示可挂 image_generation 工具：官方工具指南列出 gpt-4o / gpt-4.1 / gpt-5 系 / o3，故 gpt-4o* / gpt-4.1* / gpt-5* / o3* 为 true（o3-mini 除外）；gpt-6* 未在列表中，保守 false。原 gpt-image-* 条目删除：它只能作为工具的 model 参数，不能作为 /responses 的主模型。",
+    "- Google：Gemini 全系 imageIn + documentIn（provider 级默认，inlineData）；*-image* 模型 imageOut=true、thinking='none'（生图模型不接受 thinkingConfig 调参），上下文 / 输出上限未单列的取保守值。",
     "- glm-*（Z.AI / 智谱，既有 Anthropic 兼容端点也有 OpenAI 兼容端点）：Anthropic 侧实测返回带 signature 的 thinking 块；OpenAI 侧走 reasoning_content。上下文/输出上限按 200K/32K 保守取值。",
     "- glm-* 推理控制（2026-09-14 实测 glm-5.3-flash，OpenAI 兼容端点，同一难题 reasoning_tokens）：不传 ≈5000；reasoning_effort none/minimal/low → 0；medium ≈300；high ≈1600；xhigh ≈1700；max ≈2000；非法值不报错、按默认推理；thinking:{type:'disabled'} → 0 且压过 reasoning_effort。故建模为 thinking='effort'、effortLevels=medium/high/max（low 及以下等同关闭，不单列），canDisableThinking=true，关闭走 thinking.type（quirk thinkingToggle）。",
     "- glm-* 推理控制（同日实测，Anthropic 兼容端点，thinking 字符数）：不传 ≈5100；output_config.effort low → 无推理块；medium ≈760；high ≈3250；max ≈5300；非法值不报错；thinking:{type:'disabled'} → 无；budget_tokens 1024 与 12000 都照常长推理（预算不生效，只是开关）；thinking:{type:'adaptive'} 被接受。故建模为 thinking='adaptive'（走 output_config.effort）、effortLevels=medium/high/max、canDisableThinking=true。",
@@ -18,7 +23,7 @@
     "Gemini 3 Flash 的 thinkingLevel 支持 minimal/low/medium/high（与 ST calculateGoogleBudgetTokens 的 getGemini3FlashBudget 一致），Pro 仍只写 low/high。"
   ],
   "version": 2,
-  "updated": "2026-09-13",
+  "updated": "2026-09-16",
   "defaults": {
     "thinking": "none",
     "caching": "none",
@@ -261,8 +266,24 @@
     },
     {
       "provider": "openai-chat",
+      "match": "glm-*v",
+      "capabilities": {
+        "imageIn": true
+      }
+    },
+    {
+      "provider": "openai-chat",
+      "match": "glm-*v-*",
+      "capabilities": {
+        "imageIn": true
+      }
+    },
+    {
+      "provider": "openai-chat",
       "match": "gpt-4o*",
       "capabilities": {
+        "imageIn": true,
+        "documentIn": true,
         "maxContext": 128000,
         "maxOutput": 16384
       }
@@ -271,6 +292,8 @@
       "provider": "openai-chat",
       "match": "gpt-4.1*",
       "capabilities": {
+        "imageIn": true,
+        "documentIn": true,
         "maxContext": 1000000,
         "maxOutput": 32768
       }
@@ -281,9 +304,27 @@
       "capabilities": {
         "thinking": "effort",
         "effortLevels": ["low", "medium", "high"],
+        "imageIn": true,
+        "documentIn": true,
         "prefill": false,
         "maxContext": 200000,
         "maxOutput": 100000
+      }
+    },
+    {
+      "provider": "openai-chat",
+      "match": "o1-mini*",
+      "capabilities": {
+        "imageIn": false,
+        "documentIn": false
+      }
+    },
+    {
+      "provider": "openai-chat",
+      "match": "o1-preview*",
+      "capabilities": {
+        "imageIn": false,
+        "documentIn": false
       }
     },
     {
@@ -292,9 +333,19 @@
       "capabilities": {
         "thinking": "effort",
         "effortLevels": ["low", "medium", "high"],
+        "imageIn": true,
+        "documentIn": true,
         "prefill": false,
         "maxContext": 200000,
         "maxOutput": 100000
+      }
+    },
+    {
+      "provider": "openai-chat",
+      "match": "o3-mini*",
+      "capabilities": {
+        "imageIn": false,
+        "documentIn": false
       }
     },
     {
@@ -303,6 +354,8 @@
       "capabilities": {
         "thinking": "effort",
         "effortLevels": ["low", "medium", "high"],
+        "imageIn": true,
+        "documentIn": true,
         "prefill": false,
         "maxContext": 200000,
         "maxOutput": 100000
@@ -314,6 +367,8 @@
       "capabilities": {
         "thinking": "effort",
         "effortLevels": ["minimal", "low", "medium", "high"],
+        "imageIn": true,
+        "documentIn": true,
         "prefill": false,
         "maxContext": 400000,
         "maxOutput": 128000
@@ -325,9 +380,27 @@
       "capabilities": {
         "thinking": "effort",
         "effortLevels": ["minimal", "low", "medium", "high"],
+        "imageIn": true,
+        "documentIn": true,
         "prefill": false,
         "maxContext": 400000,
         "maxOutput": 128000
+      }
+    },
+    {
+      "provider": "openai-chat",
+      "match": "google/gemini-*-image*",
+      "capabilities": {
+        "imageIn": true,
+        "imageOut": true
+      }
+    },
+    {
+      "provider": "openai-chat",
+      "match": "openai/gpt-5-image*",
+      "capabilities": {
+        "imageIn": true,
+        "imageOut": true
       }
     },
     {
@@ -358,6 +431,7 @@
       "provider": "openai-responses",
       "match": "gpt-4.1*",
       "capabilities": {
+        "imageOut": true,
         "maxContext": 1000000,
         "maxOutput": 32768
       }
@@ -368,6 +442,7 @@
       "capabilities": {
         "thinking": "effort",
         "effortLevels": ["low", "medium", "high"],
+        "imageOut": true,
         "maxContext": 200000,
         "maxOutput": 100000
       }
@@ -378,6 +453,7 @@
       "capabilities": {
         "thinking": "effort",
         "effortLevels": ["minimal", "low", "medium", "high"],
+        "imageOut": true,
         "maxContext": 400000,
         "maxOutput": 128000
       }
@@ -433,6 +509,7 @@
       "provider": "openai-responses",
       "match": "gpt-4o*",
       "capabilities": {
+        "imageOut": true,
         "maxContext": 128000,
         "maxOutput": 16384
       }
@@ -445,6 +522,31 @@
         "effortLevels": ["low", "medium", "high"],
         "maxContext": 200000,
         "maxOutput": 100000
+      }
+    },
+    {
+      "provider": "openai-responses",
+      "match": "o1-mini*",
+      "capabilities": {
+        "imageIn": false,
+        "documentIn": false
+      }
+    },
+    {
+      "provider": "openai-responses",
+      "match": "o1-preview*",
+      "capabilities": {
+        "imageIn": false,
+        "documentIn": false
+      }
+    },
+    {
+      "provider": "openai-responses",
+      "match": "o3-mini*",
+      "capabilities": {
+        "imageIn": false,
+        "documentIn": false,
+        "imageOut": false
       }
     },
     {
@@ -469,15 +571,6 @@
       }
     },
     {
-      "provider": "openai-responses",
-      "match": "gpt-image-*",
-      "capabilities": {
-        "imageOut": true,
-        "maxContext": 128000,
-        "maxOutput": 4096
-      }
-    },
-    {
       "provider": "google",
       "match": "gemini-2.5-flash-lite*",
       "capabilities": {
@@ -495,6 +588,14 @@
         "effortLevels": ["minimal", "low", "medium", "high"],
         "maxContext": 1000000,
         "maxOutput": 65536
+      }
+    },
+    {
+      "provider": "google",
+      "match": "gemini-*-image*",
+      "capabilities": {
+        "thinking": "none",
+        "imageOut": true
       }
     },
     {
@@ -534,6 +635,16 @@
         "thinking": "none",
         "imageOut": true,
         "maxContext": 1000000,
+        "maxOutput": 8192
+      }
+    },
+    {
+      "provider": "google",
+      "match": "gemini-3.1-flash-lite-image*",
+      "capabilities": {
+        "thinking": "none",
+        "imageOut": true,
+        "maxContext": 32768,
         "maxOutput": 8192
       }
     }

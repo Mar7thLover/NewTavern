@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 
+import { ChatGallery } from './ChatGallery';
 import {
   AuthorsNoteSection,
   ChatLorebooksSection,
@@ -13,6 +14,7 @@ import { Badge } from '../../components/ui/badge';
 import { FieldLabel, Input, Select } from '../../components/ui/field';
 import { IconButton } from '../../components/ui/icon-button';
 import { Segmented } from '../../components/ui/segmented';
+import { SwitchRow } from '../../components/ui/switch';
 import {
   useCharacter,
   useConnectionModels,
@@ -209,6 +211,13 @@ export function SessionPanel({ chat, path }: SessionPanelProps) {
           model={effectiveModel || null}
           onChange={setThinking}
         />
+
+        <ImageOutputSwitch
+          chat={chat}
+          connectionId={effectiveConnectionId || null}
+          model={effectiveModel || null}
+          onChange={(imageOutput) => patchOverrides({ imageOutput })}
+        />
       </section>
 
       {/* Persona 与预设 */}
@@ -294,6 +303,49 @@ export function SessionPanel({ chat, path }: SessionPanelProps) {
           note={t('chat.panel.messages', { total: path.length })}
         />
       </section>
+
+      {/* 本对话的图片（全部节点，新的在前） */}
+      <ChatGallery chat={chat} />
+    </div>
+  );
+}
+
+/**
+ * 「允许模型输出图片」：只在当前模型能出图（caps.imageOut）时出现，写 `overrides.imageOutput`。
+ * 没设过时显示提供商的默认（M4 契约 §1.2：Responses 默认关，其余能出图的默认开）。
+ */
+function ImageOutputSwitch({
+  chat,
+  connectionId,
+  model,
+  onChange,
+}: {
+  chat: ChatDetail;
+  connectionId: string | null;
+  model: string | null;
+  onChange: (imageOutput: boolean) => void;
+}) {
+  const { t } = useTranslation();
+  const caps = useModelCapabilities(connectionId, model);
+  const connections = useConnections();
+  if (!caps.data?.imageOut) return null;
+
+  const provider = connections.data?.find((item) => item.id === connectionId)?.provider;
+  const stored = chat.overrides?.imageOutput;
+  const checked = typeof stored === 'boolean' ? stored : provider !== 'openai-responses';
+
+  return (
+    <div data-part="image-output-switch" data-value={checked} className="mt-3">
+      <SwitchRow
+        title={t('chat.attach.imageOutput')}
+        hint={t(
+          provider === 'openai-responses'
+            ? 'chat.attach.imageOutputHintTool'
+            : 'chat.attach.imageOutputHint',
+        )}
+        checked={checked}
+        onChange={onChange}
+      />
     </div>
   );
 }

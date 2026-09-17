@@ -323,7 +323,7 @@ describe('api', () => {
     ].join('\n');
     expect(
       await message(await upload(app, '/api/import/character', '聊天.jsonl', encodeText(jsonl))),
-    ).toBe('这是 SillyTavern 聊天记录文件，目前还不支持导入。');
+    ).toBe('这是 SillyTavern 聊天记录，请在对话列表里导入。');
 
     // 合法文件照常导入
     expect(

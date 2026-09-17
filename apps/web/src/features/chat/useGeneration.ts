@@ -9,6 +9,7 @@ import {
   type ChatSummary,
   type GenerateBody,
   type GenerationError,
+  type ImagePart,
   type MessageNode,
   type Usage,
 } from '../../lib/api';
@@ -205,6 +206,13 @@ async function runGeneration(
             message.event === 'text.delta' ? 'text' : 'reasoning',
             payload.text,
           );
+          break;
+        }
+        case 'image': {
+          // 模型输出的图片已落盘为资产（M4 契约 §1.3）：先追加在正文之后，done 再按最终顺序
+          const payload = parseJson<{ nodeId: string; part: ImagePart }>(message.data);
+          if (!payload?.part?.assetId) break;
+          store.appendImage(payload.nodeId, payload.part);
           break;
         }
         case 'usage': {

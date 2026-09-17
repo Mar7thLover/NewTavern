@@ -1,6 +1,13 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import type { TFunction } from 'i18next';
+import { Paperclip } from 'lucide-react';
+import { useEffect, useLayoutEffect, useRef, useState, type ClipboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import type { AttachmentTray as TrayState } from './useAttachmentTray';
+import { ATTACHMENT_ACCEPT } from '../../components/AttachmentFiles';
+import { AttachmentTray } from '../../components/AttachmentTray';
+import { IconButton } from '../../components/ui/icon-button';
+import type { ModelCapabilities } from '../../lib/api';
 import { useSignature } from '../../themes/signature';
 
 const MAX_HEIGHT_PX = 260;
@@ -11,20 +18,34 @@ function isTouchPrimary(): boolean {
 }
 
 export interface ComposerProps {
-  onSend: (text: string) => void;
+  /** attachments：已上传的资产（按托盘顺序，带这次的文件名）；没有附件时为空数组 */
+  onSend: (text: string, attachments: { id: string; name: string }[]) => void;
   onStop: () => void;
   isGenerating: boolean;
   disabled?: boolean;
   /** 换聊天时清空草稿 */
   resetKey?: string;
+  /** 附件托盘（状态放在 ChatView：拖放区域也要往里加文件） */
+  tray: TrayState;
+  /** 当前模型的能力；拿不到时为 undefined，不做能力提示 */
+  capabilities: ModelCapabilities | undefined;
 }
 
-export function Composer({ onSend, onStop, isGenerating, disabled, resetKey }: ComposerProps) {
+export function Composer({
+  onSend,
+  onStop,
+  isGenerating,
+  disabled,
+  resetKey,
+  tray,
+  capabilities,
+}: ComposerProps) {
   const { t } = useTranslation();
   const { SendButton } = useSignature();
   const [value, setValue] = useState('');
   const [touch, setTouch] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => setTouch(isTouchPrimary()), []);
   useEffect(() => setValue(''), [resetKey]);
@@ -36,14 +57,31 @@ export function Composer({ onSend, onStop, isGenerating, disabled, resetKey }: C
     element.style.height = `${Math.min(element.scrollHeight, MAX_HEIGHT_PX)}px`;
   }, [value]);
 
+  const hasAttachments = tray.assetIds.length > 0;
+  // 上传中 / 有失败项时不能发：宁可停下来，也不悄悄丢掉用户以为带上了的文件
+  const attachmentsBlocked = tray.uploading || tray.failed;
+  const canSend = (value.trim() !== '' || hasAttachments) && !attachmentsBlocked && !disabled;
+
   const send = () => {
+    if (!canSend || isGenerating) return;
     const text = value.trim();
-    if (text === '' || disabled || isGenerating) return;
+    const attachments = tray.attachments;
     setValue('');
-    onSend(text);
+    tray.clear();
+    onSend(text, attachments);
   };
 
-  const canSend = value.trim() !== '' && !disabled;
+  /** 粘贴图片 / 文件：剪贴板里有文字时照常粘文字（从 Word、表格复制时也会带一张位图） */
+  const onPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    const data = event.clipboardData;
+    const files = Array.from(data.files);
+    if (files.length === 0) return;
+    if (data.getData('text/plain').trim() !== '') return;
+    event.preventDefault();
+    tray.add(files);
+  };
+
+  const hints = trayHints(tray, capabilities, t);
 
   return (
     <div
@@ -51,7 +89,54 @@ export function Composer({ onSend, onStop, isGenerating, disabled, resetKey }: C
       className="surface-reading shrink-0 px-4 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-6"
     >
       <div className="mx-auto w-full max-w-3xl min-w-0">
-        <div data-part="composer" className="field rounded-panel flex min-w-0 items-end gap-2 p-2">
+        <AttachmentTray tray={tray} />
+        {hints.length > 0 && (
+          <div
+            data-part="composer-tray-hint"
+            className="-mt-0.5 mb-2 space-y-0.5"
+            aria-live="polite"
+          >
+            {hints.map((hint) => (
+              <p
+                key={hint.key}
+                className={
+                  hint.tone === 'danger'
+                    ? 'text-[12px] leading-snug text-danger'
+                    : 'text-[12px] leading-snug text-ink-2'
+                }
+              >
+                {hint.text}
+              </p>
+            ))}
+          </div>
+        )}
+        <div data-part="composer" className="field rounded-panel flex min-w-0 items-end gap-1 p-2">
+          <IconButton
+            label={t('chat.attach.add')}
+            size="md"
+            data-part="composer-attach"
+            disabled={disabled}
+            onClick={() => fileRef.current?.click()}
+            className="shrink-0"
+          >
+            <Paperclip aria-hidden />
+          </IconButton>
+          <input
+            ref={fileRef}
+            type="file"
+            multiple
+            accept={ATTACHMENT_ACCEPT}
+            tabIndex={-1}
+            aria-hidden
+            className="hidden"
+            onChange={(event) => {
+              const files = event.target.files;
+              if (files && files.length > 0) tray.add(Array.from(files));
+              // 允许再次选择同一个文件
+              event.target.value = '';
+              ref.current?.focus();
+            }}
+          />
           <textarea
             ref={ref}
             data-part="composer-input"
@@ -61,13 +146,14 @@ export function Composer({ onSend, onStop, isGenerating, disabled, resetKey }: C
             placeholder={t('chat.composer.placeholder')}
             aria-label={t('chat.composer.placeholder')}
             onChange={(event) => setValue(event.target.value)}
+            onPaste={onPaste}
             onKeyDown={(event) => {
               if (event.key !== 'Enter' || event.shiftKey || touch) return;
               if (event.nativeEvent.isComposing) return; // 输入法候选中
               event.preventDefault();
               send();
             }}
-            className="max-h-[260px] min-h-9 w-full min-w-0 flex-1 resize-none bg-transparent px-2 py-1.5 text-[15px] leading-[1.6] text-ink placeholder:text-ink-3 focus:outline-none disabled:opacity-50"
+            className="max-h-[260px] min-h-9 w-full min-w-0 flex-1 resize-none bg-transparent px-1 py-1.5 text-[15px] leading-[1.6] text-ink placeholder:text-ink-3 focus:outline-none disabled:opacity-50"
           />
           {/* 记忆物件：发送键的形态由主题决定（素 = 黑色圆点） */}
           <SendButton
@@ -83,4 +169,59 @@ export function Composer({ onSend, onStop, isGenerating, disabled, resetKey }: C
       </div>
     </div>
   );
+}
+
+interface TrayHint {
+  key: string;
+  text: string;
+  tone: 'muted' | 'danger';
+}
+
+/**
+ * 托盘下方的轻提示：失败项挡住发送时说一句；当前模型看不到图片 / 读不了 PDF 时说一句。
+ * 能力未知（没有连接、目录里查不到）时不猜。
+ */
+function trayHints(tray: TrayState, caps: ModelCapabilities | undefined, t: TFunction): TrayHint[] {
+  const hints: TrayHint[] = [];
+  const failed = tray.items.filter((item) => item.status === 'error');
+  const only = failed.length === 1 ? failed[0] : undefined;
+  if (only) {
+    hints.push({
+      key: 'failed',
+      text: only.retryable
+        ? t('chat.attach.blockedRetry', { name: only.name })
+        : t('chat.attach.blockedRemove', {
+            name: only.name,
+            reason:
+              only.error?.message ?? t(`chat.attach.errors.${only.error?.reason ?? 'failed'}`),
+          }),
+      tone: 'danger',
+    });
+  } else if (failed.length > 1) {
+    hints.push({
+      key: 'failed',
+      text: t('chat.attach.blockedMany', { total: failed.length }),
+      tone: 'danger',
+    });
+  }
+  if (!caps) return hints;
+
+  const live = tray.items.filter((item) => item.status !== 'error');
+  if (caps.imageIn === false && live.some((item) => item.kind === 'image')) {
+    hints.push({ key: 'image', text: t('chat.attach.imageDropped'), tone: 'muted' });
+  }
+  const pdfs = live.filter((item) => item.kind === 'pdf');
+  if (caps.documentIn === false && pdfs.length > 0) {
+    // 还没传完的 PDF 不知道有没有文字，等它传完再下结论
+    const settled = pdfs.filter((item) => item.status === 'done');
+    if (settled.length > 0) {
+      const allText = settled.every((item) => (item.asset?.textLength ?? 0) > 0);
+      hints.push({
+        key: 'pdf',
+        text: allText ? t('chat.attach.pdfAsText') : t('chat.attach.pdfDropped'),
+        tone: 'muted',
+      });
+    }
+  }
+  return hints;
 }

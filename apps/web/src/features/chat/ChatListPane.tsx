@@ -1,13 +1,15 @@
-import { Plus, Trash2, X } from 'lucide-react';
-import { useState } from 'react';
+import { Download, FileUp, Plus, Trash2, X } from 'lucide-react';
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { formatRelativeTime, renderMacros } from './shared';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { IconButton } from '../../components/ui/icon-button';
 import { useChats, useDeleteChat, usePersonas, type ChatSummary } from '../../lib/api';
+import { useExportStChat, type ExportStChatResult } from '../../lib/api-migration';
 import { cn } from '../../lib/utils';
 import { Avatar, QueryStatus, errorMessage } from '../library/shared';
+import { ExportNoticeDialog, ImportChatDialog } from '../migration/ChatTransferDialogs';
 
 export interface ChatListPaneProps {
   activeChatId: string | null;
@@ -24,6 +26,23 @@ export function ChatListPane({ activeChatId, onSelect, onNew, onClose }: ChatLis
   const personas = usePersonas();
   const deleteChat = useDeleteChat();
   const [pendingDelete, setPendingDelete] = useState<ChatSummary | null>(null);
+  // 导入 / 导出 SillyTavern 聊天记录（M4 §2.4）
+  const importInputRef = useRef<HTMLInputElement>(null);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const exportChat = useExportStChat();
+  const [exportNotice, setExportNotice] = useState<
+    { result: ExportStChatResult } | { error: unknown } | null
+  >(null);
+
+  const startExport = (chat: ChatSummary) => {
+    exportChat.mutate(chat.id, {
+      onSuccess: (result) => {
+        if (result.droppedBranches > 0 || result.skippedAttachments > 0)
+          setExportNotice({ result });
+      },
+      onError: (error) => setExportNotice({ error }),
+    });
+  };
 
   const list = [...(chats.data ?? [])].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 
@@ -35,6 +54,23 @@ export function ChatListPane({ activeChatId, onSelect, onNew, onClose }: ChatLis
       >
         <span className="text-sm font-semibold">{t('chat.list.title')}</span>
         <div className="flex items-center gap-1">
+          <input
+            ref={importInputRef}
+            type="file"
+            accept=".jsonl"
+            className="hidden"
+            onChange={(event) => {
+              const file = event.target.files?.[0] ?? null;
+              event.target.value = '';
+              if (file) setImportFile(file);
+            }}
+          />
+          <IconButton
+            label={t('chat.transfer.import')}
+            onClick={() => importInputRef.current?.click()}
+          >
+            <FileUp aria-hidden />
+          </IconButton>
           <IconButton label={t('chat.list.new')} variant="outline" onClick={onNew}>
             <Plus aria-hidden />
           </IconButton>
@@ -120,18 +156,35 @@ export function ChatListPane({ activeChatId, onSelect, onNew, onClose }: ChatLis
                     </span>
                   </span>
                 </button>
-                <IconButton
-                  label={t('common.delete')}
-                  size="xs"
-                  variant="destructive"
-                  className="absolute end-2 top-3 opacity-0 group-hover/item:opacity-100 focus-visible:opacity-100"
-                  onClick={() => {
-                    deleteChat.reset();
-                    setPendingDelete(chat);
-                  }}
+                {/* 悬停 / 键盘聚焦时出现；触屏没有悬停，常显 */}
+                <div
+                  data-part="chat-list-actions"
+                  className="absolute end-2 top-3 flex flex-col gap-1 opacity-0 group-hover/item:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100"
                 >
-                  <Trash2 aria-hidden />
-                </IconButton>
+                  <IconButton
+                    label={t('common.delete')}
+                    size="xs"
+                    variant="destructive"
+                    onClick={() => {
+                      deleteChat.reset();
+                      setPendingDelete(chat);
+                    }}
+                  >
+                    <Trash2 aria-hidden />
+                  </IconButton>
+                  <IconButton
+                    label={
+                      exportChat.isPending && exportChat.variables === chat.id
+                        ? t('chat.transfer.exporting')
+                        : t('chat.transfer.export')
+                    }
+                    size="xs"
+                    disabled={exportChat.isPending}
+                    onClick={() => startExport(chat)}
+                  >
+                    <Download aria-hidden />
+                  </IconButton>
+                </div>
               </li>
             );
           })}
@@ -162,6 +215,13 @@ export function ChatListPane({ activeChatId, onSelect, onNew, onClose }: ChatLis
           });
         }}
       />
+
+      <ImportChatDialog
+        file={importFile}
+        onClose={() => setImportFile(null)}
+        onOpenChat={onSelect}
+      />
+      <ExportNoticeDialog notice={exportNotice} onClose={() => setExportNotice(null)} />
     </div>
   );
 }

@@ -1,9 +1,10 @@
-import { useEffect } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { NavLink, Outlet, useLocation, useMatch } from 'react-router';
 
 import { useUiStore } from './store/ui';
 import { Button } from '../components/ui/button';
+import { CommandPalette, CommandPaletteTrigger } from '../features/palette/CommandPalette';
 import { useServerHealth } from '../lib/api';
 import { cn } from '../lib/utils';
 import { applyTheme, watchSystemMode } from '../themes/apply';
@@ -94,6 +95,8 @@ export function AppLayout() {
             ))}
           </nav>
           <div className="ml-auto flex shrink-0 items-center gap-3">
+            {/* 命令面板入口：键盘用户有 Ctrl/⌘ + K，触屏靠这里 */}
+            <CommandPaletteTrigger />
             <span
               data-part="server-status"
               data-online={health.isSuccess}
@@ -120,9 +123,34 @@ export function AppLayout() {
           data-part="main"
           className={cn('min-w-0 flex-1', fullBleed ? 'min-h-0' : 'p-5 md:p-8')}
         >
-          <Outlet />
+          {/* 页面是按路由拆分的 chunk：首次进入时的轻量占位；之后的导航在过渡里完成，停留在旧页面直到新页面就绪 */}
+          <Suspense fallback={<RouteFallback />}>
+            <Outlet />
+          </Suspense>
         </main>
       </div>
+
+      <CommandPalette navItems={NAV_ITEMS} />
+    </div>
+  );
+}
+
+/** 等页面 chunk 时的占位：先空着，稍等仍未就绪才出现一行「加载中」（快的时候什么也不闪） */
+function RouteFallback() {
+  const { t } = useTranslation();
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setVisible(true), 240);
+    return () => window.clearTimeout(timer);
+  }, []);
+  return (
+    <div
+      data-part="route-fallback"
+      role="status"
+      aria-live="polite"
+      className="flex h-full min-h-40 items-center justify-center"
+    >
+      {visible && <span className="pulse-live text-sm text-ink-3">{t('common.loading')}</span>}
     </div>
   );
 }

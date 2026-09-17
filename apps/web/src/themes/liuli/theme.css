@@ -465,6 +465,7 @@
   [data-part='chat-aside']::after,
   [data-part='chat-page'] > div:not([data-part])::after,
   [data-part='modal']::after,
+  [data-part='command-palette']::after,
   [data-part='composer']::after,
   [data-part='character-card']::after,
   [data-part='connection-card']::after,
@@ -568,7 +569,8 @@
     backdrop-filter: blur(2px);
   }
 
-  [data-part='modal'] {
+  [data-part='modal'],
+  [data-part='command-palette'] {
     position: relative;
     border-color: var(--liuli-slab-edge);
   }
@@ -1435,7 +1437,8 @@
       animation: liuli-slide-right var(--dur-panel) var(--ease) backwards;
     }
 
-    [data-part='modal'] {
+    [data-part='modal'],
+    [data-part='command-palette'] {
       animation: liuli-settle var(--dur-panel) var(--ease) backwards;
     }
   }

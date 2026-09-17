@@ -3,6 +3,13 @@ import type { Part, PromptIR } from '@newtavern/core';
 import { defaultMaxTokens, globMatch, lookupCapabilities } from '../catalog.js';
 import { errorTypeToKind, isAbortError, normalizeUnknownError } from '../errors.js';
 import { providerFetch, providerGet, trimTrailingSlash } from '../http.js';
+import {
+  createMediaRenderer,
+  EMPTY_TEXT_PLACEHOLDER,
+  isMediaPart,
+  type MediaRenderer,
+  type MediaSource,
+} from '../media.js';
 import { irToChatMessages, mergeAdjacentSameRole, type ChatMessage } from '../messages.js';
 import { parseSseStream } from '../sse.js';
 import { canDisableThinking, resolveThinking, stEffortToClaude } from '../thinking.js';
@@ -50,10 +57,14 @@ function rejectsSamplingParams(model: string): boolean {
   return NO_SAMPLING_PATTERNS.some((p) => globMatch(p, model));
 }
 
+/** 媒体来源：原生 base64；没有 resolver 的预览沿用 `url` 占位（`asset:<id>`） */
+type AnthropicSource =
+  { type: 'base64'; media_type: string; data: string } | { type: 'url'; url: string };
+
 type AnthropicBlock =
   | { type: 'text'; text: string; cache_control?: CacheControl }
-  | { type: 'image'; source: { type: 'url'; url: string } }
-  | { type: 'document'; source: { type: 'url'; url: string } }
+  | { type: 'image'; source: AnthropicSource }
+  | { type: 'document'; source: AnthropicSource }
   | Record<string, unknown>;
 
 interface CacheControl {
@@ -66,23 +77,46 @@ interface AnthropicMessage {
   content: AnthropicBlock[];
 }
 
-function renderParts(parts: readonly Part[], model: string, warnings: string[]): AnthropicBlock[] {
+function anthropicSource(source: MediaSource, mime: string): AnthropicSource {
+  return source.type === 'inline'
+    ? { type: 'base64', media_type: mime, data: source.base64 }
+    : { type: 'url', url: source.url };
+}
+
+/**
+ * 渲染一段 parts。`role` 是最终角色（system 顶层块传 'system'）：
+ * 图片 / PDF 只能出现在 user 消息里，assistant 与 system 里的媒体丢弃并告警。
+ * 媒体块保持与文本的相对顺序（不按 Anthropic「图片在前」的建议重排，与用户看到的一致）。
+ */
+function renderParts(
+  parts: readonly Part[],
+  role: string,
+  model: string,
+  media: MediaRenderer,
+  warnings: string[],
+): AnthropicBlock[] {
   const head: AnthropicBlock[] = [];
   const body: AnthropicBlock[] = [];
+  const roleCtx = { accepts: role === 'user', role };
   for (const part of parts) {
     switch (part.type) {
       case 'text':
         body.push({ type: 'text', text: part.text });
         break;
       case 'image':
-        // assetId 占位，由服务端在 M4 替换为 base64 / 可访问 URL
-        body.push({ type: 'image', source: { type: 'url', url: `asset:${part.assetId}` } });
-        warnings.push(`图片 ${part.assetId} 以 asset: 占位 URL 渲染，需由服务端替换为图片源`);
+      case 'document': {
+        const rendered = media.render(part, roleCtx);
+        if (!rendered) break;
+        if (rendered.kind === 'text') {
+          body.push({ type: 'text', text: rendered.text });
+        } else {
+          body.push({
+            type: rendered.kind === 'image' ? 'image' : 'document',
+            source: anthropicSource(rendered.source, rendered.mime),
+          });
+        }
         break;
-      case 'document':
-        body.push({ type: 'document', source: { type: 'url', url: `asset:${part.assetId}` } });
-        warnings.push(`文档 ${part.assetId} 以 asset: 占位 URL 渲染，需由服务端替换为文档源`);
-        break;
+      }
       case 'reasoning_opaque':
         // 历史里的 thinking / redacted_thinking 块必须原样、且放在 assistant content 开头
         if (part.provider !== 'anthropic' || part.model !== model) {
@@ -198,13 +232,24 @@ function buildRequest(
     });
   }
 
+  const media = createMediaRenderer({
+    caps,
+    resolveAsset: opts?.resolveAsset,
+    label: 'Anthropic',
+    warnings,
+  });
   const renderedSystem: AnthropicBlock[][] = systemBlocks.map((b) =>
-    renderParts(b.parts, model, warnings),
+    renderParts(b.parts, 'system', model, media, warnings),
   );
-  const renderedMessages: AnthropicMessage[] = working.map((msg) => ({
-    role: msg.role,
-    content: renderParts(msg.parts, model, warnings),
-  }));
+  const renderedMessages: AnthropicMessage[] = working.map((msg) => {
+    const content = renderParts(msg.parts, msg.role, model, media, warnings);
+    // 只有媒体、且媒体全被丢弃的消息会变成空 content（API 会 400）：照 ST 用零宽空格占位
+    if (content.length === 0 && msg.parts.some(isMediaPart)) {
+      content.push({ type: 'text', text: EMPTY_TEXT_PLACEHOLDER });
+    }
+    return { role: msg.role, content };
+  });
+  media.flush();
 
   // 5. 缓存断点：system 在前、messages 在后，靠前优先，数量 ≤ maxBreakpoints
   if (caps.caching === 'breakpoints') {
@@ -300,6 +345,7 @@ function buildRequest(
   if (s.repetitionPenalty !== undefined)
     warnings.push('Anthropic 不支持 repetition_penalty，已丢弃');
   if (s.seed !== undefined) warnings.push('Anthropic 不支持 seed，已丢弃');
+  if (opts?.imageOutput === true) warnings.push('该提供商不支持图片输出，已忽略 imageOutput');
 
   return {
     method: 'POST',

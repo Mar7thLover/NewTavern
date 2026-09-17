@@ -334,8 +334,14 @@ describe('chats 生成 SSE', () => {
     });
     expect(typeof done.latencyMs).toBe('number');
 
-    // extra.request 去掉 headers，保留 method/url/body
-    const request = (done.node.extra?.request ?? {}) as Record<string, unknown>;
+    // extra.request 去掉 headers，保留 method/url/body；只落库，不随节点下发（M4 §4 载荷瘦身）
+    expect(done.node.extra && 'request' in done.node.extra).toBe(false);
+    const storedRow = db
+      .select()
+      .from(schema.messageNodes)
+      .where(eq(schema.messageNodes.id, done.node.id))
+      .get();
+    const request = (storedRow?.extra?.request ?? {}) as Record<string, unknown>;
     expect(request.url).toBe('https://example.test/v1/chat/completions');
     expect('headers' in request).toBe(false);
     expect(done.node.extra?.stopReason).toBe('end');

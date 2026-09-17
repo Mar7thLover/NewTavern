@@ -45,8 +45,11 @@ export interface ModelCapabilities {
   maxBreakpoints?: number;
   systemInMessages: boolean;
   reasoningRoundtrip: 'none' | 'signature' | 'encrypted' | 'thoughtSignature';
+  /** 接受图片输入（user 消息里的 image part） */
   imageIn: boolean;
+  /** 能原生输出图片（Gemini `*-image*`、Responses image_generation 工具、OpenRouter 生图模型） */
   imageOut: boolean;
+  /** 接受 PDF 原生输入（文本类文档由服务端内联为文本，不看这一项） */
   documentIn: boolean;
   tools: boolean;
   structuredOutput: boolean;
@@ -77,9 +80,27 @@ export interface ThinkingOptions {
   budgetTokens?: number;
 }
 
-/** buildRequest 的可选参数：由聊天覆盖项（ChatOverrides.thinking）传入 */
+/** 服务端预先读出的资产内容（base64 不带 data: 前缀） */
+export interface ResolvedAsset {
+  mime: string;
+  base64: string;
+  name?: string;
+}
+
+/** buildRequest 的可选参数：由聊天覆盖项（ChatOverrides.thinking / imageOutput）与服务端传入 */
 export interface BuildOptions {
   thinking?: ThinkingOptions;
+  /**
+   * 资产解析器。提供时 image / document 渲染为各家原生内联块；
+   * 缺省（检查器预览、黄金测试）时保持 `asset:<id>` 占位，不告警「需替换」。
+   * 返回 undefined 视为资产不存在：丢弃该 part 并告警。
+   */
+  resolveAsset?: (assetId: string) => ResolvedAsset | undefined;
+  /**
+   * 请求模型输出图片。undefined = 按默认：google / openai-chat 在 caps.imageOut 时开，
+   * openai-responses 关（image_generation 工具单独计费）。true / false = 显式开关。
+   */
+  imageOutput?: boolean;
 }
 
 export type ProviderErrorKind =
@@ -98,7 +119,13 @@ export type GenEvent =
   | { type: 'text.delta'; text: string }
   | { type: 'reasoning.delta'; text: string }
   | { type: 'reasoning.opaque'; provider: string; model: string; payload: unknown }
+  /** 模型输出的图片；data 为不带 data: 前缀的 base64 */
   | { type: 'image'; mime: string; data: string }
+  /**
+   * 流式解析中的非致命告警（例如 OpenRouter 返回了 http 图片链接而不是内联数据）。
+   * 不影响生成，服务端可以并入节点告警，也可以忽略。
+   */
+  | { type: 'warning'; message: string }
   | { type: 'tool.call'; id: string; name: string; argsDelta: string }
   | {
       type: 'usage';

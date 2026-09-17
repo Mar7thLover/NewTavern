@@ -104,6 +104,30 @@ function toMessage(obj: Record<string, unknown>, lineNo: number): ImportedMessag
   return { ...known, rest } as ImportedMessage;
 }
 
+/** 中立模型的消息 → ST 原始键名对象（与 serialize 同一规则：undefined 的已知字段不写） */
+export function chatMessageToStRecord(message: ImportedMessage): Record<string, unknown> {
+  const { rest, ...known } = message;
+  return joinKnown(known, rest, MESSAGE_KEYS);
+}
+
+/** ST 原始键名对象 → 中立模型的消息（不校验；校验走 parseChatJsonl） */
+export function chatMessageFromStRecord(record: Record<string, unknown>): ImportedMessage {
+  const { known, rest } = splitKnown(record, MESSAGE_KEYS);
+  return { ...known, rest } as ImportedMessage;
+}
+
+/** 中立模型的 header → ST 原始键名对象 */
+export function chatHeaderToStRecord(header: ImportedChatHeader): Record<string, unknown> {
+  const { rest, ...known } = header;
+  return joinKnown(known, rest, HEADER_KEYS);
+}
+
+/** ST 原始键名对象 → 中立模型的 header */
+export function chatHeaderFromStRecord(record: Record<string, unknown>): ImportedChatHeader {
+  const { known, rest } = splitKnown(record, HEADER_KEYS);
+  return { ...known, rest } as ImportedChatHeader;
+}
+
 export function parseChatJsonl(text: string): ImportedChat {
   const lines = text
     .replace(/^\uFEFF/, '')
