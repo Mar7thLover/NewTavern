@@ -397,6 +397,11 @@ export interface MessageNode {
   model: string | null;
   isHidden: boolean;
   extra: Record<string, unknown> | null;
+  /**
+   * 该节点是否带变量快照（MVU 的 `stat_data` 在里面）。内容不随详情下发
+   * （一条几 KB，长对话会把接口撑爆），要就取 `/api/chats/:id/variables?nodeId=`。
+   */
+  hasVariables: boolean;
   createdAt: string;
 }
 

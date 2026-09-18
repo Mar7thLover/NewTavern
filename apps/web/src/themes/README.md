@@ -248,6 +248,10 @@ loadFonts: () =>
 | `lightbox`                                                     | 灯箱根（`role=dialog`）：`lightbox-backdrop` / `lightbox-bar` / `lightbox-stage` / `lightbox-image` / `lightbox-button` | —                                                                                       |
 | `gallery` / `gallery-item`                                     | 会话面板「图片」分区 / 每张图                                                                                           | —                                                                                       |
 | `image-output-switch`                                          | 会话设置里「允许模型输出图片」开关行                                                                                    | —                                                                                       |
+| `frontend-card`                                                | 一张跑起来的前端卡（沙箱 iframe 的外框，M5 §4）；**里面是卡自己的世界，不要去染色**                                     | `data-trust`、`data-nt-card`                                                            |
+| `frontend-card-placeholder`                                    | 流式中前端卡的占位（消息写完才真的跑）                                                                                 | —                                                                                       |
+| `script-buttons`                                               | 脚本库按钮条（输入框正上方）                                                                                            | —                                                                                       |
+| `inspector-variables`                                          | 检查器「变量」页签的内容                                                                                                | —                                                                                       |
 | `start-screen`                                                 | 未选会话时的开始页（滚动容器，`surface-reading`）                                                                       | —                                                                                       |
 | `start-persona`                                                | 开始页「以谁的身份开始」下拉的外层 `div`（有用户档案时才渲染）                                                          | —                                                                                       |
 | `character-card`                                               | 开始页每张角色卡 `button`（3:4）                                                                                        | —                                                                                       |
@@ -612,6 +616,10 @@ export interface ThemeOption {
 
 **这块不归主题管**：卡自己带样式，你的 `blocks.css` 不要去动 `.nt-md [data-nt-html] *`，
 那是卡作者的地盘。你只负责 `data-nt-block`。
+
+带 `<script>` 的前端卡从 M5（二）起进 iframe 沙箱（`data-part="frontend-card"`，契约 `docs/M5-CONTRACT.md` §4）：
+里面是另一个文档，你的 CSS 根本够不着，也**不应该**够得着。主题能做的只有外框——
+边线、圆角、外边距，和你给别的面板一样的材质。
 
 ### 10.4 自检
 

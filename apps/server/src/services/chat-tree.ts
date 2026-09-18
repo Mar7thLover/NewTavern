@@ -38,6 +38,12 @@ export interface MessageNode {
   model: string | null;
   isHidden: boolean;
   extra: Record<string, unknown> | null;
+  /**
+   * 该节点是否带变量快照（MVU 的 `stat_data` 就在里面）。
+   * 只给布尔值不给内容：长对话里每个节点的快照几 KB，全下发会把 ChatDetail 撑爆
+   * （M4 契约 §4「载荷瘦身」）。要内容走 `/api/chats/:id/variables?nodeId=`。
+   */
+  hasVariables: boolean;
   createdAt: Date;
 }
 
@@ -117,6 +123,7 @@ export function toMessageNode(row: NodeRow): MessageNode {
     model: row.model,
     isHidden: row.isHidden,
     extra: publicExtra(row.extra ?? null),
+    hasVariables: row.variables !== null && Object.keys(row.variables).length > 0,
     createdAt: row.createdAt,
   };
 }

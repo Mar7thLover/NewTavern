@@ -32,6 +32,11 @@ interface UiState {
   richBlocks: boolean;
   /** 渲染角色卡 / 世界书 / 预设自带的 HTML 前端（白名单净化 + CSS 关进本条消息） */
   cardHtml: boolean;
+  /**
+   * 跑带脚本的前端卡（iframe 沙箱 + 酒馆助手 API）。关掉后这类卡退回围栏代码块，
+   * 不带脚本的 HTML 仍由 `cardHtml` 那条路内联渲染。
+   */
+  cardRuntime: boolean;
   setLanguage: (language: Language) => void;
   setThemeId: (themeId: string) => void;
   setMode: (mode: ModeSetting) => void;
@@ -39,6 +44,7 @@ interface UiState {
   setDeveloperMode: (developerMode: boolean) => void;
   setRichBlocks: (richBlocks: boolean) => void;
   setCardHtml: (cardHtml: boolean) => void;
+  setCardRuntime: (cardRuntime: boolean) => void;
   /** 命令面板是否打开（不持久化） */
   paletteOpen: boolean;
   setPaletteOpen: (open: boolean) => void;
@@ -71,6 +77,7 @@ export const useUiStore = create<UiState>()(
       developerMode: false,
       richBlocks: true,
       cardHtml: true,
+      cardRuntime: true,
       setLanguage: (language) => set({ language }),
       setThemeId: (themeId) => set({ themeId }),
       setMode: (mode) => set({ mode }),
@@ -84,6 +91,7 @@ export const useUiStore = create<UiState>()(
       setDeveloperMode: (developerMode) => set({ developerMode }),
       setRichBlocks: (richBlocks) => set({ richBlocks }),
       setCardHtml: (cardHtml) => set({ cardHtml }),
+      setCardRuntime: (cardRuntime) => set({ cardRuntime }),
       paletteOpen: false,
       setPaletteOpen: (paletteOpen) => set({ paletteOpen }),
       chatPanelRequest: null,

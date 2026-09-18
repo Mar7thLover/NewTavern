@@ -96,7 +96,8 @@
       "appearance": "外观",
       "worldInfo": "世界书",
       "globalSystemPrompt": "全局系统提示词",
-      "regex": "正则脚本"
+      "regex": "正则脚本",
+      "cards": "前端卡"
     },
     "developerMode": "开发者模式",
     "developerModeHint": "显示面向开发与排错的工具，比如检查器里的 ST 对照。",
@@ -132,7 +133,9 @@
     "richBlocks": "主题美化",
     "richBlocksHint": "认出预设输出里的状态栏、思考、选项、摘要，按当前世界的材质呈现。原文不动。",
     "cardHtml": "卡自带的前端",
-    "cardHtmlHint": "渲染角色卡 / 世界书 / 预设的正则吐出来的 HTML。脚本不执行，样式只作用于该条消息。"
+    "cardHtmlHint": "渲染角色卡 / 世界书 / 预设的正则吐出来的 HTML。脚本不执行，样式只作用于该条消息。",
+    "cardRuntime": "跑带脚本的前端卡",
+    "cardRuntimeHint": "把卡自带的界面放进沙箱 iframe 里真的跑起来（酒馆助手 API 与变量都通）。关掉后这类卡退回代码块。"
   },
   "library": {
     "characters": {
@@ -808,6 +811,7 @@
     "tabs": {
       "segments": "段",
       "worldInfo": "世界书",
+      "variables": "变量",
       "request": "原始请求",
       "compare": "ST 对照"
     },
@@ -1029,5 +1033,61 @@
     "network": "网络错误",
     "not_found": "资源不存在",
     "unknown": "发生未知错误"
+  },
+  "cards": {
+    "frameTitle": "前端卡",
+    "reload": "重新加载这张卡",
+    "errors": "这张卡报了 {{count}} 条错误",
+    "streamingPlaceholder": "界面会在这条消息写完后显示",
+    "legacyWarning": "兼容模式：这张卡能读写浏览器存储、也能碰到宿主页面，只在你信任卡的来源时用。",
+    "runtime": "运行",
+    "runtimeHint": "前端卡跑在沙箱 iframe 里：没有宿主页面的 DOM、cookie 与本地存储，一切能力都经受控接口过去。",
+    "runtimeSwitch": "跑带脚本的前端卡",
+    "runtimeSwitchHint": "同「外观 → 正文」里的那个开关，存在本机。",
+    "externalLibs": "允许社区常用外链",
+    "externalLibsHint": "FontAwesome 图标与 Tailwind：很多卡默认它们存在。关掉更适合离线或不想连外网的场景（卡会少图标）。",
+    "scripts": "运行脚本库",
+    "scriptsHint": "角色卡自带的脚本与全局脚本在隐藏 iframe 里运行（MVU 之类的框架脚本就是这么来的）。",
+    "trustTitle": "信任级别",
+    "trustHint": "默认档对所有卡生效；下面列出单独调过的角色卡。",
+    "trust": {
+      "strict": "严格",
+      "standard": "标准",
+      "trusted": "信任",
+      "legacy-unsafe": "兼容"
+    },
+    "trustDetail": {
+      "strict": "只能用新酒馆自带的库，不能联网、不能加载任何外部资源。最安全，但依赖 CDN 的卡会缺东西。",
+      "standard": "可以加载 https 的脚本、样式、图片与字体；网络请求只能发回新酒馆自己（要访问外部 API 得经宿主代理）。推荐。",
+      "trusted": "在标准之上允许卡直接请求任意地址。只给自己写的或来源可靠的卡。",
+      "legacy-unsafe": "额外给同源权限，让依赖 window.parent / localStorage 的老卡能跑。等于放弃隔离，仅作兜底。"
+    },
+    "resetTrust": "用默认",
+    "unknownCharacter": "已删除的角色卡",
+    "mvuTitle": "变量框架（MVU）",
+    "mvuHint": "解析模型输出里的 <UpdateVariable> 指令，把结果写进这条消息的变量快照。分支与重生各自带一套变量。",
+    "mvuSwitch": "自动解析变量更新",
+    "mvuSwitchHint": "关掉之后变量表照旧可读可写，只是不再自动跟着模型的输出变。",
+    "variables": {
+      "title": "变量",
+      "empty": "这条消息还没有变量快照。",
+      "initHint": "变量的初始形态来自世界书里备注含 [InitVar] 的条目。",
+      "statData": "变量表",
+      "delta": "本轮变化",
+      "noDelta": "本轮没有变量变化。",
+      "errors": "解析报错",
+      "rerun": "重新解析这条",
+      "replay": "从这条重算",
+      "replayDone": "重算了 {{count}} 条消息",
+      "path": "路径",
+      "value": "值",
+      "scope": {
+        "message": "本条消息",
+        "global": "全局",
+        "character": "角色卡"
+      }
+    },
+    "scriptButtons": "脚本按钮",
+    "loading": "界面加载中…"
   }
 }

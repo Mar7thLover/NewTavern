@@ -162,7 +162,14 @@ export interface AssembleInputV2 extends AssembleInput {
   globalSystemPrompt?: AssembleGlobalSystemPrompt | null;
   /** 全局（按 display_order）+ 角色（按数组序），已过滤 disabled */
   regexScripts?: RegexScript[];
-  variables: { chat: Record<string, unknown>; global: Record<string, unknown> };
+  variables: {
+    chat: Record<string, unknown>;
+    global: Record<string, unknown>;
+    /** 角色卡变量表（酒馆助手 `{{get_character_variable::}}`，M5 契约 §3） */
+    character?: Record<string, unknown>;
+    /** 预设变量表（同上；新酒馆目前只读不写） */
+    preset?: Record<string, unknown>;
+  };
   /** 可见历史条数（WI delay 用） */
   messageCount: number;
   providerCaps: LayoutProviderCaps;
@@ -565,6 +572,15 @@ export function assemblePrompt(input: AssembleInputV2): AssembleResult {
     now,
     model: input.model,
     variables: transaction,
+    // 酒馆助手变量宏读的几张表。`message` 与 `chat` 是同一份「节点快照」：
+    // 新酒馆的聊天变量本来就按消息节点存（M3 契约 §3.5），MVU 的 stat_data 也在里面。
+    helperVariables: {
+      message: input.variables.chat,
+      chat: input.variables.chat,
+      global: input.variables.global,
+      ...(input.variables.character ? { character: input.variables.character } : {}),
+      ...(input.variables.preset ? { preset: input.variables.preset } : {}),
+    },
     rng: random,
     pickSeed: input.rng.seed,
     ...(input.idleDurationMs === undefined ? {} : { idleDurationMs: input.idleDurationMs }),

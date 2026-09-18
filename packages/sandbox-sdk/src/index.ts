@@ -1,42 +1,17 @@
 /**
- * 前端卡 RPC 协议类型。宿主端与 iframe 端引导脚本在 M5 实现，见 docs/PLAN.md §3.5。
- * 传输：postMessage + 请求 id + 结构化克隆；宿主校验 event.source 与一次性 nonce。
+ * 前端卡沙箱 SDK。见 docs/PLAN.md §3.5、docs/M5-CONTRACT.md §4。
+ *
+ * - `protocol.ts`：RPC 信封、方法表、镜像切片、载荷类型
+ * - `events.ts`：酒馆助手 / MVU 事件名表与映射
+ * - `srcdoc.ts`：iframe 文档生成（CSP、库、引导脚本）
+ * - `host.ts`：宿主端帧通道（验身、派发、推镜像）
+ * - `guest.ts`：iframe 里的运行时（原生 API + 酒馆助手 shim + Mvu）
+ *
+ * 宿主侧的装配（把 handlers 接到真实状态）在 `apps/web/src/features/cards/`。
  */
 
-export type FrontendCardTrustLevel = 'strict' | 'standard' | 'trusted' | 'legacy-unsafe';
-
-export interface RpcEnvelope {
-  /** srcdoc 注入的一次性 nonce，origin 为 null 时据此鉴权 */
-  nonce: string;
-  /** 每帧绑定的消息节点 id 与能力集 */
-  messageId: string;
-  payload: RpcRequest | RpcResponse | RpcEventMessage | RpcMirrorPush;
-}
-
-export interface RpcRequest {
-  kind: 'request';
-  id: string;
-  method: string;
-  params: unknown;
-}
-
-export interface RpcResponse {
-  kind: 'response';
-  id: string;
-  ok: boolean;
-  result?: unknown;
-  error?: { code: string; message: string };
-}
-
-export interface RpcEventMessage {
-  kind: 'event';
-  event: string;
-  payload: unknown;
-}
-
-/** 宿主推入 iframe 的状态镜像（同步 getter 的数据源） */
-export interface RpcMirrorPush {
-  kind: 'mirror';
-  slice: 'chatMessages' | 'variables' | 'charData' | 'macroContext';
-  snapshot: unknown;
-}
+export * from './events.js';
+export * from './guest.js';
+export * from './host.js';
+export * from './protocol.js';
+export * from './srcdoc.js';

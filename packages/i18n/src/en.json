@@ -96,7 +96,8 @@
       "appearance": "Appearance",
       "worldInfo": "World info",
       "globalSystemPrompt": "Global system prompt",
-      "regex": "Regex scripts"
+      "regex": "Regex scripts",
+      "cards": "Frontend cards"
     },
     "developerMode": "Developer mode",
     "developerModeHint": "Show tools for development and debugging, such as the ST diff in the inspector.",
@@ -132,7 +133,9 @@
     "richBlocks": "Theme styling",
     "richBlocksHint": "Recognises status bars, thinking, choices and summaries in what the model writes, and renders them in the material of this world. The stored text never changes.",
     "cardHtml": "Front-ends from cards",
-    "cardHtmlHint": "Renders the HTML a character card, lorebook or preset produces through its own regex. Scripts never run; styles reach only that one message."
+    "cardHtmlHint": "Renders the HTML a character card, lorebook or preset produces through its own regex. Scripts never run; styles reach only that one message.",
+    "cardRuntime": "Run scripted frontend cards",
+    "cardRuntimeHint": "Runs a card's own UI for real inside a sandboxed iframe (TavernHelper APIs and variables included). Turn it off and such cards fall back to code blocks."
   },
   "library": {
     "characters": {
@@ -808,6 +811,7 @@
     "tabs": {
       "segments": "Segments",
       "worldInfo": "World info",
+      "variables": "Variables",
       "request": "Raw request",
       "compare": "ST diff"
     },
@@ -1029,5 +1033,61 @@
     "network": "Network error",
     "not_found": "Not found",
     "unknown": "Something went wrong"
+  },
+  "cards": {
+    "frameTitle": "Frontend card",
+    "reload": "Reload this card",
+    "errors": "This card reported {{count}} error(s)",
+    "streamingPlaceholder": "The UI appears once this message finishes",
+    "legacyWarning": "Compatibility mode: this card can read and write browser storage and reach the host page. Only use it for cards you trust.",
+    "runtime": "Runtime",
+    "runtimeHint": "Frontend cards run in a sandboxed iframe: no host DOM, cookies or local storage — every capability goes through a controlled bridge.",
+    "runtimeSwitch": "Run scripted frontend cards",
+    "runtimeSwitchHint": "Same switch as Appearance → Body; stored on this device.",
+    "externalLibs": "Allow common external assets",
+    "externalLibsHint": "FontAwesome icons and Tailwind, which many cards assume exist. Turn off for offline or network-free setups (cards lose icons).",
+    "scripts": "Run the script library",
+    "scriptsHint": "Character-bound and global scripts run in hidden iframes — that's how framework scripts like MVU get loaded.",
+    "trustTitle": "Trust level",
+    "trustHint": "The default applies to every card; characters with their own level are listed below.",
+    "trust": {
+      "strict": "Strict",
+      "standard": "Standard",
+      "trusted": "Trusted",
+      "legacy-unsafe": "Legacy"
+    },
+    "trustDetail": {
+      "strict": "Only NewTavern's bundled libraries; no network and no external resources at all. Safest, but cards that rely on a CDN will miss pieces.",
+      "standard": "Can load https scripts, styles, images and fonts; network requests only reach NewTavern itself (external APIs must go through the host proxy). Recommended.",
+      "trusted": "Standard plus the card may call any address directly. Reserve it for cards you wrote or fully trust.",
+      "legacy-unsafe": "Also grants same-origin access so old cards relying on window.parent / localStorage keep working. This gives up isolation — last resort only."
+    },
+    "resetTrust": "Use default",
+    "unknownCharacter": "Deleted character",
+    "mvuTitle": "Variable framework (MVU)",
+    "mvuHint": "Parses <UpdateVariable> commands out of the model's output into this message's variable snapshot. Branches and rerolls each keep their own set.",
+    "mvuSwitch": "Parse variable updates automatically",
+    "mvuSwitchHint": "With this off, variable tables stay readable and writable — they just stop following the model's output.",
+    "variables": {
+      "title": "Variables",
+      "empty": "No variable snapshot on this message yet.",
+      "initHint": "Initial values come from lorebook entries whose comment contains [InitVar].",
+      "statData": "Table",
+      "delta": "This turn",
+      "noDelta": "No variable changes this turn.",
+      "errors": "Parse errors",
+      "rerun": "Re-parse this message",
+      "replay": "Recompute from here",
+      "replayDone": "Recomputed {{count}} message(s)",
+      "path": "Path",
+      "value": "Value",
+      "scope": {
+        "message": "This message",
+        "global": "Global",
+        "character": "Character"
+      }
+    },
+    "scriptButtons": "Script buttons",
+    "loading": "Loading the card…"
   }
 }

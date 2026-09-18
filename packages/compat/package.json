@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./mvu": "./src/mvu/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -13,6 +14,7 @@
   "dependencies": {
     "@newtavern/core": "workspace:*",
     "fflate": "^0.8.3",
+    "yaml": "^2.8.1",
     "zod": "^4.1.11"
   },
   "devDependencies": {

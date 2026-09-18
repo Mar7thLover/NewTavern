@@ -1,3 +1,4 @@
+import { splitCardSegments } from '@newtavern/core';
 import { defaultRangeExtractor, useVirtualizer, type Range } from '@tanstack/react-virtual';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowDown } from 'lucide-react';
@@ -354,7 +355,11 @@ function estimateMessageHeight(
   if (body === undefined) {
     // 正文列宽：容器减去两侧内边距与头像列，且不超过 36em
     const width = Math.max(160, Math.min((containerWidth ?? 768) - 48 - 48, 576));
-    const text = nodeText(node);
+    // 前端卡是个 iframe：不能把它那一大段 HTML 当文字算行数，按一张 280px 估
+    // （真实高度由 guest 报上来，measureElement 随后会修正）
+    const parts = splitCardSegments(nodeText(node));
+    const cards = parts.filter((part) => part.kind === 'card').length;
+    const text = parts.map((part) => (part.kind === 'card' ? '' : part.text)).join('\n');
     let lines = 0;
     let paragraphs = 0;
     for (const paragraph of text.split(/\n+/)) {
@@ -364,7 +369,7 @@ function estimateMessageHeight(
       for (const char of paragraph) units += char.charCodeAt(0) > 0x2e80 ? 1 : 0.55;
       lines += Math.max(1, Math.ceil((units * 16) / width));
     }
-    body = Math.max(1, lines) * 29 + Math.max(0, paragraphs - 1) * 12;
+    body = Math.max(1, lines) * 29 + Math.max(0, paragraphs - 1) * 12 + cards * 280;
     if (node.reasoning?.text) body += 40;
     bodyEstimateCache.set(node, body);
   }

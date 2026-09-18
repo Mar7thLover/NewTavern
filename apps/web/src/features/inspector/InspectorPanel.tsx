@@ -6,6 +6,7 @@ import { Link } from 'react-router';
 import { CompareView } from './CompareView';
 import { RequestView } from './RequestView';
 import { SegmentList } from './SegmentList';
+import { VariablesView } from './VariablesView';
 import { WorldInfoView } from './WorldInfoView';
 import { isInspectPlaceholder, type InspectData } from './types';
 import { useInspect } from './useInspect';
@@ -24,7 +25,7 @@ import { cn } from '../../lib/utils';
 import { QueryStatus } from '../library/shared';
 
 const LAYOUT_MODES: LayoutMode[] = ['strict', 'cache-aware'];
-const TABS = ['segments', 'worldInfo', 'request', 'compare'] as const;
+const TABS = ['segments', 'worldInfo', 'variables', 'request', 'compare'] as const;
 type InspectorTab = (typeof TABS)[number];
 
 export interface InspectorPanelProps {
@@ -138,7 +139,10 @@ export function InspectorPanel({ chat, isGenerating }: InspectorPanelProps) {
           </p>
         )}
 
-        {noConnection ? (
+        {/* 变量页签自己取数，不依赖 inspect（没连接也能看变量） */}
+        {tab === 'variables' ? (
+          <VariablesView chat={chat} isGenerating={isGenerating} />
+        ) : noConnection ? (
           // 没有默认连接 / 模型时 inspect 直接 400，这里给出口而不是干巴巴的错误码
           <div className="edge-rule m-3 border-t pt-4 text-sm">
             <p>{t('errors.no_connection')}</p>

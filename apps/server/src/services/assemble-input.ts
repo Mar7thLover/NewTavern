@@ -24,7 +24,7 @@ import type { LayoutMode } from './generation-context.js';
 import { resolveGlobalSystemPrompt } from './global-system-prompt.js';
 import { inlineDocumentParts } from './media-inline.js';
 import { characterRegexScripts, toRegexScript } from './regex-map.js';
-import { readGlobalVariables } from './variables.js';
+import { readGlobalVariables, readVariableTable } from './variables.js';
 import { loadWIBooks, mapCharacterDepthPrompt } from './wi-map.js';
 import { readGlobalBookIds, readWISettings } from './wi-settings.js';
 
@@ -66,6 +66,12 @@ export interface BuildAssembleInputContext {
   assets?: AssetsService;
   /** 检查器预览：不推进 WI 时间态、不产生变量副作用 */
   dryRun?: boolean;
+  /**
+   * 覆盖 chat 作用域变量（MVU `[InitVar]` 初始化的结果）。
+   * generate 在组装前先跑一遍初始化，第一轮的提示词里
+   * `{{get_message_variable::stat_data}}` 才能看到初始值。
+   */
+  variablesOverride?: Record<string, unknown>;
   /** 本轮新节点的兄弟序号；缺省按父节点下一个 */
   siblingSeq?: number;
   now?: Date;
@@ -185,7 +191,7 @@ export function buildAssembleInput(db: Db, ctx: BuildAssembleInputContext): Asse
   // 只看直接父节点会导致每轮 chat 变量与 WI 时间态被清空。
   const snapshots = readNearestSnapshots(path);
   const wiState = snapshots.wiState;
-  const chatVariables = snapshots.variables;
+  const chatVariables = ctx.variablesOverride ?? snapshots.variables;
 
   const characterData = (characterRow?.data ?? null) as AssembleCharacter['data'] | null;
   const siblingSeq = ctx.siblingSeq ?? nextSiblingSeq(nodes, parentId);
@@ -236,7 +242,12 @@ export function buildAssembleInput(db: Db, ctx: BuildAssembleInputContext): Asse
     ),
     globalSystemPrompt: resolveGlobalSystemPrompt(db, ctx.overrides),
     regexScripts: readRegexScripts(db, characterId, characterData),
-    variables: { chat: chatVariables, global: readGlobalVariables(db) },
+    variables: {
+      chat: chatVariables,
+      global: readGlobalVariables(db),
+      // 角色卡变量表（酒馆助手 `{{get_character_variable::}}` 与脚本共用）
+      ...(characterId ? { character: readVariableTable(db, 'character', characterId) } : {}),
+    },
     messageCount: visibleCount,
     providerCaps: {
       caching: ctx.caps.caching,

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router';
 
 import { AppearanceSettings } from './AppearanceSettings';
+import { CardsSettings } from './CardsSettings';
 import { GlobalSystemPromptSettings } from './GlobalSystemPromptSettings';
 import { RegexSettings } from './RegexSettings';
 import { WorldInfoSettings } from './WorldInfoSettings';
@@ -20,6 +21,7 @@ const SECTIONS = [
   'worldInfo',
   'globalSystemPrompt',
   'regex',
+  'cards',
   'storage',
 ] as const;
 type SectionKey = (typeof SECTIONS)[number];
@@ -71,6 +73,7 @@ export function SettingsPage() {
         {section === 'worldInfo' && <WorldInfoSettings />}
         {section === 'globalSystemPrompt' && <GlobalSystemPromptSettings />}
         {section === 'regex' && <RegexSettings />}
+        {section === 'cards' && <CardsSettings />}
         {section === 'storage' && <StorageSettings />}
       </div>
     </div>

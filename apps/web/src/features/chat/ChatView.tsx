@@ -10,6 +10,7 @@ import { deepestLeaf } from './shared';
 import { useAttachmentTray } from './useAttachmentTray';
 import { useGeneration } from './useGeneration';
 import { LightboxHost } from '../../components/Lightbox';
+import { ScriptRunner } from '../cards/ScriptRunner';
 import { IconButton } from '../../components/ui/icon-button';
 import {
   useGenerationDefault,
@@ -136,6 +137,9 @@ export function ChatView({
         onSwitchSibling={switchSibling}
         onRegenerate={regenerate}
       />
+
+      {/* 脚本库：隐藏的脚本帧 + 脚本按钮条（M5 §4.7），紧贴输入框上方 */}
+      <ScriptRunner chatId={chat.id} />
 
       <Composer
         resetKey={chat.id}

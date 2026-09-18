@@ -41,6 +41,8 @@ export function AppearanceSettings() {
   const cardHtml = useUiStore((s) => s.cardHtml);
   const setRichBlocks = useUiStore((s) => s.setRichBlocks);
   const setCardHtml = useUiStore((s) => s.setCardHtml);
+  const cardRuntime = useUiStore((s) => s.cardRuntime);
+  const setCardRuntime = useUiStore((s) => s.setCardRuntime);
 
   // 预览卡要真实渲染，所以把所有主题的 CSS 都预热一遍
   useEffect(() => {
@@ -109,6 +111,12 @@ export function AppearanceSettings() {
             hint={t('appearance.cardHtmlHint')}
             checked={cardHtml}
             onChange={setCardHtml}
+          />
+          <SwitchRow
+            title={t('appearance.cardRuntime')}
+            hint={t('appearance.cardRuntimeHint')}
+            checked={cardRuntime}
+            onChange={setCardRuntime}
           />
         </div>
       </SettingsSection>

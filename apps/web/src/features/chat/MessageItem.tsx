@@ -1,4 +1,4 @@
-import { htmlScopeId } from '@newtavern/core';
+import { htmlScopeId, splitCardSegments } from '@newtavern/core';
 import { motion } from 'framer-motion';
 import { Check, Copy, Pencil, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -11,6 +11,8 @@ import { formatClock, siblingInfo } from './shared';
 import type { DisplayRegexFn } from './useDisplayRegex';
 import { useRichText } from './useRichText';
 import type { StreamBuffer } from '../../app/store/chat';
+import { useUiStore } from '../../app/store/ui';
+import { FrontendCardFrame } from '../cards/FrontendCardFrame';
 import {
   AttachmentDocumentList,
   AttachmentEditList,
@@ -61,6 +63,28 @@ function toSegments(parts: MessageNode['parts']): BodySegment[] {
     }
   });
   return segments;
+}
+
+/**
+ * 正文里一段文本被切开之后的渲染单元：Markdown，或者一张要跑起来的前端卡。
+ * 前端卡从**显示侧正则**的输出里认出来（社区卡就是正则替换出的一段 HTML），
+ * 识别规则见 `@newtavern/core` 的 `splitCardSegments`。
+ */
+type BodyPiece =
+  | { kind: 'markdown'; text: string }
+  | { kind: 'card'; html: string; cardIndex: number };
+
+/** 流式中的前端卡占位：等这条消息收完再真正把 iframe 跑起来 */
+function CardPlaceholder() {
+  const { t } = useTranslation();
+  return (
+    <div
+      data-part="frontend-card-placeholder"
+      className="rounded-card edge-rule my-3 flex h-16 items-center justify-center border border-dashed text-[12px] text-ink-3 first:mt-0"
+    >
+      {t('cards.streamingPlaceholder')}
+    </div>
+  );
 }
 
 export interface MessageItemProps {
@@ -134,18 +158,24 @@ export function MessageItem({
   const hasMedia = segments.some((segment) => segment.kind !== 'text');
   const lastTextKey = segments.findLast((segment) => segment.kind === 'text')?.key;
 
-  // 渲染用文本：先套显示侧正则，再做正文美化。流式过程中每帧都要算，用 useMemo 挡一下。
+  // 渲染用文本：先套显示侧正则（它才是产出前端卡的那一步），再切出前端卡，
+  // 剩下的文本做正文美化。流式过程中每帧都要算，用 useMemo 挡一下。
   const rich = useRichText();
   const richTransform = rich.transform;
-  const displayTexts = useMemo(
-    () =>
-      segments.map((segment) =>
-        segment.kind === 'text'
-          ? richTransform(applyDisplayRegex(segment.text, node.role, depth))
-          : '',
-      ),
-    [applyDisplayRegex, richTransform, segments, node.role, depth],
-  );
+  const cardRuntime = useUiStore((state) => state.cardRuntime);
+  const displayPieces = useMemo(() => {
+    let cardIndex = 0;
+    return segments.map((segment) => {
+      if (segment.kind !== 'text') return [];
+      const display = applyDisplayRegex(segment.text, node.role, depth);
+      const parts = cardRuntime ? splitCardSegments(display) : [{ kind: 'text' as const, text: display }];
+      return parts.map((part): BodyPiece =>
+        part.kind === 'card'
+          ? { kind: 'card', html: part.html, cardIndex: cardIndex++ }
+          : { kind: 'markdown', text: richTransform(part.text) },
+      );
+    });
+  }, [applyDisplayRegex, richTransform, segments, node.role, depth, cardRuntime]);
   /** 卡自带 `<style>` 的作用域名：一条消息一个，两条消息的 CSS 不会互相打架 */
   const scopeId = useMemo(() => htmlScopeId(node.id), [node.id]);
 
@@ -274,20 +304,42 @@ export function MessageItem({
               ) : (
                 segments.map((segment, segmentIndex) => {
                   if (segment.kind === 'text') {
-                    const display = displayTexts[segmentIndex] ?? '';
+                    const pieces = displayPieces[segmentIndex] ?? [];
                     const isStreamTarget = streaming && segment.key === lastTextKey;
+                    const blank = pieces.every(
+                      (piece) => piece.kind === 'markdown' && piece.text.trim() === '',
+                    );
                     // 只有附件的消息（纯图片）里，空的文本块不占位
-                    if (display.trim() === '' && !isStreamTarget && hasMedia) return null;
+                    if (blank && !isStreamTarget && hasMedia) return null;
                     return (
                       <div key={segment.key} className="mt-3 first:mt-0">
-                        <Markdown
-                          streaming={isStreamTarget}
-                          cursor={<StreamingCursor kind="text" />}
-                          html={rich.html}
-                          scopeId={scopeId}
-                        >
-                          {display === '' ? ' ' : display}
-                        </Markdown>
+                        {pieces.map((piece, pieceIndex) =>
+                          piece.kind === 'card' ? (
+                            // 流式中先占位：每个增量都重建 iframe 会让卡不停重跑
+                            streaming ? (
+                              <CardPlaceholder key={`card-${piece.cardIndex}`} />
+                            ) : (
+                              <FrontendCardFrame
+                                key={`card-${piece.cardIndex}`}
+                                chatId={chatId}
+                                nodeId={node.id}
+                                messageId={pathIndex}
+                                index={piece.cardIndex}
+                                html={piece.html}
+                              />
+                            )
+                          ) : (
+                            <Markdown
+                              key={`text-${pieceIndex}`}
+                              streaming={isStreamTarget && pieceIndex === pieces.length - 1}
+                              cursor={<StreamingCursor kind="text" />}
+                              html={rich.html}
+                              scopeId={scopeId}
+                            >
+                              {piece.text === '' ? ' ' : piece.text}
+                            </Markdown>
+                          ),
+                        )}
                       </div>
                     );
                   }

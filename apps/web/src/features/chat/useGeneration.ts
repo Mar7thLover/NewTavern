@@ -2,6 +2,9 @@ import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
 
 import { useChatStore } from '../../app/store/chat';
+import { emitCompat, emitNative, NATIVE_EVENTS } from '../cards/bus';
+import { cardQueryKeys, type MvuNodeResult } from '../../lib/api-cards';
+import { pathToHead } from './shared';
 import {
   mergeNode,
   queryKeys,
@@ -90,6 +93,12 @@ function parseJson<T>(raw: string): T | null {
   }
 }
 
+/** 当前分支上这个节点是第几楼（酒馆助手的 message_id） */
+function floorOf(detail: ChatDetail | undefined, nodeId: string): number {
+  if (!detail) return -1;
+  return pathToHead(detail.nodes, detail.headNodeId).findIndex((node) => node.id === nodeId);
+}
+
 /** 把服务端推来的节点写入 ChatDetail 缓存，并把 head 移到它上面 */
 function writeNode(
   queryClient: QueryClient,
@@ -125,6 +134,8 @@ export function useGeneration(chatId: string | null): GenerationController {
       const controller = new AbortController();
       controllers.set(chatId, controller);
       store.startRun(chatId, body);
+      // 前端卡靠这些事件跟上生成进度（酒馆助手的 generation_started 等）
+      emitNative(NATIVE_EVENTS.GENERATION_STARTED, chatId);
       void runGeneration(queryClient, chatId, body, controller).finally(() => {
         if (controllers.get(chatId) === controller) controllers.delete(chatId);
       });
@@ -195,6 +206,10 @@ async function runGeneration(
           writeNode(queryClient, chatId, payload.node, payload.chat);
           // assistant 节点才是流式目标；user 节点只是写入历史
           if (payload.node.role === 'assistant') store.attachNode(chatId, payload.node.id);
+          else {
+            const detail = queryClient.getQueryData<ChatDetail>(queryKeys.chat(chatId));
+            emitNative(NATIVE_EVENTS.MESSAGE_ADDED, floorOf(detail, payload.node.id), 'user');
+          }
           break;
         }
         case 'text.delta':
@@ -206,6 +221,9 @@ async function runGeneration(
             message.event === 'text.delta' ? 'text' : 'reasoning',
             payload.text,
           );
+          if (message.event === 'text.delta') {
+            emitNative(NATIVE_EVENTS.STREAM_DELTA, payload.text, payload.nodeId);
+          }
           break;
         }
         case 'image': {
@@ -230,9 +248,41 @@ async function runGeneration(
           );
           break;
         }
+        case 'variables': {
+          // MVU：服务端算完的节点快照。写进缓存（前端卡的镜像据此刷新），
+          // 再按 MVU 的事件名广播一遍，监听 `mag_variable_update_ended` 的卡就能收到。
+          const payload = parseJson<MvuNodeResult>(message.data);
+          if (!payload) break;
+          if (payload.nodeId) {
+            queryClient.setQueryData(cardQueryKeys.variables(chatId, payload.nodeId), {
+              nodeId: payload.nodeId,
+              message: payload.variables,
+              chat: payload.variables,
+              global: {},
+              character: {},
+            });
+          }
+          void queryClient.invalidateQueries({ queryKey: ['chats', chatId, 'variables'] });
+          emitNative(NATIVE_EVENTS.VARIABLES_UPDATED, payload.variables, payload.nodeId);
+          if ((payload.initialized ?? []).length > 0) {
+            emitCompat('mag_variable_initiailized', payload.variables, 0);
+          }
+          if (payload.changed) {
+            emitCompat('mag_variable_update_started', payload.variables);
+            emitCompat('mag_variable_update_ended', payload.variables, payload.variables);
+          }
+          for (const error of payload.errors) {
+            console.warn(`[MVU] ${error.command}：${error.message}`);
+          }
+          break;
+        }
         case 'done': {
           const payload = parseJson<{ node: MessageNode; chat: ChatSummary }>(message.data);
-          if (payload) writeNode(queryClient, chatId, payload.node, payload.chat);
+          if (payload) {
+            writeNode(queryClient, chatId, payload.node, payload.chat);
+            const detail = queryClient.getQueryData<ChatDetail>(queryKeys.chat(chatId));
+            emitNative(NATIVE_EVENTS.MESSAGE_ADDED, floorOf(detail, payload.node.id), 'normal');
+          }
           finished = true;
           break;
         }
@@ -268,6 +318,10 @@ async function runGeneration(
       });
     }
   } finally {
+    emitNative(
+      finished ? NATIVE_EVENTS.GENERATION_ENDED : NATIVE_EVENTS.GENERATION_STOPPED,
+      chatId,
+    );
     if (!finished && !useChatStore.getState().runs[chatId]?.error) {
       // 流意外中断（无 done 也无 error）：以服务端为准
       void queryClient.invalidateQueries({ queryKey: queryKeys.chat(chatId) });

@@ -11,7 +11,11 @@ import { streamSSE } from 'hono/streaming';
 
 import { schema, type Db } from '../db/client.js';
 import { assemblePrompt } from '../services/assemble.js';
-import { buildAssembleInput, readFrozenVolatile } from '../services/assemble-input.js';
+import {
+  buildAssembleInput,
+  readFrozenVolatile,
+  readNearestSnapshots,
+} from '../services/assemble-input.js';
 import type { AssetsService } from '../services/assets.js';
 import { parseAuthorsNote } from '../services/authors-note.js';
 import {
@@ -21,6 +25,7 @@ import {
   loadChat,
   loadNodes,
   patchChat,
+  pathToNode,
   setChatLorebooks,
   textOfParts,
   toChatDetail,
@@ -39,6 +44,7 @@ import {
   type GenerationContext,
 } from '../services/generation-context.js';
 import { isGlobalSystemPromptOverride } from '../services/global-system-prompt.js';
+import { ensureMvuInitialized, runMvuForNode } from '../services/mvu.js';
 import { buildInspect } from '../services/inspect.js';
 import {
   AttachmentError,
@@ -626,11 +632,21 @@ export function createChatsRoutes(db: Db, providers: ProviderService, assets: As
 
             // 2. 组装 v2：世界书 / 宏 / 正则 / 变量 / 布局（契约 §6）
             const caps = resolved.adapter.capabilities(model, resolved.conn);
+            const nodesForAssemble = loadNodes(db, chatId);
+            // MVU `[InitVar]`：组装前先把变量表初始化好，第一轮的
+            // `{{get_message_variable::stat_data}}` 才能看到初始值（M5 §2.2）
+            const mvuInit = ensureMvuInitialized(
+              db,
+              chatNow(),
+              readNearestSnapshots(
+                genParentId ? pathToNode(nodesForAssemble, genParentId) : [],
+              ).variables,
+            );
             const assembled = assemblePrompt(
               buildAssembleInput(db, {
                 chat: chatNow(),
                 overrides,
-                nodes: loadNodes(db, chatId),
+                nodes: nodesForAssemble,
                 parentId: genParentId,
                 provider,
                 model,
@@ -638,8 +654,23 @@ export function createChatsRoutes(db: Db, providers: ProviderService, assets: As
                 caps,
                 // 文档附件在组装前内联（M4 §3.3）
                 assets,
+                ...(mvuInit.initialized.length > 0 ? { variablesOverride: mvuInit.variables } : {}),
               }),
             );
+            if (mvuInit.initialized.length > 0 || mvuInit.errors.length > 0) {
+              await send('variables', {
+                nodeId: null,
+                // 形状与更新事件保持一致：前端一个分支就能处理两种
+                changed: false,
+                initialized: mvuInit.initialized,
+                errors: mvuInit.errors.map((error) => ({
+                  command: `[InitVar] ${error.book}`,
+                  message: error.message,
+                })),
+                updates: [],
+                variables: mvuInit.variables,
+              });
+            }
             const ir = assembled.ir;
             // 图片 / PDF 渲染成各家内联块：只解析 IR 里出现过的资产，首次用到时读文件
             const resolveAsset = createAssetResolver(assets, ir);
@@ -806,6 +837,18 @@ export function createChatsRoutes(db: Db, providers: ProviderService, assets: As
                 .get();
               // 全局变量变更入库（chat 作用域已随节点快照落库）
               applyGlobalChanges(db, assembled.variables.globalChanges, assistantId);
+              // MVU：从本节点的快照（= 生成前状态）出发应用 `<UpdateVariable>`，写回同一节点。
+              // 父快照不动，所以 swipe / 重生天然从同一起点重新算（M5 §2.3）。
+              const mvuResult = runMvuForNode(db, chatNow(), finalRow, text);
+              if (mvuResult) {
+                await send('variables', {
+                  nodeId: mvuResult.nodeId,
+                  variables: mvuResult.variables,
+                  updates: mvuResult.updates,
+                  errors: mvuResult.errors,
+                  initialized: [],
+                });
+              }
               // 本轮新冻结的易变段并入 chat.metadata.frozenVolatile，下一轮复用
               const newFrozen = assembled.layout.newFrozenVolatile;
               if (Object.keys(newFrozen).length > 0) {

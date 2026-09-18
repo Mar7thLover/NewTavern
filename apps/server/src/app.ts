@@ -20,7 +20,9 @@ import { createModelsRoutes } from './routes/models.js';
 import { createPersonasRoutes } from './routes/personas.js';
 import { createPresetsRoutes } from './routes/presets.js';
 import { createRegexRoutes } from './routes/regex.js';
+import { createSandboxRoutes } from './routes/sandbox.js';
 import { createSettingsRoutes } from './routes/settings.js';
+import { createChatVariablesRoutes, createVariablesRoutes } from './routes/variables.js';
 import { createAssetsService } from './services/assets.js';
 import { createImporter } from './services/importer.js';
 import { createProviderService, ensureBuiltinAdapters } from './services/providers.js';
@@ -60,6 +62,10 @@ export function createApp({ db, dataDir, webDist }: AppOptions) {
     .route('/chats', createChatsRoutes(db, providers, assets))
     // 聊天导出为 ST jsonl（M4 §2.2）：独立文件，第二次挂到 /chats
     .route('/chats', createChatTransferRoutes(db))
+    // 变量与 MVU（M5 §3.4）、前端卡的 generate（M5 §4.6）：同样挂在 /chats 下
+    .route('/chats', createChatVariablesRoutes(db))
+    .route('/chats', createSandboxRoutes(db, providers, assets))
+    .route('/variables', createVariablesRoutes(db))
     .route('/migration', createMigrationRoutes(db, assets, importer))
     .route('/inspect', createInspectRoutes(db, providers))
     .route('/models', createModelsRoutes());

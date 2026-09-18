@@ -21,3 +21,6 @@ coverage/
 # 系统
 .DS_Store
 Thumbs.db
+
+# 前端卡沙箱的第三方库（由 apps/web/scripts/build-sandbox-libs.mjs 生成）
+apps/web/public/sandbox/lib/

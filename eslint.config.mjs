@@ -12,6 +12,8 @@ export default tseslint.config(
       'data/**',
       'apps/server/drizzle/**',
       'tools/fixtures/**',
+      // 前端卡沙箱的第三方库：由 apps/web/scripts/build-sandbox-libs.mjs 打出来的产物
+      'apps/web/public/sandbox/lib/**',
     ],
   },
   js.configs.recommended,
