@@ -44,7 +44,12 @@ export interface RegexScript {
   substituteRegex: 0 | 1 | 2;
   minDepth?: number | null;
   maxDepth?: number | null;
-  scope: 'global' | 'character';
+  /**
+   * 脚本来源：`global` 是用户自己的，其余三种是角色卡 / 预设 / 世界书自带的
+   * （导入时抽进正则库，见 M3 契约 §3.2 修正）。引擎本身不按 scope 做任何区分，
+   * 它只影响列表里的分组与启用开关。
+   */
+  scope: 'global' | 'character' | 'preset' | 'book';
 }
 
 export interface RegexRunContext {

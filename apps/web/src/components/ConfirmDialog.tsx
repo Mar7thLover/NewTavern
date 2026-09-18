@@ -9,6 +9,8 @@ export interface ConfirmDialogProps {
   title: ReactNode;
   description?: ReactNode;
   confirmLabel?: string;
+  /** 取消按钮的文案；不给用「取消」 */
+  cancelLabel?: string;
   /** 危险操作（删除）用红色确认按钮 */
   destructive?: boolean;
   /** 进行中：禁用按钮、禁止关闭 */
@@ -24,6 +26,7 @@ export function ConfirmDialog({
   title,
   description,
   confirmLabel,
+  cancelLabel,
   destructive = false,
   pending = false,
   error,
@@ -41,7 +44,7 @@ export function ConfirmDialog({
       footer={
         <>
           <Button variant="outline" size="sm" onClick={onCancel} disabled={pending}>
-            {t('common.cancel')}
+            {cancelLabel ?? t('common.cancel')}
           </Button>
           <Button
             variant={destructive ? 'destructive' : 'default'}

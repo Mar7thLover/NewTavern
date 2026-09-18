@@ -625,7 +625,10 @@ export const queryKeys = {
   catalogModels: ['models', 'catalog'] as const,
   setting: (key: string) => ['settings', key] as const,
   regexScripts: ['regex'] as const,
+  /** 含自带脚本的全量列表（设置页按来源分组用） */
+  allRegexScripts: ['regex', 'all'] as const,
   characterRegex: (id: string) => ['characters', id, 'regex'] as const,
+  presetRegex: (id: string) => ['presets', id, 'regex'] as const,
   /** 检查器：head / 布局模式 / 连接模型任一变化都要重新取数 */
   chatInspect: (id: string, params: Record<string, string | null>) =>
     ['chats', id, 'inspect', params] as const,
@@ -1321,6 +1324,7 @@ export function useRegexScripts() {
 }
 
 /** 角色卡内嵌正则（`data.extensions.regex_scripts`，scope='character'） */
+/** 这张卡自带的正则（导入时抽进正则库，M3 契约 §3.2 修正） */
 export function useCharacterRegex(characterId: string | null) {
   return useQuery({
     queryKey: queryKeys.characterRegex(characterId ?? ''),
@@ -1330,12 +1334,64 @@ export function useCharacterRegex(characterId: string | null) {
   });
 }
 
+/** 这份预设自带的正则（思维链美化 / 不发送思维链这类） */
+export function usePresetRegex(presetId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.presetRegex(presetId ?? ''),
+    queryFn: () => fetchJson<RegexScript[]>(`/api/presets/${enc(presetId ?? '')}/regex`),
+    enabled: presetId !== null,
+    staleTime: 5 * 60_000,
+  });
+}
+
+/** 脚本 + 来源（`scope !== 'global'` 时 ownerId / ownerName 有值） */
+export interface OwnedRegexScript extends RegexScript {
+  ownerId: string | null;
+  ownerName: string | null;
+}
+
+/** 全部脚本（全局 + 卡 / 预设 / 世界书自带），设置页用 */
+export function useAllRegexScripts() {
+  return useQuery({
+    queryKey: queryKeys.allRegexScripts,
+    queryFn: () => fetchJson<OwnedRegexScript[]>('/api/regex?scope=all'),
+  });
+}
+
+export interface RegexOwnerInput {
+  scope: 'character' | 'preset' | 'book';
+  ownerId: string;
+  enabled: boolean;
+}
+
+/**
+ * 一次开关某个来源自带的全部脚本。启用时按原件里的状态恢复
+ * （作者本来就关掉的那几条不会被一键打开）。
+ */
+export function useSetRegexOwnerEnabled() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: RegexOwnerInput) =>
+      mutate<{ changed: number; scripts: OwnedRegexScript[] }>('/api/regex/owner', 'POST', input),
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        predicate: (query) => query.queryKey[0] === 'regex' || query.queryKey[2] === 'regex',
+      }),
+  });
+}
+
 /** 写操作成功后统一刷新脚本列表 */
 function useRegexMutation<TVariables>(mutationFn: (variables: TVariables) => Promise<unknown>) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.regexScripts }),
+    // 三处都要刷：全局表、含自带脚本的全量表、以及按来源取的那两个
+    // （`['characters', id, 'regex']` / `['presets', id, 'regex']`，显示侧正则读它们）
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          query.queryKey[0] === 'regex' || query.queryKey[2] === 'regex',
+      }),
   });
 }
 

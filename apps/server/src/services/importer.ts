@@ -26,7 +26,7 @@ import {
   detectStTextKind,
   type StFileKind,
 } from '@newtavern/compat';
-import { desc, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 
 import { schema, type Db } from '../db/client.js';
 import type { AssetsService } from './assets.js';
@@ -43,6 +43,7 @@ import {
   type ImportStChatInput,
   type ImportStChatResult,
 } from './chat-transfer.js';
+import { extractEmbeddedRegex, nextGlobalOrder, summarize } from './embedded-regex.js';
 import { stRegexToScript, toRegexColumns, toRegexScript, type RegexScript } from './regex-map.js';
 
 export type CharacterFormat = 'png' | 'charx' | 'json';
@@ -211,7 +212,19 @@ export function createImporter(db: Db, assets: AssetsService, dataDir: string) {
         .get();
       // 内嵌世界书抽表（契约 §3.1）：data.character_book 原样保留
       const bookId = extractCharacterBook(db, row);
-      return bookId ? { ...row, bookId } : row;
+      // 自带的正则也抽进正则库（默认不启用，由前端问过用户再开；§3.2 修正）
+      const embeddedRegex = summarize(
+        'character',
+        row.id,
+        row.name,
+        extractEmbeddedRegex(db, {
+          scope: 'character',
+          ownerId: row.id,
+          ownerName: row.name,
+          data: row.data,
+        }),
+      );
+      return { ...row, ...(bookId ? { bookId } : {}), ...(embeddedRegex ? { embeddedRegex } : {}) };
     },
 
     /** 未修改的卡按原格式导出原件；其余格式由 data 重新生成 */
@@ -265,7 +278,7 @@ export function createImporter(db: Db, assets: AssetsService, dataDir: string) {
       const preset = guard(() => parsePreset(parseJsonBytes(bytes, '预设')));
       const name =
         options.name ?? (typeof preset['name'] === 'string' ? preset['name'] : baseName(fileName));
-      return db
+      const row = db
         .insert(schema.presets)
         .values({
           name,
@@ -276,6 +289,19 @@ export function createImporter(db: Db, assets: AssetsService, dataDir: string) {
         })
         .returning()
         .get();
+      // 预设自带的正则（思维链美化 / 不发送思维链这类，本机 14 个预设里 11 个带）
+      const embeddedRegex = summarize(
+        'preset',
+        row.id,
+        row.name,
+        extractEmbeddedRegex(db, {
+          scope: 'preset',
+          ownerId: row.id,
+          ownerName: row.name,
+          data: preset,
+        }),
+      );
+      return { ...row, ...(embeddedRegex ? { embeddedRegex } : {}) };
     },
 
     exportPreset(id: string): ExportedFile | undefined {
@@ -312,7 +338,23 @@ export function createImporter(db: Db, assets: AssetsService, dataDir: string) {
             .values({ ...toWorldbookEntryColumns(item.entry), bookId: row.id, extra })
             .run();
         }
-        return { ...row, entryCount: items.length };
+        // ST 的世界书本身没有正则字段，但社区有把正则塞进 extensions 的；带了就一并收进正则库
+        const embeddedRegex = summarize(
+          'book',
+          row.id,
+          row.name,
+          extractEmbeddedRegex(tx, {
+            scope: 'book',
+            ownerId: row.id,
+            ownerName: row.name,
+            data: book,
+          }),
+        );
+        return {
+          ...row,
+          entryCount: items.length,
+          ...(embeddedRegex ? { embeddedRegex } : {}),
+        };
       });
     },
 
@@ -341,12 +383,7 @@ export function createImporter(db: Db, assets: AssetsService, dataDir: string) {
     importRegexScripts(fileName: string, bytes: Uint8Array): RegexScript[] {
       assertExpectedKind(bytes, 'regex');
       const scripts = guard(() => parseRegexScripts(parseJsonBytes(bytes, '正则脚本')));
-      const last = db
-        .select()
-        .from(schema.regexScripts)
-        .orderBy(desc(schema.regexScripts.displayOrder))
-        .get();
-      let order = (last?.displayOrder ?? -1) + 1;
+      let order = nextGlobalOrder(db);
       return scripts.map((raw, index) => {
         const script = stRegexToScript(raw, `${index}`, 'global');
         if (!script) throw new ImportError(`第 ${index + 1} 个正则脚本缺少 scriptName/findRegex`);

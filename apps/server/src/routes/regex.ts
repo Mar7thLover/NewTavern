@@ -1,7 +1,13 @@
-import { asc, desc, eq } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 import { Hono, type Context } from 'hono';
 
 import { schema, type Db } from '../db/client.js';
+import {
+  nextGlobalOrder,
+  ownerNames,
+  setOwnerRegexEnabled,
+  type EmbeddedScope,
+} from '../services/embedded-regex.js';
 import {
   flagsToDirection,
   toRegexScript,
@@ -10,9 +16,11 @@ import {
 } from '../services/regex-map.js';
 
 /**
- * 全局正则脚本 CRUD 与排序。见 docs/M3-CONTRACT.md §3.2。
- * 角色级脚本来自卡内 `data.extensions.regex_scripts`，不落表，见 routes/characters.ts。
- * 导入 ST JSON 见 routes/import.ts。
+ * 正则脚本 CRUD、排序与「自带脚本」的启停。见 docs/M3-CONTRACT.md §3.2（含 2026-09-18 修正）。
+ *
+ * 表里有四类：`global` 是用户自己导入 / 新建的；`character` / `preset` / `book`
+ * 是卡 / 预设 / 世界书自带、导入时抽进来的（`services/embedded-regex.ts`）。
+ * `GET /` 默认只给 global（显示侧正则要的就是它）；`?scope=all` 给全部并带来源名。
  */
 
 type ScriptInput = Omit<RegexScript, 'id' | 'scope'>;
@@ -27,6 +35,39 @@ function listScripts(db: Db): RegexScript[] {
     .orderBy(asc(schema.regexScripts.displayOrder), asc(schema.regexScripts.createdAt))
     .all()
     .map(toRegexScript);
+}
+
+/** 带来源信息的脚本（设置页按来源分组用） */
+export interface OwnedRegexScript extends RegexScript {
+  ownerId: string | null;
+  /** 角色卡 / 预设 / 世界书的当前名字（来源已删除时用抽表时记下的） */
+  ownerName: string | null;
+}
+
+function listAllScripts(db: Db): OwnedRegexScript[] {
+  const rows = db
+    .select()
+    .from(schema.regexScripts)
+    .orderBy(asc(schema.regexScripts.displayOrder), asc(schema.regexScripts.createdAt))
+    .all();
+  const names = ownerNames(db, rows);
+  return rows.map((row) => {
+    const extra = (row.extra ?? {}) as { ownerName?: string };
+    return {
+      ...toRegexScript(row),
+      ownerId: row.ownerId,
+      ownerName:
+        row.scope === 'global' || !row.ownerId
+          ? null
+          : (names.get(`${row.scope}:${row.ownerId}`) ?? extra.ownerName ?? null),
+    };
+  });
+}
+
+const EMBEDDED_SCOPES: readonly EmbeddedScope[] = ['character', 'preset', 'book'];
+
+function isEmbeddedScope(value: unknown): value is EmbeddedScope {
+  return typeof value === 'string' && (EMBEDDED_SCOPES as readonly string[]).includes(value);
 }
 
 /** 校验请求体；partial=true 时只校验出现过的字段。返回错误消息或字段增量 */
@@ -117,24 +158,36 @@ async function readJson(c: Context): Promise<Record<string, unknown> | undefined
 export function createRegexRoutes(db: Db) {
   return (
     new Hono()
-      .get('/', (c) => c.json(listScripts(db)))
+      .get('/', (c) => c.json(c.req.query('scope') === 'all' ? listAllScripts(db) : listScripts(db)))
+      /**
+       * 一次开关某个来源自带的全部脚本（导入时的「是否启用」问句、设置页的来源开关）。
+       * 启用时按原件里的状态恢复：作者本来就关掉的那几条不会被一键打开。
+       */
+      .post('/owner', async (c) => {
+        const body = await readJson(c);
+        if (!body) return c.json({ error: 'invalid', message: '请求体不是合法 JSON' }, 400);
+        if (!isEmbeddedScope(body.scope)) return c.json({ error: 'invalid', message: 'scope 非法' }, 400);
+        if (typeof body.ownerId !== 'string' || body.ownerId === '') {
+          return c.json({ error: 'invalid', message: 'ownerId 非法' }, 400);
+        }
+        if (typeof body.enabled !== 'boolean') {
+          return c.json({ error: 'invalid', message: 'enabled 非法' }, 400);
+        }
+        const changed = setOwnerRegexEnabled(db, body.scope, body.ownerId, body.enabled);
+        return c.json({ changed, scripts: listAllScripts(db) });
+      })
       .post('/', async (c) => {
         const body = await readJson(c);
         if (!body) return c.json({ error: 'invalid', message: '请求体不是合法 JSON' }, 400);
         const parsed = readBody(body, false);
         if ('error' in parsed) return c.json({ error: 'invalid', message: parsed.error }, 400);
-        const last = db
-          .select()
-          .from(schema.regexScripts)
-          .orderBy(desc(schema.regexScripts.displayOrder))
-          .get();
         const row = db
           .insert(schema.regexScripts)
           .values({
             scriptName: parsed.patch.name as string,
             findRegex: parsed.patch.findRegex as string,
             scope: 'global',
-            displayOrder: (last?.displayOrder ?? -1) + 1,
+            displayOrder: nextGlobalOrder(db),
             ...toColumns(parsed.patch),
           })
           .returning()

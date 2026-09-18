@@ -3,6 +3,8 @@ import { desc, eq } from 'drizzle-orm';
 import { Hono, type Context } from 'hono';
 
 import { schema, type Db } from '../db/client.js';
+import { ownerRegexRows } from '../services/embedded-regex.js';
+import { toRegexScript } from '../services/regex-map.js';
 import { DEFAULT_PRESET } from '../services/assemble.js';
 import type { Importer } from '../services/importer.js';
 import {
@@ -84,6 +86,16 @@ export function createPresetsRoutes(db: Db, importer: Importer) {
         const row = load(c.req.param('id'));
         if (!row) return c.json({ error: 'not_found' }, 404);
         return c.json(row);
+      })
+      /**
+       * 这份预设自带的正则（导入时抽进 regex_scripts 表，scope='preset'）。
+       * ST 里它们是「预设正则」，思维链美化 / 不发送思维链这类基本都靠它。
+       * 与角色卡那个端点一样，不过滤 disabled。
+       */
+      .get('/:id/regex', (c) => {
+        const row = load(c.req.param('id'));
+        if (!row) return c.json({ error: 'not_found' }, 404);
+        return c.json(ownerRegexRows(db, 'preset', row.id).map(toRegexScript));
       })
       .put('/:id', async (c) => {
         const id = c.req.param('id');

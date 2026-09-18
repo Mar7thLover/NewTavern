@@ -3,7 +3,8 @@ import { Hono } from 'hono';
 
 import { schema, type Db } from '../db/client.js';
 import type { CharacterFormat, Importer } from '../services/importer.js';
-import { characterRegexScripts } from '../services/regex-map.js';
+import { ownerRegexRows } from '../services/embedded-regex.js';
+import { toRegexScript } from '../services/regex-map.js';
 import { sendDownload } from './download.js';
 
 const EXPORT_FORMATS: readonly CharacterFormat[] = ['png', 'charx', 'json'];
@@ -43,7 +44,10 @@ export function createCharactersRoutes(db: Db, importer: Importer) {
         if (!row) return c.json({ error: 'not_found' }, 404);
         return c.json(row);
       })
-      // 卡内嵌正则：data.extensions.regex_scripts → 契约 §2.1 形状（scope='character'）
+      /**
+       * 这张卡自带的正则（导入时已抽进 regex_scripts 表，scope='character'）。
+       * 显示侧正则要用它，所以**不过滤 disabled**——过滤由调用方按 `disabled` 做。
+       */
       .get('/:id/regex', (c) => {
         const row = db
           .select()
@@ -51,7 +55,7 @@ export function createCharactersRoutes(db: Db, importer: Importer) {
           .where(eq(schema.characters.id, c.req.param('id')))
           .get();
         if (!row) return c.json({ error: 'not_found' }, 404);
-        return c.json(characterRegexScripts(row.id, row.data));
+        return c.json(ownerRegexRows(db, 'character', row.id).map(toRegexScript));
       })
       .get('/:id/export', (c) => {
         const format = (c.req.query('format') ?? 'png') as CharacterFormat;

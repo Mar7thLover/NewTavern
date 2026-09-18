@@ -4,6 +4,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 
 import { schema } from './db/client.js';
 import type { RegexScript } from './services/regex-map.js';
+import { backfillEmbeddedRegex } from './services/backfill.js';
 import { makeTempDataDir, makeTestApp } from './test-helpers.js';
 
 /** 正则脚本 CRUD / 排序 / ST 导入 / 卡内嵌脚本。见 docs/M3-CONTRACT.md §3.2、§3.7。 */
@@ -188,7 +189,7 @@ describe('正则脚本', () => {
     expect(((await badRes.json()) as { message: string }).message).toMatch(/JSON/);
   });
 
-  it('GET /api/characters/:id/regex：卡内 extensions.regex_scripts → 契约形状', async () => {
+  it('GET /api/characters/:id/regex：卡自带的正则（抽表之后）', async () => {
     const { app, db } = makeTestApp(dataDir);
     const character = db
       .insert(schema.characters)
@@ -205,20 +206,23 @@ describe('正则脚本', () => {
       .returning()
       .get();
 
+    // 自带正则在**导入时**抽表；这里是直接插的行，先补一次回填（§3.2 修正）
+    expect(
+      ((await (await app.request(`/api/characters/${character.id}/regex`)).json()) as RegexScript[])
+        .length,
+    ).toBe(0);
+    backfillEmbeddedRegex(db);
+
     const scripts = (await (
       await app.request(`/api/characters/${character.id}/regex`)
     ).json()) as RegexScript[];
-    // 非法项被跳过；id = `${charId}:${index}`
+    // 非法项被跳过
     expect(scripts).toHaveLength(2);
-    expect(scripts[0]).toMatchObject({
-      id: `${character.id}:0`,
-      name: '去除星号',
-      scope: 'character',
-      markdownOnly: true,
-    });
-    expect(scripts[1]?.id).toBe(`${character.id}:2`);
-    // 卡内脚本不落表
-    expect(db.select().from(schema.regexScripts).all()).toHaveLength(0);
+    expect(scripts[0]).toMatchObject({ name: '去除星号', scope: 'character', markdownOnly: true });
+    expect(scripts[1]?.name).toBe('提示词侧替换');
+    // 现在落表了，但不会混进「我自己的脚本」（GET /api/regex 只给 global）
+    expect(db.select().from(schema.regexScripts).all()).toHaveLength(2);
+    expect((await (await app.request('/api/regex')).json()) as RegexScript[]).toHaveLength(0);
 
     expect((await app.request('/api/characters/nope/regex')).status).toBe(404);
   });

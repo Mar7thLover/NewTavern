@@ -42,6 +42,8 @@ export function createImportRoutes(importer: Importer) {
             avatarAssetId: row.avatarAssetId,
             createdAt: row.createdAt,
             updatedAt: row.updatedAt,
+            // 卡自带的正则：已收进正则库但还没启用，前端据此问用户（§3.2 修正）
+            ...('embeddedRegex' in row ? { embeddedRegex: row.embeddedRegex } : {}),
           };
         }),
       )

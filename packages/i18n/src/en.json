@@ -792,6 +792,22 @@
     "scopes": {
       "global": "Global",
       "character": "Character"
+    },
+    "embedded": {
+      "askTitle": "These files ship their own regex",
+      "askBody": "{{count}} script(s) from {{names}} were added to your regex library but are not active yet. Enable them now? Scripts the author had switched off stay off.",
+      "enable": "Enable",
+      "later": "Not now",
+      "title": "Scripts from cards and presets",
+      "hint": "Regex that came with an imported character card, preset or lorebook, grouped by source. They only apply in chats using that card or preset, and keep the original order.",
+      "groupCount": "{{total}} script(s)",
+      "toggleAll": "Enable all",
+      "unknownOwner": "Deleted source",
+      "scopes": {
+        "character": "Character card",
+        "preset": "Preset",
+        "book": "Lorebook"
+      }
     }
   },
   "inspector": {

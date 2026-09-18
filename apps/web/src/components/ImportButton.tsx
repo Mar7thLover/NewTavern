@@ -2,13 +2,41 @@ import { useQueryClient, type QueryKey } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { ConfirmDialog } from './ConfirmDialog';
 import { Button, type ButtonProps } from './ui/button';
-import { uploadFile } from '../lib/api';
+import { uploadFile, useSetRegexOwnerEnabled, type RegexOwnerInput } from '../lib/api';
 import { cn } from '../lib/utils';
 
 interface FileFailure {
   file: string;
   message: string;
+}
+
+/**
+ * 导入接口在「这个文件自带正则」时回的摘要。脚本已经收进正则库但**还没启用**，
+ * 由这里问一句再开（M3 契约 §3.2 修正：默认导入、询问是否加载）。
+ */
+interface EmbeddedRegex {
+  scope: RegexOwnerInput['scope'];
+  ownerId: string;
+  ownerName: string;
+  count: number;
+}
+
+function readEmbeddedRegex(result: unknown): EmbeddedRegex | null {
+  const value = (result as { embeddedRegex?: unknown } | null)?.embeddedRegex;
+  if (typeof value !== 'object' || value === null) return null;
+  const record = value as Record<string, unknown>;
+  if (typeof record.ownerId !== 'string' || typeof record.count !== 'number') return null;
+  if (record.scope !== 'character' && record.scope !== 'preset' && record.scope !== 'book') {
+    return null;
+  }
+  return {
+    scope: record.scope,
+    ownerId: record.ownerId,
+    ownerName: typeof record.ownerName === 'string' ? record.ownerName : '',
+    count: record.count,
+  };
 }
 
 export interface ImportButtonProps {
@@ -44,6 +72,9 @@ export function ImportButton({
   const inputRef = useRef<HTMLInputElement>(null);
   const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
   const [failures, setFailures] = useState<FileFailure[]>([]);
+  /** 这批文件自带的正则：导入完统一问一次「要不要现在启用」 */
+  const [pendingRegex, setPendingRegex] = useState<EmbeddedRegex[]>([]);
+  const setOwnerEnabled = useSetRegexOwnerEnabled();
 
   const handleFiles = async (fileList: FileList | null) => {
     const files = Array.from(fileList ?? []);
@@ -51,12 +82,16 @@ export function ImportButton({
     if (files.length === 0) return;
 
     setFailures([]);
+    setPendingRegex([]);
     const nextFailures: FileFailure[] = [];
+    const embedded: EmbeddedRegex[] = [];
     try {
       for (const [index, file] of files.entries()) {
         setProgress({ current: index + 1, total: files.length });
         try {
-          await uploadFile(endpoint, file);
+          const result = await uploadFile(endpoint, file);
+          const regex = readEmbeddedRegex(result);
+          if (regex) embedded.push(regex);
         } catch (error) {
           nextFailures.push({
             file: file.name,
@@ -67,6 +102,7 @@ export function ImportButton({
     } finally {
       setProgress(null);
       setFailures(nextFailures);
+      setPendingRegex(embedded);
       if (nextFailures.length < files.length) {
         await queryClient.invalidateQueries({ queryKey: invalidateKey });
       }
@@ -107,6 +143,26 @@ export function ImportButton({
             : t('common.importing')
           : (label ?? t('common.import'))}
       </Button>
+      <ConfirmDialog
+        open={pendingRegex.length > 0}
+        title={t('regex.embedded.askTitle')}
+        description={t('regex.embedded.askBody', {
+          count: pendingRegex.reduce((total, item) => total + item.count, 0),
+          names: pendingRegex.map((item) => item.ownerName).join('、'),
+        })}
+        confirmLabel={t('regex.embedded.enable')}
+        cancelLabel={t('regex.embedded.later')}
+        pending={setOwnerEnabled.isPending}
+        onCancel={() => setPendingRegex([])}
+        onConfirm={() => {
+          const targets = pendingRegex;
+          setPendingRegex([]);
+          for (const item of targets) {
+            setOwnerEnabled.mutate({ scope: item.scope, ownerId: item.ownerId, enabled: true });
+          }
+        }}
+      />
+
       {failures.length > 0 && (
         <div
           role="alert"

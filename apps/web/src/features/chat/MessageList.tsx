@@ -91,6 +91,7 @@ function VirtualMessageList({
   // 显示侧正则：宏里的 {{char}} / {{user}} 与消息头显示的名字保持一致
   const applyDisplayRegex = useDisplayRegex({
     characterId: chat.character?.id ?? null,
+    presetId: chat.presetId,
     charName: chat.character?.name ?? t('chat.assistant'),
     userName: persona?.name ?? t('chat.you'),
   });

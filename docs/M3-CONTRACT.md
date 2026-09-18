@@ -832,3 +832,35 @@ diffLayouts / layoutStrict / layoutCacheAware / resolveLayoutPolicy` 都可从
 ### 修正（2026-09-14，主会话）：WI 默认值以 ST 发行版 settings.json 为准
 
 WI-10 与 SB-4 作废。ST `world-info.js` 里 `let world_info_recursive = false` 等只是模块初值，启动时被发行版自带的 `default/content/settings.json` 覆盖，该文件为 `world_info_recursive: true`、`world_info_match_whole_words: true`、`world_info_include_names: true`、`world_info_case_sensitive: false`；录制用的全新 ST 环境正是这套值（`preset-custom-formats` 用例对 recursive 敏感）。服务端 `DEFAULT_WI_UI_SETTINGS`、前端 `DEFAULT_WORLD_INFO_SETTINGS`、`tools/golden` 的 `ST_WI_DEFAULTS` 已统一为 true / true / true。
+
+
+### 修正（2026-09-18，主会话）：卡 / 预设 / 世界书自带的正则一律抽进正则库，导入时问一次
+
+§3.2 第二条「角色级脚本来自 `characters.data.extensions.regex_scripts`，**不落表**」作废。
+
+**为什么改**：自带的正则以前是隐形的——用户在「设置 · 正则脚本」里只看得到自己导入的那几条，
+卡偷偷带的看不见、关不掉；预设自带的更糟，**根本没生效过**（组装只读全局 + 卡内，从不读预设），
+而本机 14 个 ST 预设里有 11 个带正则（ARGO 4 条、小冰块 24 条、双人成行 36 条），
+思维链美化 / 不发送思维链全靠它们，缺了就等于预设坏了一半。
+
+**改成什么样**（与 ST 的三类脚本 + 两张允许名单对齐）：
+
+1. `regex_scripts.scope` 扩成 `global | character | preset | book`，自带的脚本在**导入时**
+   抽进表，`owner_id` 指向卡 / 预设 / 世界书；`extra = { raw, sourceDisabled, ownerName }`。
+   原件里的 `extensions.regex_scripts` **原样保留**，导出仍然无损（表里的编辑不写回原件）。
+2. **默认不启用**。导入接口在响应里带 `embeddedRegex: { scope, ownerId, ownerName, count }`，
+   前端弹一句「已经收进正则库，现在启用吗」；点启用走 `POST /api/regex/owner`
+   `{ scope, ownerId, enabled }`，按 `extra.sourceDisabled` 恢复——**作者本来就关掉的那几条不会被一键打开**。
+3. **运行时只读表**：`readRegexScripts` 按 ST `getRegexScripts` 的次序取
+   **全局 → 预设自带 → 角色卡自带**（都滤掉 disabled），不再直接读卡 / 预设里的字段，
+   免得同一条跑两遍。`GET /api/characters/:id/regex` 与新增的 `GET /api/presets/:id/regex`
+   都改成读表（不滤 disabled，交给调用方），显示侧正则也加上了预设那一档。
+4. **列表**：`GET /api/regex` 仍只给全局（显示侧要的就是它）；`?scope=all` 给全部并带
+   `ownerId` / `ownerName`，设置页按来源分组，每组一个总开关。
+5. **回填**（`backfillEmbeddedRegex`，启动时幂等）：角色卡自带的按原状态回填
+   （它们在这次改动前本来就在生效，不能因为升级变了行为）；预设 / 世界书自带的回填成**关闭**
+   （以前从没生效过，突然生效会把老对话的观感改掉），用户在设置里自己开。
+6. **ST 迁移**照搬 ST 的允许名单：`extension_settings.character_allowed_regex`（按头像文件名）与
+   `preset_allowed_regex`（按 api → 预设名）里点过头的，迁过来直接是启用的。
+
+世界书自带正则 ST 没有这个概念，社区偶有塞在 `extensions` 里的，带了就一并收（`scope='book'`）。

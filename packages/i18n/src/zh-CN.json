@@ -792,6 +792,22 @@
     "scopes": {
       "global": "全局",
       "character": "角色卡"
+    },
+    "embedded": {
+      "askTitle": "这些文件自带正则脚本",
+      "askBody": "已经收进正则库（共 {{count}} 条，来自 {{names}}），但还没启用。现在启用吗？作者本来就关掉的那几条不会被打开。",
+      "enable": "启用",
+      "later": "暂不启用",
+      "title": "卡 / 预设自带的脚本",
+      "hint": "角色卡、预设、世界书导入时自带的正则，按来源分组。它们只在用到那张卡 / 那份预设的会话里生效；顺序跟着原件走。",
+      "groupCount": "{{total}} 条",
+      "toggleAll": "整组启用",
+      "unknownOwner": "已删除的来源",
+      "scopes": {
+        "character": "角色卡",
+        "preset": "预设",
+        "book": "世界书"
+      }
     }
   },
   "inspector": {

@@ -1,5 +1,5 @@
 import type { ModelCapabilities } from '@newtavern/providers';
-import { asc, eq } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 
 import { schema, type Db } from '../db/client.js';
 import { NO_PRESET } from './assemble.js';
@@ -23,7 +23,7 @@ import type { AssetsService } from './assets.js';
 import type { LayoutMode } from './generation-context.js';
 import { resolveGlobalSystemPrompt } from './global-system-prompt.js';
 import { inlineDocumentParts } from './media-inline.js';
-import { characterRegexScripts, toRegexScript } from './regex-map.js';
+import { toRegexScript } from './regex-map.js';
 import { readGlobalVariables, readVariableTable } from './variables.js';
 import { loadWIBooks, mapCharacterDepthPrompt } from './wi-map.js';
 import { readGlobalBookIds, readWISettings } from './wi-settings.js';
@@ -40,7 +40,7 @@ import { readGlobalBookIds, readWISettings } from './wi-settings.js';
  * - `variables.global`：`variables` 表（scope='global'）；
  * - `authorsNote`：`chats.metadata.authorsNote`；`characterDepthPrompt`：卡 `extensions.depth_prompt`；
  * - `globalSystemPrompt`：设置 KV + `chats.overrides` 合并后（已按 enabled / 空文本过滤）；
- * - `regexScripts`：全局表（display_order 升序）+ 角色卡内嵌，均已滤掉 disabled；
+ * - `regexScripts`：正则表里的全局 → 预设自带 → 角色卡自带（自带的在导入时抽表），均已滤掉 disabled；
  * - `providerCaps`：`adapter.capabilities(model, conn)` 的布局相关子集；
  * - `layoutPolicy.frozenVolatile`：`chats.metadata.frozenVolatile`；
  * - `rng.seed`：`${chatId}:${parentId}:${siblingSeq}`（同一 swipe 位重新生成得到同一随机流）。
@@ -120,23 +120,37 @@ export function readNearestSnapshots(path: readonly NodeRow[]): {
   return { wiState, variables: variables ?? {} };
 }
 
-/** 全局正则表（display_order 升序）+ 角色卡内嵌，已滤掉 disabled（契约 §4 `regexScripts`） */
-export function readRegexScripts(db: Db, characterId: string | undefined, characterData: unknown) {
-  const rows = db
-    .select()
-    .from(schema.regexScripts)
-    .where(eq(schema.regexScripts.scope, 'global'))
-    .orderBy(asc(schema.regexScripts.displayOrder), asc(schema.regexScripts.createdAt))
-    .all();
-  const scripts: RegexScript[] = rows
-    .map((row) => toRegexScript(row))
-    .filter((script) => !script.disabled);
-  if (characterId) {
-    for (const script of characterRegexScripts(characterId, characterData)) {
-      if (!script.disabled) scripts.push(script);
-    }
-  }
-  return scripts;
+/**
+ * 本轮要跑的正则脚本，已滤掉 disabled（契约 §4 `regexScripts`）。
+ *
+ * 顺序与 ST 的 `getRegexScripts` 一致：**全局 → 预设自带 → 角色卡自带**
+ * （ST `SCRIPT_TYPES` 的 `Object.values` 次序就是 global/preset/scoped）。
+ * 自带的脚本从表里读——导入时已抽表（`services/embedded-regex.ts`），
+ * 不再直接读卡 / 预设里的 `extensions.regex_scripts`，否则同一条会跑两遍。
+ */
+export function readRegexScripts(
+  db: Db,
+  owners: { characterId?: string | undefined; presetId?: string | undefined },
+) {
+  const pick = (scope: 'global' | 'character' | 'preset', ownerId?: string): RegexScript[] => {
+    const rows = db
+      .select()
+      .from(schema.regexScripts)
+      .where(
+        ownerId === undefined
+          ? eq(schema.regexScripts.scope, scope)
+          : and(eq(schema.regexScripts.scope, scope), eq(schema.regexScripts.ownerId, ownerId)),
+      )
+      .orderBy(asc(schema.regexScripts.displayOrder), asc(schema.regexScripts.createdAt))
+      .all();
+    return rows.map((row) => toRegexScript(row)).filter((script) => !script.disabled);
+  };
+
+  return [
+    ...pick('global'),
+    ...(owners.presetId ? pick('preset', owners.presetId) : []),
+    ...(owners.characterId ? pick('character', owners.characterId) : []),
+  ];
 }
 
 export function buildAssembleInput(db: Db, ctx: BuildAssembleInputContext): AssembleInputV2 {
@@ -241,7 +255,10 @@ export function buildAssembleInput(db: Db, ctx: BuildAssembleInputContext): Asse
       isRecord(characterData?.extensions) ? characterData.extensions : undefined,
     ),
     globalSystemPrompt: resolveGlobalSystemPrompt(db, ctx.overrides),
-    regexScripts: readRegexScripts(db, characterId, characterData),
+    regexScripts: readRegexScripts(db, {
+      characterId,
+      ...(presetRow ? { presetId: presetRow.id } : {}),
+    }),
     variables: {
       chat: chatVariables,
       global: readGlobalVariables(db),

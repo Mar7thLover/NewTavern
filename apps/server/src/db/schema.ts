@@ -311,7 +311,12 @@ export const generationLog = sqliteTable(
 
 export const regexScripts = sqliteTable('regex_scripts', {
   id: id(),
-  scope: text('scope', { enum: ['global', 'character'] })
+  /**
+   * 脚本从哪来（与 ST 的三类对齐，另加世界书）：
+   * `global` 用户自己的；其余三种是角色卡 / 预设 / 世界书自带、导入时抽进来的，
+   * `owner_id` 指向那条记录（M3 契约 §3.2 修正）。
+   */
+  scope: text('scope', { enum: ['global', 'character', 'preset', 'book'] })
     .notNull()
     .default('global'),
   ownerId: text('owner_id'),

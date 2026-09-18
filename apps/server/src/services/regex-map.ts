@@ -11,7 +11,8 @@ import type { schema } from '../db/client.js';
 
 export type RegexScriptRow = typeof schema.regexScripts.$inferSelect;
 export type RegexDirection = 'prompt' | 'display' | 'both';
-export type RegexScope = 'global' | 'character';
+/** 与 `regex_scripts.scope` 一致：global = 用户自己的，其余是自带的（导入时抽表） */
+export type RegexScope = 'global' | 'character' | 'preset' | 'book';
 
 export interface RegexScript {
   id: string;
@@ -136,8 +137,11 @@ export function stRegexToScript(raw: unknown, id: string, scope: RegexScope): Re
 }
 
 /**
- * 角色卡内嵌正则：`data.extensions.regex_scripts`（不落 regex_scripts 表）。
- * id 形如 `${charId}:${index}`，scope 固定 'character'（契约 §3.2）。
+ * 角色卡内嵌正则：直接从卡数据里读（`data.extensions.regex_scripts`）。
+ *
+ * **组装与显示都不再走这里**——自带正则在导入时已抽进 `regex_scripts` 表
+ * （`services/embedded-regex.ts`），这个函数只留给抽表与回填用，
+ * 免得同一条脚本跑两遍。
  */
 export function characterRegexScripts(characterId: string, data: unknown): RegexScript[] {
   const extensions = (data as { extensions?: unknown } | null)?.extensions;

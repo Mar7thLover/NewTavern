@@ -7,6 +7,7 @@ import { asc, eq } from 'drizzle-orm';
 
 import { schema, type Db } from '../db/client.js';
 import type { AssetsService } from './assets.js';
+import { setOwnerRegexEnabled } from './embedded-regex.js';
 import { ImportError, type Importer } from './importer.js';
 import { DEFAULT_PERSONA_KEY } from './personas.js';
 import {
@@ -326,6 +327,30 @@ function existingPersonas(db: Db): Map<string, { id: string; avatarHash: string 
   return map;
 }
 
+/**
+ * ST 的「允许自带正则」名单：`character_allowed_regex`（按头像文件名）与
+ * `preset_allowed_regex`（按 api → 预设名）。迁移时照搬——在 ST 里点过头的卡 / 预设，
+ * 搬过来仍然是启用的，不用再问一次（M3 契约 §3.2 修正）。
+ */
+function stAllowedRegex(settings: Record<string, unknown> | null): {
+  characters: Set<string>;
+  presets: Set<string>;
+} {
+  const ext = isRecord(settings?.['extension_settings']) ? settings['extension_settings'] : {};
+  const characters = new Set(
+    (Array.isArray(ext['character_allowed_regex']) ? ext['character_allowed_regex'] : []).filter(
+      (item): item is string => typeof item === 'string',
+    ),
+  );
+  const presets = new Set<string>();
+  const byApi = isRecord(ext['preset_allowed_regex']) ? ext['preset_allowed_regex'] : {};
+  for (const list of Object.values(byApi)) {
+    if (!Array.isArray(list)) continue;
+    for (const name of list) if (typeof name === 'string') presets.add(name);
+  }
+  return { characters, presets };
+}
+
 function existingRegexKeys(db: Db): Set<string> {
   return new Set(
     db
@@ -617,6 +642,7 @@ export async function runStMigration(
     }
     return !isAborted();
   };
+  const allowedRegex = stAllowedRegex(settings);
   const readChild = (sub: string, file: string) => {
     const abs = childPath(root, sub, file);
     if (!isFile(abs)) throw new MigrationError('文件不存在');
@@ -641,6 +667,10 @@ export async function runStMigration(
     const ok = await attempt('characters', file, () => {
       const row = importer.importCharacter(file, readChild('characters', file));
       characterIds.set(file, row.id);
+      // ST 里允许过这张卡的自带正则 → 搬过来也保持启用（文件名就是 ST 的 avatar）
+      if (allowedRegex.characters.has(file)) {
+        setOwnerRegexEnabled(db, 'character', row.id, true);
+      }
       return { id: row.id };
     });
     if (!ok) break;
@@ -723,6 +753,9 @@ export async function runStMigration(
       const row = importer.importPreset(file, readChild('OpenAI Settings', file), {
         name: baseName(file),
       });
+      if (allowedRegex.presets.has(baseName(file))) {
+        setOwnerRegexEnabled(db, 'preset', row.id, true);
+      }
       return { id: row.id };
     });
     if (!ok) break;
