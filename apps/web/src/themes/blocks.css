@@ -1,0 +1,239 @@
+/**
+ * 正文块的骨架（`data-nt-block`）。
+ *
+ * 结构由 `packages/core/src/richtext/blocks.ts` 认出来，这里只给一套**默认形态**——
+ * 和 slots.css 一样，默认 = 「素」：不填色、1px 线、靠留白与对齐成形。
+ * 每个世界在 `themes/<id>/blocks.css` 里把它换成自己的材质（见 themes/README.md §10）。
+ *
+ * 和 materials.css 同在 `@layer components`：主题 CSS 不在任何 layer 里，压得过这里。
+ */
+
+@layer components {
+  /* ------------------------------------------------------------------ */
+  /* 通用骨架                                                            */
+  /* ------------------------------------------------------------------ */
+
+  .nt-md [data-nt-block]:not([data-nt-inline]) {
+    display: block;
+    margin-block: 1.15em;
+    /* 块不是段落：书斋的段首缩进不该跑到这里来 */
+    text-indent: 0;
+  }
+
+  .nt-md > [data-nt-block]:first-child {
+    margin-block-start: 0;
+  }
+
+  .nt-md > [data-nt-block]:last-child {
+    margin-block-end: 0;
+  }
+
+  /* 小标题：界面字、小号、次要色。没有图标，没有 emoji。 */
+  [data-nt-block] > [data-nt-part='title'] {
+    font-family: var(--font-ui);
+    font-size: 0.72em;
+    font-weight: 500;
+    line-height: 1.4;
+    letter-spacing: 0.1em;
+    color: var(--ink-3);
+    text-indent: 0;
+  }
+
+  [data-nt-block] > [data-nt-part='body'] {
+    margin-block-start: 0.5em;
+  }
+
+  /* 块内的段落不吃故事排版的缩进与段距：块自己决定节奏 */
+  [data-nt-block] [data-nt-part='body'] > p {
+    margin-block: 0.4em;
+    text-indent: 0;
+  }
+
+  [data-nt-block] [data-nt-part='body'] > :first-child {
+    margin-block-start: 0;
+  }
+
+  [data-nt-block] [data-nt-part='body'] > :last-child {
+    margin-block-end: 0;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* 思考 / 场外 / 旁白 / 摘要——都是「不是正文」的旁支                   */
+  /* ------------------------------------------------------------------ */
+
+  /* 默认：左侧一根发丝线，字浅一档。这是「素」的做法。 */
+  [data-nt-block='think'],
+  [data-nt-block='ooc']:not([data-nt-inline]),
+  [data-nt-block='aside'],
+  [data-nt-block='summary'] {
+    padding-inline-start: 0.85em;
+    border-inline-start: 1px solid var(--edge);
+    color: var(--ink-2);
+    font-size: 0.94em;
+  }
+
+  /* 行内的场外话：夹在叙述中间，只降一档明度，不加框 */
+  [data-nt-block='ooc'][data-nt-inline] {
+    color: var(--ink-3);
+    font-size: 0.92em;
+  }
+
+  [data-nt-block='ooc'][data-nt-inline]::before {
+    content: '（';
+  }
+
+  [data-nt-block='ooc'][data-nt-inline]::after {
+    content: '）';
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* 状态栏                                                              */
+  /* ------------------------------------------------------------------ */
+
+  [data-nt-block='status'] > [data-nt-part='rows'] {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+    gap: 0.15rem 1.75rem;
+    margin-block-start: 0.5em;
+  }
+
+  [data-nt-block='status'] [data-nt-part='row'] {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-width: 0;
+    font-family: var(--font-ui);
+    font-size: 0.8em;
+    line-height: 1.9;
+    text-indent: 0;
+  }
+
+  /* 没有键的行（「下着雨」这种）横跨整行，靠左 */
+  [data-nt-block='status'] [data-nt-part='row'][data-nt-plain] {
+    grid-column: 1 / -1;
+    color: var(--ink-2);
+  }
+
+  [data-nt-part='key'] {
+    flex: none;
+    color: var(--ink-3);
+  }
+
+  [data-nt-part='value'] {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-inline-start: auto;
+    min-width: 0;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+  }
+
+  [data-nt-part='row'][data-nt-plain] [data-nt-part='value'] {
+    margin-inline-start: 0;
+  }
+
+  [data-nt-part='value-text'] {
+    flex: none;
+  }
+
+  /* 数值条：默认是一根 1px 的轨道，填充段用强调色。主题按自己的材质换掉。 */
+  [data-nt-part='meter'] {
+    position: relative;
+    display: block;
+    flex: none;
+    width: 4.5rem;
+    height: 1px;
+    background-color: var(--edge);
+    overflow: hidden;
+  }
+
+  [data-nt-part='meter-fill'] {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: 0;
+    /* --nt-meter 是 0–1，由识别层写在 [data-nt-part='value'] 上 */
+    inline-size: calc(var(--nt-meter, 0) * 100%);
+    background-color: var(--accent);
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* 选项                                                                */
+  /* ------------------------------------------------------------------ */
+
+  /* Markdown 的 ol 工具类会给出小数点序号：我们自己画序号，关掉它 */
+  [data-nt-block='options'] > [data-nt-part='body'] {
+    margin-block: 0.5em 0;
+    padding-inline-start: 0;
+    list-style: none;
+  }
+
+  [data-nt-part='option'] {
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+    padding-block: 0.25rem;
+    text-indent: 0;
+  }
+
+  [data-nt-part='marker'] {
+    flex: none;
+    min-width: 1.25em;
+    color: var(--ink-3);
+    font-family: var(--font-ui);
+    font-size: 0.82em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  [data-nt-part='option-text'] {
+    min-width: 0;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* 变量更新（机器指令，默认折叠）                                      */
+  /* ------------------------------------------------------------------ */
+
+  [data-nt-block='data'] > [data-nt-part='title'] {
+    cursor: pointer;
+    list-style: none;
+    width: fit-content;
+  }
+
+  [data-nt-block='data'] > [data-nt-part='title']::-webkit-details-marker {
+    display: none;
+  }
+
+  [data-nt-block='data'] > [data-nt-part='title']::after {
+    content: '…';
+    margin-inline-start: 0.4em;
+  }
+
+  [data-nt-block='data'][open] > [data-nt-part='title']::after {
+    content: '';
+  }
+
+  [data-nt-block='data'] > pre[data-nt-part='body'] {
+    margin-block: 0.5em 0;
+    padding: 0.6rem 0.75rem;
+    border: 1px solid var(--edge);
+    border-radius: var(--r-card);
+    overflow-x: auto;
+    font-family: var(--font-mono);
+    font-size: 0.78em;
+    line-height: 1.7;
+    color: var(--ink-2);
+    white-space: pre-wrap;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* 卡自带的前端                                                        */
+  /* ------------------------------------------------------------------ */
+
+  /*
+   * 卡的 CSS 已经被 `@scope` 关进本条消息，但它读到的仍是页面的默认字体与颜色。
+   * 给它一个干净的起点：继承故事排版，不继承段首缩进。
+   */
+  .nt-md [data-nt-card] {
+    text-indent: 0;
+  }
+}

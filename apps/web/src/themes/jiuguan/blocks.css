@@ -1,0 +1,142 @@
+/**
+ * 酒馆 · Jiuguan —— 正文块（themes/README.md §10）。
+ *
+ * 状态栏是账本上**压进羊皮纸的一格**：四边有厚度（一道暗边一道亮边），里面是凹下去的。
+ * 数值是一条**黄铜刻度**：铜身有竖向渐变与顶上的高光，槽是凹的，铜是凸的。
+ *
+ * 铁律同 theme.css：不扁平、阴影有方向、没有玻璃模糊、不出冷色。
+ * 注意正文在羊皮纸上，`--ink*` 已被 `--jg-p-*` 改写过，这里直接用槽位就是纸上的墨色。
+ */
+
+@scope ([data-theme='jiuguan']) to ([data-theme]) {
+  /* 压进纸里的一格：内凹阴影 + 上暗下亮的边 */
+  [data-nt-block='status'],
+  [data-nt-block='options'],
+  [data-nt-block='summary'],
+  [data-nt-block='data'] {
+    padding: 0.7rem 0.85rem;
+    border: 1px solid var(--jg-well-edge);
+    border-radius: var(--r-card);
+    background-color: var(--jg-sunk);
+    box-shadow:
+      var(--jg-sunk-inset),
+      0 1px 0 var(--jg-well-hi);
+  }
+
+  /* 题头像账本上的手写栏名：衬线、略小、带一点压印的高光 */
+  [data-nt-block] > [data-nt-part='title'] {
+    color: var(--ink-2);
+    font-family: var(--font-ui);
+    font-size: 0.76em;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-shadow: var(--jg-emboss);
+  }
+
+  /* 旁支是纸上的一段旁注：左边一道刻槽（1px 暗 + 1px 亮），字退一档 */
+  [data-nt-block='think'],
+  [data-nt-block='ooc']:not([data-nt-inline]),
+  [data-nt-block='aside'] {
+    padding-inline-start: 0.9rem;
+    border-inline-start: 1px solid var(--jg-groove);
+    box-shadow: inset 1px 0 0 var(--jg-hi);
+    color: var(--ink-2);
+  }
+
+  [data-nt-block='status'] > [data-nt-part='rows'] {
+    gap: 0.1rem 1.75rem;
+  }
+
+  [data-nt-block='status'] [data-nt-part='row'] {
+    font-size: 0.82em;
+    line-height: 1.95;
+  }
+
+  [data-nt-part='key'] {
+    text-shadow: var(--jg-emboss);
+  }
+
+  [data-nt-part='value'] {
+    color: var(--ink);
+    font-weight: 600;
+  }
+
+  /*
+   * 黄铜刻度：槽凹进纸里，铜条浮在槽上——顶部高光、底部暗边、外面一点点投影。
+   * 铜是有厚度的，所以填充段比槽矮一点，两边留出槽壁。
+   */
+  [data-nt-part='meter'] {
+    width: 4.5rem;
+    height: 9px;
+    padding: 1px;
+    border: 1px solid var(--jg-well-edge);
+    border-radius: var(--r-pill);
+    background-color: var(--jg-sunk);
+    box-shadow: var(--jg-sunk-inset);
+  }
+
+  [data-nt-part='meter-fill'] {
+    inset-block: 1px;
+    inset-inline-start: 1px;
+    inline-size: calc(var(--nt-meter, 0) * (100% - 2px));
+    border-radius: var(--r-pill);
+    background: linear-gradient(
+      180deg,
+      var(--jg-brass-1) 0%,
+      var(--jg-brass-2) 38%,
+      var(--jg-brass-3) 72%,
+      var(--jg-brass-4) 100%
+    );
+    box-shadow:
+      inset 0 1px 0 var(--jg-brass-shine),
+      0 1px 0 var(--jg-brass-deep);
+  }
+
+  /* 选项：每条前面钉一颗**黄铜铆钉**，按下去像真的被按进纸里 */
+  [data-nt-part='option'] {
+    align-items: center;
+    gap: 0.7rem;
+    padding-block: 0.32rem;
+  }
+
+  [data-nt-part='marker'] {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.4rem;
+    height: 1.4rem;
+    border-radius: var(--r-pill);
+    background: radial-gradient(
+      circle at 35% 28%,
+      var(--jg-brass-1) 0%,
+      var(--jg-brass-2) 42%,
+      var(--jg-brass-3) 78%,
+      var(--jg-brass-4) 100%
+    );
+    box-shadow: var(--jg-rivet-cast);
+    color: var(--jg-brass-deep);
+    font-family: var(--font-ui);
+    font-size: 0.7em;
+    font-weight: 700;
+    text-shadow: 0 1px 0 var(--jg-brass-shine);
+  }
+
+  [data-nt-part='option']:active [data-nt-part='marker'] {
+    transform: translateY(1px);
+    box-shadow: none;
+  }
+
+  /* 行内场外话：像在页边用铅笔写的一句，淡、斜不了就不斜 */
+  [data-nt-block='ooc'][data-nt-inline] {
+    color: var(--ink-3);
+  }
+
+  /* 变量更新：账本的夹页，压得更深一点 */
+  [data-nt-block='data'] > pre[data-nt-part='body'] {
+    border: 1px solid var(--jg-well-edge);
+    border-radius: var(--r-control);
+    background-color: var(--jg-sunk);
+    box-shadow: var(--jg-sunk-inset);
+    color: var(--ink-2);
+  }
+}

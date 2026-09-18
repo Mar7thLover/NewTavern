@@ -3,6 +3,8 @@ export * from './prompt/assemble.js';
 export * from './prompt/ir.js';
 export * from './prompt/layout/index.js';
 export * from './regex/engine.js';
+export * from './richtext/blocks.js';
+export * from './richtext/css.js';
 export * from './tokenizer.js';
 export * from './tree/path.js';
 export * from './variables/transaction.js';

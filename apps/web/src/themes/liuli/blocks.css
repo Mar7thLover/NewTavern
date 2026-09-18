@@ -1,0 +1,137 @@
+/**
+ * 琉璃 · Liuli —— 正文块（themes/README.md §10）。
+ *
+ * 状态栏是一片**薄冰**：浮在阅读面上，透得能看见底下的冰室，边缘有 1px 的虹。
+ * 数值不是条，是一根**冰棱**——从里面亮起来，顶上有一道白色的光。
+ *
+ * 铁律同 theme.css：没有实心的东西、没有暖色、没有噪点；影是光不是暗。
+ */
+
+@scope ([data-theme='liuli']) to ([data-theme]) {
+  /* 薄冰的通用形：半透明板 + 白边 + 光影。板级才模糊，薄冰不模糊。 */
+  [data-nt-block='status'],
+  [data-nt-block='options'],
+  [data-nt-block='summary'],
+  [data-nt-block='data'] {
+    padding: 0.75rem 0.9rem;
+    border: 1px solid var(--liuli-sheet-edge);
+    border-radius: var(--r-card);
+    background: var(--liuli-sheet);
+    box-shadow: var(--liuli-sheet-shadow);
+  }
+
+  /* 小标题是冰青的，字距拉开，像刻在冰面上 */
+  [data-nt-block] > [data-nt-part='title'] {
+    color: var(--liuli-accent-ink);
+    font-size: 0.7em;
+    font-weight: 500;
+    letter-spacing: 0.16em;
+  }
+
+  /*
+   * 思考 / 场外 / 旁白：不给框——这个世界里没有实心的东西，
+   * 只让它们更透一点，左边留一道**光痕**（从透明到白到透明），和消息之间的分隔同源。
+   */
+  [data-nt-block='think'],
+  [data-nt-block='ooc']:not([data-nt-inline]),
+  [data-nt-block='aside'] {
+    position: relative;
+    padding-inline-start: 1.1rem;
+    border-inline-start: 0;
+    color: var(--ink-2);
+  }
+
+  [data-nt-block='think']::before,
+  [data-nt-block='ooc']:not([data-nt-inline])::before,
+  [data-nt-block='aside']::before {
+    content: '';
+    position: absolute;
+    inset-block: 0.15em;
+    inset-inline-start: 0;
+    width: 1px;
+    background: linear-gradient(
+      180deg,
+      transparent,
+      var(--liuli-trace) 30%,
+      var(--liuli-trace) 70%,
+      transparent
+    );
+  }
+
+  /* 状态栏的行之间不画线：靠明度与留白，线会把冰打脏 */
+  [data-nt-block='status'] > [data-nt-part='rows'] {
+    gap: 0.1rem 1.75rem;
+  }
+
+  [data-nt-part='key'] {
+    letter-spacing: 0.02em;
+  }
+
+  [data-nt-part='value'] {
+    color: var(--liuli-accent-ink);
+  }
+
+  /*
+   * 冰棱：轨道是一条极淡的凹槽，填充段从冰青到冰白，顶上压一道 1px 的白光。
+   * 折射的感觉来自「亮边 + 内部渐变」，不是发光。
+   */
+  [data-nt-part='meter'] {
+    width: 4rem;
+    height: 5px;
+    border-radius: var(--r-pill);
+    background-color: var(--liuli-track);
+    box-shadow: var(--liuli-inset);
+  }
+
+  [data-nt-part='meter-fill'] {
+    border-radius: var(--r-pill);
+    background: linear-gradient(
+      180deg,
+      var(--liuli-ice-2),
+      var(--liuli-ice-1) 55%,
+      var(--liuli-ice-3)
+    );
+    box-shadow: inset 0 1px 0 var(--liuli-glint);
+  }
+
+  /* 选项：一颗冰珠 + 一行字；悬停时珠子里的光亮起来 */
+  [data-nt-part='option'] {
+    align-items: center;
+    gap: 0.7rem;
+    padding-block: 0.3rem;
+  }
+
+  [data-nt-part='marker'] {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.5rem;
+    height: 1.5rem;
+    border: 1px solid var(--liuli-bead-edge);
+    border-radius: var(--r-pill);
+    background: var(--liuli-bead);
+    box-shadow: var(--liuli-bead-shadow);
+    color: var(--liuli-accent-ink);
+    font-size: 0.72em;
+  }
+
+  [data-nt-part='option']:hover [data-nt-part='marker'] {
+    box-shadow:
+      var(--liuli-bead-shadow),
+      0 0 0 3px var(--liuli-focus-glow);
+  }
+
+  /* 行内场外话：冰青的小字，括号也是冰青 */
+  [data-nt-block='ooc'][data-nt-inline] {
+    color: var(--liuli-accent-ink);
+    opacity: 0.8;
+  }
+
+  /* 变量更新：整块更透，原文是冷墨 */
+  [data-nt-block='data'] > pre[data-nt-part='body'] {
+    border: 0;
+    border-radius: var(--r-control);
+    background-color: var(--liuli-track);
+    color: var(--ink-2);
+  }
+}

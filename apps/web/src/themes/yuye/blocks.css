@@ -1,0 +1,141 @@
+/**
+ * 雨夜 · Yuye —— 正文块（themes/README.md §10）。
+ *
+ * 状态栏是窗上的一块**湿玻璃**：没有边框，靠明度和模糊浮起来，上缘有一道 1px 的高光。
+ * 数值是**水位**：一条几乎看不见的槽，暖黄的灯光沿着它涨上去，末端有一点光晕。
+ *
+ * 铁律同 theme.css：不要大面积白、不要饱和色、只有一个暖色（远处那盏灯）、颗粒常在。
+ */
+
+@scope ([data-theme='yuye']) to ([data-theme]) {
+  /* 湿玻璃：半透明底 + 模糊 + 上缘高光。线几乎不用。 */
+  [data-nt-block='status'],
+  [data-nt-block='options'],
+  [data-nt-block='summary'],
+  [data-nt-block='data'] {
+    padding: 0.8rem 0.95rem;
+    border: 0;
+    border-radius: var(--r-card);
+    background-color: var(--panel);
+    backdrop-filter: blur(18px);
+    box-shadow: inset 0 1px 0 var(--edge-highlight);
+  }
+
+  /* 题头：等宽的小字，像窗台上那块牌子上的刻印，很轻 */
+  [data-nt-block] > [data-nt-part='title'] {
+    /* --ink-3 是时间戳那一档；这里字更小、字距更开，再淡就读不出来了（实测 3.8） */
+    color: var(--ink-2);
+    font-family: var(--font-mono);
+    font-size: 0.68em;
+    font-weight: 400;
+    letter-spacing: 0.18em;
+  }
+
+  /*
+   * 思考 / 场外 / 旁白：不给框，只往下压一档明度，
+   * 左边留一道**水痕**——从透明淡入、又淡出的一根蓝白线，和消息之间的分隔同源。
+   */
+  [data-nt-block='think'],
+  [data-nt-block='ooc']:not([data-nt-inline]),
+  [data-nt-block='aside'] {
+    position: relative;
+    padding-inline-start: 1.15rem;
+    border-inline-start: 0;
+    color: var(--ink-2);
+  }
+
+  [data-nt-block='think']::before,
+  [data-nt-block='ooc']:not([data-nt-inline])::before,
+  [data-nt-block='aside']::before {
+    content: '';
+    position: absolute;
+    inset-block: 0.2em;
+    inset-inline-start: 0;
+    width: 1px;
+    background: linear-gradient(180deg, transparent, var(--edge-strong) 25%, transparent);
+  }
+
+  [data-nt-block='status'] > [data-nt-part='rows'] {
+    gap: 0.15rem 1.75rem;
+  }
+
+  [data-nt-block='status'] [data-nt-part='row'] {
+    font-size: 0.8em;
+    line-height: 1.95;
+  }
+
+  /* 值是这个世界里唯一的暖色：远处的那盏灯 */
+  [data-nt-part='value'] {
+    color: var(--accent);
+  }
+
+  /* 水位：槽是暗的，涨上来的一段是灯光，末端带一点晕 */
+  [data-nt-part='meter'] {
+    width: 4.25rem;
+    height: 3px;
+    border-radius: var(--r-pill);
+    background-color: var(--control);
+    overflow: visible;
+  }
+
+  [data-nt-part='meter-fill'] {
+    border-radius: var(--r-pill);
+    background-color: var(--accent);
+    box-shadow: 0 0 6px var(--primary-glow);
+  }
+
+  /* 选项：一排暗着的灯，指到哪盏哪盏亮 */
+  [data-nt-part='option'] {
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.32rem 0.5rem;
+    margin-inline: -0.5rem;
+    border-radius: var(--r-control);
+    transition: background-color var(--dur-hover) var(--ease);
+  }
+
+  [data-nt-part='option']:hover {
+    background-color: var(--accent-soft);
+  }
+
+  [data-nt-part='marker'] {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.35rem;
+    height: 1.35rem;
+    border-radius: var(--r-pill);
+    background-color: var(--primary);
+    color: var(--accent);
+    font-size: 0.7em;
+    transition: box-shadow var(--dur-hover) var(--ease);
+  }
+
+  [data-nt-part='option']:hover [data-nt-part='marker'] {
+    box-shadow: 0 0 10px var(--primary-glow);
+  }
+
+  /* 行内场外话：更沉一档，藏进夜里 */
+  [data-nt-block='ooc'][data-nt-inline] {
+    color: var(--ink-3);
+    opacity: 0.85;
+  }
+
+  /* 变量更新：玻璃上呵出来的一片，字冷 */
+  [data-nt-block='data'] > pre[data-nt-part='body'] {
+    border: 0;
+    border-radius: var(--r-control);
+    background-color: var(--control);
+    color: var(--ink-2);
+  }
+}
+
+/* 减弱动效：灯不再随指针亮起，只留颜色 */
+@media (prefers-reduced-motion: reduce) {
+  @scope ([data-theme='yuye']) to ([data-theme]) {
+    [data-nt-part='option'],
+    [data-nt-part='marker'] {
+      transition: none;
+    }
+  }
+}

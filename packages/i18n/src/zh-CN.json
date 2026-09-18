@@ -126,7 +126,13 @@
     "previewLine": "门轴吱呀一声，风里带着雪。",
     "previewQuote": "「坐下罢。」",
     "previewUser": "我把斗篷挂在门边。",
-    "previewUserName": "旅人"
+    "previewUserName": "旅人",
+    "reading": "正文",
+    "readingHint": "预设与角色卡怎么在这个世界里落到纸上。换主题时这两项跟着换一副样子。",
+    "richBlocks": "主题美化",
+    "richBlocksHint": "认出预设输出里的状态栏、思考、选项、摘要，按当前世界的材质呈现。原文不动。",
+    "cardHtml": "卡自带的前端",
+    "cardHtmlHint": "渲染角色卡 / 世界书 / 预设的正则吐出来的 HTML。脚本不执行，样式只作用于该条消息。"
   },
   "library": {
     "characters": {
@@ -524,6 +530,15 @@
         "cacheWrite": "缓存写入",
         "reasoning": "推理"
       }
+    },
+    "blocks": {
+      "think": "思考",
+      "status": "状态",
+      "ooc": "场外",
+      "options": "选项",
+      "summary": "摘要",
+      "aside": "旁白",
+      "data": "变量更新"
     }
   },
   "lightbox": {

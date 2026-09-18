@@ -9,6 +9,9 @@
  * 对白是全墨 0.15、叙述是 0.38，靠明度区分，不着色；动画只做透明度，120ms。
  */
 
+/* 正文块（data-nt-block）的皮肤：结构见 themes/README.md §10 */
+@import './blocks.css';
+
 [data-theme='su'][data-mode='light'] {
   /* 表面：一律不填。面板、输入框、卡片、头像都与 canvas 同色，只靠 1px 线成形 */
   --canvas: oklch(0.99 0 0);

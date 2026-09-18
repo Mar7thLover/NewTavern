@@ -38,6 +38,11 @@ const VENDOR_CHUNKS: { name: string; test: (pkg: string) => boolean }[] = [
         'longest-streak',
         'markdown-table',
         'parse-entities',
+        // rehype-raw 走 parse5 真解析一遍原生 HTML（正文块与卡自带前端）
+        'parse5',
+        'entities',
+        'web-namespaces',
+        'html-void-elements',
         'property-information',
         'stringify-entities',
         'style-to-js',

@@ -37,6 +37,10 @@ export function AppearanceSettings() {
   const setThemeId = useUiStore((s) => s.setThemeId);
   const setMode = useUiStore((s) => s.setMode);
   const setThemeOption = useUiStore((s) => s.setThemeOption);
+  const richBlocks = useUiStore((s) => s.richBlocks);
+  const cardHtml = useUiStore((s) => s.cardHtml);
+  const setRichBlocks = useUiStore((s) => s.setRichBlocks);
+  const setCardHtml = useUiStore((s) => s.setCardHtml);
 
   // 预览卡要真实渲染，所以把所有主题的 CSS 都预热一遍
   useEffect(() => {
@@ -91,6 +95,23 @@ export function AppearanceSettings() {
           </div>
         </SettingsSection>
       )}
+
+      <SettingsSection title={t('appearance.reading')} hint={t('appearance.readingHint')}>
+        <div className="divide-y divide-edge">
+          <SwitchRow
+            title={t('appearance.richBlocks')}
+            hint={t('appearance.richBlocksHint')}
+            checked={richBlocks}
+            onChange={setRichBlocks}
+          />
+          <SwitchRow
+            title={t('appearance.cardHtml')}
+            hint={t('appearance.cardHtmlHint')}
+            checked={cardHtml}
+            onChange={setCardHtml}
+          />
+        </div>
+      </SettingsSection>
 
       {current && currentOptions.length > 0 && (
         <SettingsSection title={t('appearance.options')} hint={t('appearance.optionsHint')}>

@@ -126,7 +126,13 @@
     "previewLine": "The door creaks; the wind carries snow. ",
     "previewQuote": "“Sit down.”",
     "previewUser": "I hang my cloak by the door.",
-    "previewUserName": "Traveller"
+    "previewUserName": "Traveller",
+    "reading": "Story text",
+    "readingHint": "How presets and cards land on the page in this world. Both follow the theme you live in.",
+    "richBlocks": "Theme styling",
+    "richBlocksHint": "Recognises status bars, thinking, choices and summaries in what the model writes, and renders them in the material of this world. The stored text never changes.",
+    "cardHtml": "Front-ends from cards",
+    "cardHtmlHint": "Renders the HTML a character card, lorebook or preset produces through its own regex. Scripts never run; styles reach only that one message."
   },
   "library": {
     "characters": {
@@ -524,6 +530,15 @@
         "cacheWrite": "Cache write",
         "reasoning": "Reasoning"
       }
+    },
+    "blocks": {
+      "think": "Thinking",
+      "status": "Status",
+      "ooc": "Aside to you",
+      "options": "Choices",
+      "summary": "Summary",
+      "aside": "Narration",
+      "data": "Variables"
     }
   },
   "lightbox": {

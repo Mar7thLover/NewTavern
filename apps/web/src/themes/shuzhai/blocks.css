@@ -1,0 +1,154 @@
+/**
+ * 书斋 · Shuzhai —— 正文块（themes/README.md §10）。
+ *
+ * 状态栏是夹在书里的一页**笺**：外粗内细的双线框，题头盖一枚小小的朱砂印。
+ * 数值不是进度条，是一把**竹尺**：竹色的尺身，朱砂的刻痕。
+ *
+ * 铁律同 theme.css：没有玻璃、模糊、发光、彩色渐变；圆角不过 3px；故事字是宋体。
+ */
+
+@scope ([data-theme='shuzhai']) to ([data-theme]) {
+  /*
+   * 双线框：外线用 --edge-strong（粗一档的墨），里面再用 box-shadow 描一条细线。
+   * 层级靠纸的叠放，不靠阴影。
+   */
+  [data-nt-block='status'],
+  [data-nt-block='options'],
+  [data-nt-block='summary'],
+  [data-nt-block='data'] {
+    padding: 0.7rem 0.9rem;
+    border: 1px solid var(--edge-strong);
+    border-radius: 0;
+    background-color: var(--control);
+    box-shadow:
+      inset 0 0 0 1px var(--canvas),
+      inset 0 0 0 2px var(--sz-sheet-edge);
+  }
+
+  /* 题头：一枚朱砂小印 + 楷体的标签，不拉字距（中文不靠字距装饰） */
+  [data-nt-block] > [data-nt-part='title'] {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    /* 用 --accent 而不是 --sz-seal：烛夜下印泥色压到 0.52，当字用太暗（实测对比度 2.6） */
+    color: var(--accent);
+    font-family: var(--font-display);
+    font-size: 0.78em;
+    font-weight: 400;
+    letter-spacing: 0.04em;
+  }
+
+  [data-nt-block] > [data-nt-part='title']::before {
+    content: '';
+    flex: none;
+    width: 0.5em;
+    height: 0.5em;
+    border-radius: 1px;
+    background-color: var(--sz-seal);
+    /* 印泥不匀 */
+    box-shadow: inset -0.5px -0.5px 0 var(--sz-seal-deep);
+  }
+
+  /* 旁支是**眉批**：正文右侧退一格，左边一条墨线，字用淡墨的宋体 */
+  [data-nt-block='think'],
+  [data-nt-block='ooc']:not([data-nt-inline]),
+  [data-nt-block='aside'] {
+    padding-inline-start: 1em;
+    border-inline-start: 1px solid var(--edge-strong);
+    color: var(--ink-2);
+    font-size: 0.92em;
+    line-height: 1.85;
+  }
+
+  /* 摘要是一段「提要」：字略小，段首照旧缩两格 */
+  [data-nt-block='summary'] [data-nt-part='body'] > p {
+    text-indent: 2em;
+    margin-block: 0;
+  }
+
+  /* 状态栏的行：一行一格，格与格之间一根淡墨线 */
+  [data-nt-block='status'] > [data-nt-part='rows'] {
+    gap: 0 2rem;
+  }
+
+  [data-nt-block='status'] [data-nt-part='row'] {
+    padding-block: 0.1rem;
+    border-block-end: 1px solid var(--edge);
+    font-family: var(--font-story);
+    font-size: 0.82em;
+    line-height: 2;
+  }
+
+  [data-nt-block='status'] [data-nt-part='row']:last-child {
+    border-block-end: 0;
+  }
+
+  [data-nt-part='value'] {
+    color: var(--ink);
+    /* 旧式数字：账簿上的数就该长这样 */
+    font-variant-numeric: oldstyle-nums;
+  }
+
+  /* 竹尺：竹身一条，两端封边，朱砂走到哪里就是刻到哪里 */
+  [data-nt-part='meter'] {
+    width: 4.5rem;
+    height: 7px;
+    border: 1px solid var(--sz-bamboo-edge);
+    border-radius: 1px;
+    background-color: var(--sz-bamboo);
+  }
+
+  [data-nt-part='meter-fill'] {
+    background-color: var(--sz-seal);
+  }
+
+  /* 选项是**签**：朱砂的序号写在竹签上，一条一条排下去 */
+  [data-nt-part='option'] {
+    align-items: center;
+    gap: 0.65rem;
+    padding-block: 0.28rem;
+  }
+
+  [data-nt-part='marker'] {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.35rem;
+    padding-block: 0.1rem;
+    border: 1px solid var(--sz-bamboo-edge);
+    border-radius: 1px;
+    background-color: var(--sz-bamboo);
+    color: var(--sz-bamboo-ink);
+    font-family: var(--font-display);
+    font-size: 0.74em;
+    font-variant-numeric: oldstyle-nums;
+  }
+
+  [data-nt-part='option']:hover [data-nt-part='marker'] {
+    background-color: var(--sz-seal);
+    border-color: var(--sz-seal-deep);
+    color: var(--sz-seal-ink);
+  }
+
+  /* 行内场外话：淡墨的夹注，用书里的六角括号 */
+  [data-nt-block='ooc'][data-nt-inline] {
+    color: var(--ink-3);
+  }
+
+  [data-nt-block='ooc'][data-nt-inline]::before {
+    content: '〔';
+  }
+
+  [data-nt-block='ooc'][data-nt-inline]::after {
+    content: '〕';
+  }
+
+  /* 变量更新：抄录的一段，等宽，不填底 */
+  [data-nt-block='data'] > pre[data-nt-part='body'] {
+    border: 0;
+    border-block-start: 1px solid var(--edge);
+    border-radius: 0;
+    padding: 0.5rem 0 0;
+    color: var(--ink-2);
+  }
+}

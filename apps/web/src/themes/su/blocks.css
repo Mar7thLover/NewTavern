@@ -1,0 +1,94 @@
+/**
+ * 素 · Su —— 正文块（themes/README.md §10）。
+ *
+ * 这个世界里的状态栏不是一个「面板」，是一张表。没有框、没有底、没有圆角，
+ * 全部的形来自对齐、留白与一根 1px 的线；唯一的色是国际橙，只标当前与数值。
+ *
+ * 铁律同 theme.css：无填充块、无阴影、无渐变、无圆角超过 6px、动画只做透明度。
+ */
+
+@scope ([data-theme='su']) to ([data-theme]) {
+  /*
+   * 记号：小标题后面拖一根发丝线一直到行末。
+   * 这是「素」认字不认物的办法——标题不是装饰，是一条分栏线的起点。
+   */
+  [data-nt-block] > [data-nt-part='title'] {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-size: 0.7em;
+    letter-spacing: 0.14em;
+    color: var(--ink-3);
+  }
+
+  [data-nt-block] > [data-nt-part='title']::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background-color: var(--edge);
+  }
+
+  /* 旁支不加框，只退到 0.50 的灰，左边一根线 */
+  [data-nt-block='think'],
+  [data-nt-block='ooc']:not([data-nt-inline]),
+  [data-nt-block='aside'],
+  [data-nt-block='summary'] {
+    padding-inline-start: 1rem;
+    border-inline-start: 1px solid var(--edge);
+  }
+
+  /* 状态栏：两列的表，键左值右，数字 tabular，一行一行读下去 */
+  [data-nt-block='status'] > [data-nt-part='rows'] {
+    gap: 0 2.5rem;
+  }
+
+  [data-nt-block='status'] [data-nt-part='row'] {
+    /* 每行之间靠一根发丝线分开——比留白更省地方，也更像排印 */
+    border-block-end: 1px solid var(--edge);
+    padding-block: 0.15rem;
+  }
+
+  [data-nt-block='status'] [data-nt-part='row']:last-child {
+    border-block-end: 0;
+  }
+
+  /* 数值条就是那根线的一段变成橙的：没有轨道，没有圆角 */
+  [data-nt-part='meter'] {
+    width: 3.5rem;
+    height: 1px;
+    background-color: var(--edge-strong);
+  }
+
+  [data-nt-part='meter-fill'] {
+    background-color: var(--accent);
+  }
+
+  /* 选项：序号是 tabular 的小字，正文对齐到同一根基线；悬停时整行变橙 */
+  [data-nt-part='option'] {
+    padding-block: 0.3rem;
+    transition: color var(--dur-hover) var(--ease);
+  }
+
+  [data-nt-part='marker'] {
+    min-width: 1.5em;
+    color: var(--ink-3);
+    letter-spacing: 0.04em;
+  }
+
+  [data-nt-part='option']:hover [data-nt-part='marker'] {
+    color: var(--accent);
+  }
+
+  /* 行内场外话：不加括号装饰，只降明度——素不靠符号说话 */
+  [data-nt-block='ooc'][data-nt-inline] {
+    color: var(--ink-3);
+  }
+
+  /* 变量更新：一行小字加一根线，展开后是等宽的原文，不填底 */
+  [data-nt-block='data'] > pre[data-nt-part='body'] {
+    border: 0;
+    border-inline-start: 1px solid var(--edge);
+    border-radius: 0;
+    padding: 0 0 0 1rem;
+  }
+}

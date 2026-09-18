@@ -1,0 +1,165 @@
+/**
+ * 暖房 · Nuanfang —— 正文块（themes/README.md §10）。
+ *
+ * 状态栏是桌上的一张**便签**：薄荷奶昔的底、大圆角、软软的影，没有一根线。
+ * 数值是**软糖条**：杏子到草莓的渐变，顶上一道糖衣的高光，胶囊形。
+ *
+ * 铁律同 theme.css：没有黑色、没有锐角、没有细线、没有冷灰；这个世界就是要甜。
+ */
+
+@scope ([data-theme='nuanfang']) to ([data-theme]) {
+  /* 便签：色块 + 软影成形，不用线 */
+  [data-nt-block='status'],
+  [data-nt-block='options'],
+  [data-nt-block='summary'],
+  [data-nt-block='data'] {
+    padding: 0.85rem 1rem;
+    border: 0;
+    border-radius: var(--r-panel);
+    box-shadow: var(--nf-soft-sm);
+  }
+
+  /* 按用途固定的底色，不随机：状态是薄荷，选项是杏子，摘要与变量是奶油 */
+  [data-nt-block='status'] {
+    background-color: var(--nf-mint-panel);
+  }
+
+  [data-nt-block='options'] {
+    background-color: var(--nf-apricot);
+  }
+
+  [data-nt-block='summary'],
+  [data-nt-block='data'] {
+    background-color: var(--nf-cream-deep);
+  }
+
+  /* 题头：圆体、略大、不拉字距——甜的东西不需要克制的字距 */
+  [data-nt-block] > [data-nt-part='title'] {
+    font-family: var(--font-ui);
+    font-size: 0.76em;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--nf-caramel);
+  }
+
+  [data-nt-block='status'] > [data-nt-part='title'] {
+    color: var(--nf-mint-text);
+  }
+
+  /* 奶油底上的焦糖只有 4.1：摘要与变量的题头改用正文墨 */
+  [data-nt-block='summary'] > [data-nt-part='title'],
+  [data-nt-block='data'] > [data-nt-part='title'] {
+    color: var(--ink);
+  }
+
+  /*
+   * 思考 / 场外 / 旁白：不是线，是一块更浅的软垫——这个世界里没有细线。
+   */
+  [data-nt-block='think'],
+  [data-nt-block='ooc']:not([data-nt-inline]),
+  [data-nt-block='aside'] {
+    padding: 0.7rem 0.9rem;
+    border-inline-start: 0;
+    border-radius: var(--r-card);
+    background-color: var(--nf-butter);
+    color: var(--ink-2);
+  }
+
+  [data-nt-block='aside'] {
+    background-color: var(--nf-mint-soft);
+  }
+
+  [data-nt-block='status'] > [data-nt-part='rows'] {
+    gap: 0.25rem 1.5rem;
+  }
+
+  [data-nt-block='status'] [data-nt-part='row'] {
+    font-size: 0.82em;
+    line-height: 1.8;
+  }
+
+  [data-nt-part='key'] {
+    color: var(--nf-mint-text);
+  }
+
+  [data-nt-part='value'] {
+    /* 焦糖压在薄荷底上只有 4.3，数值是要读的，退回软褐的正文墨 */
+    color: var(--ink);
+    font-weight: 600;
+  }
+
+  /* 软糖条：胶囊、渐变、顶上一道糖衣的高光 */
+  [data-nt-part='meter'] {
+    width: 4.5rem;
+    height: 10px;
+    border-radius: var(--r-pill);
+    background-color: var(--nf-milk);
+  }
+
+  [data-nt-part='meter-fill'] {
+    border-radius: var(--r-pill);
+    background: linear-gradient(90deg, var(--nf-apricot-jelly), var(--nf-berry));
+    box-shadow: inset 0 2px 0 oklch(1 0 0 / 0.45);
+  }
+
+  /* 选项：一颗小豆子 + 一行字；指过去整条软软地抬起来一点 */
+  [data-nt-part='option'] {
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.4rem 0.6rem;
+    margin-inline: -0.6rem;
+    border-radius: var(--r-card);
+    transition:
+      background-color var(--dur-hover) var(--ease),
+      transform var(--dur-press) var(--ease);
+  }
+
+  [data-nt-part='option']:hover {
+    background-color: var(--nf-milk);
+    transform: translateY(-1px);
+  }
+
+  [data-nt-part='marker'] {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.5rem;
+    height: 1.5rem;
+    border-radius: var(--r-pill);
+    background: linear-gradient(180deg, var(--nf-apricot-soft), var(--nf-apricot-jelly));
+    box-shadow: inset 0 2px 0 oklch(1 0 0 / 0.5);
+    color: var(--nf-caramel);
+    font-size: 0.72em;
+    font-weight: 700;
+  }
+
+  [data-nt-part='option']:hover [data-nt-part='marker'] {
+    background: linear-gradient(180deg, var(--nf-berry-milk), var(--nf-berry));
+    color: var(--ink-on-primary);
+  }
+
+  /* 行内场外话：草莓色的小字，括号也软 */
+  [data-nt-block='ooc'][data-nt-inline] {
+    color: var(--nf-berry-deep);
+  }
+
+  /* 变量更新：奶油底上的一小块，等宽字也不冷 */
+  [data-nt-block='data'] > pre[data-nt-part='body'] {
+    border: 0;
+    border-radius: var(--r-card);
+    background-color: var(--nf-milk);
+    color: var(--nf-caramel);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  @scope ([data-theme='nuanfang']) to ([data-theme]) {
+    [data-nt-part='option'] {
+      transition: none;
+    }
+
+    [data-nt-part='option']:hover {
+      transform: none;
+    }
+  }
+}

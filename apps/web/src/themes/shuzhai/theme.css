@@ -12,6 +12,9 @@
  *  - 动画几乎没有：纸展开只做透明度 240ms；笔尖光标不闪；唯一的位移是盖章那 1px。
  */
 
+/* 正文块（data-nt-block）的皮肤：结构见 themes/README.md §10 */
+@import './blocks.css';
+
 /* 旧式数字：只替换 0–9 这十个字形（Georgia 系的数字天生是旧式），其余字仍走宋体 */
 @font-face {
   font-family: 'Shuzhai Figures';

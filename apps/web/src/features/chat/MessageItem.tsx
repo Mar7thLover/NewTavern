@@ -1,3 +1,4 @@
+import { htmlScopeId } from '@newtavern/core';
 import { motion } from 'framer-motion';
 import { Check, Copy, Pencil, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -8,6 +9,7 @@ import { ReasoningBlock } from './ReasoningBlock';
 import { SwipeBar } from './SwipeBar';
 import { formatClock, siblingInfo } from './shared';
 import type { DisplayRegexFn } from './useDisplayRegex';
+import { useRichText } from './useRichText';
 import type { StreamBuffer } from '../../app/store/chat';
 import {
   AttachmentDocumentList,
@@ -132,14 +134,20 @@ export function MessageItem({
   const hasMedia = segments.some((segment) => segment.kind !== 'text');
   const lastTextKey = segments.findLast((segment) => segment.kind === 'text')?.key;
 
-  // 渲染用文本：套显示侧正则。流式过程中每帧都要算，用 useMemo 挡一下。
+  // 渲染用文本：先套显示侧正则，再做正文美化。流式过程中每帧都要算，用 useMemo 挡一下。
+  const rich = useRichText();
+  const richTransform = rich.transform;
   const displayTexts = useMemo(
     () =>
       segments.map((segment) =>
-        segment.kind === 'text' ? applyDisplayRegex(segment.text, node.role, depth) : '',
+        segment.kind === 'text'
+          ? richTransform(applyDisplayRegex(segment.text, node.role, depth))
+          : '',
       ),
-    [applyDisplayRegex, segments, node.role, depth],
+    [applyDisplayRegex, richTransform, segments, node.role, depth],
   );
+  /** 卡自带 `<style>` 的作用域名：一条消息一个，两条消息的 CSS 不会互相打架 */
+  const scopeId = useMemo(() => htmlScopeId(node.id), [node.id]);
 
   const openImage = (imageIndex: number) =>
     openLightbox(
@@ -275,6 +283,8 @@ export function MessageItem({
                         <Markdown
                           streaming={isStreamTarget}
                           cursor={<StreamingCursor kind="text" />}
+                          html={rich.html}
+                          scopeId={scopeId}
                         >
                           {display === '' ? ' ' : display}
                         </Markdown>

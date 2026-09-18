@@ -525,3 +525,96 @@ export interface ThemeOption {
 
 - §2.5 验收全套：1440 与 390 × 每种模式 × 对话 / 开始 / 外观 / 连接；400 字故事可读性特写（`[data-part='message'][data-index='2']`）；三件记忆物件特写。
 - 截图后用 Read 工具看图，逐条对照 DESIGN 你那一节与 §四；另外至少看一眼别的世界的预览卡没有被你的 CSS 染色（外观页，在你的主题下拍）。
+
+---
+
+## 10. 正文块（`data-nt-block`）
+
+预设让模型输出的「状态栏 / 思考 / 选项 / 摘要 / 旁白 / 场外话 / 变量更新」写法有几十种，
+但结构只有那么几种。`packages/core/src/richtext/blocks.ts` 负责**认出结构**（主题无关，只写一遍），
+改写成一套统一的语义标记；**长什么样全部由你决定**——写在 `themes/<id>/blocks.css`，
+在 `theme.css` 顶部 `@import './blocks.css';`（CSS 的 `@import` 必须排在所有规则之前）。
+
+铁律照旧：只用槽位与你自己的 `--<前缀>-*` 材质变量，元素规则写在
+`@scope ([data-theme='<id>']) to ([data-theme])` 里。
+
+### 10.1 语义类型
+
+| `data-nt-block` | 是什么               | 认什么                                                   |
+| --------------- | -------------------- | -------------------------------------------------------- |
+| `status`        | 状态栏 / 属性面板    | `<status>` `<状态栏>` `<属性栏>`…、独占一行的 `【状态】` |
+| `think`         | 正文里的思维链       | `<thinking>` `<think>` `<思考>` `<内心>`…                |
+| `options`       | 剧情选项             | `<options>` `<选项>`…、独占一行的 `【选项】`             |
+| `summary`       | 摘要 / 记忆          | `<summary>` `<摘要>` `<记忆>`…                           |
+| `aside`         | 旁白 / 场景          | `<aside>` `<旁白>`…                                      |
+| `ooc`           | 场外话               | `<ooc>` `<场外>`；以及行内的 `（OOC：…）`                |
+| `data`          | 变量更新（机器指令） | `<UpdateVariable>` `<variables>`…，默认折叠              |
+
+`ooc` 有两种形态：标签式是块，括号式带 `data-nt-inline`（夹在叙述中间的 `<span>`，
+默认由 `::before/::after` 补上一对括号——你可以换成自己世界的括号，书斋用的是 `〔〕`）。
+
+### 10.2 结构
+
+正文继续吃 Markdown 的类型（`think` / `ooc` / `aside` / `summary`）：
+
+```html
+<div data-nt-block="think">
+  <div data-nt-part="title">思考</div>
+  <div data-nt-part="body"><!-- 这里是 Markdown 渲染出来的段落 --></div>
+</div>
+```
+
+结构化的类型（内容由识别层自己排，不再过 Markdown）：
+
+```html
+<div data-nt-block="status">
+  <div data-nt-part="title">状态栏</div>
+  <div data-nt-part="rows">
+    <div data-nt-part="row">
+      <span data-nt-part="key">好感度</span>
+      <span data-nt-part="value" data-nt-meter style="--nt-meter:0.6000">
+        <span data-nt-part="meter"><span data-nt-part="meter-fill"></span></span>
+        <span data-nt-part="value-text">60/100</span>
+      </span>
+    </div>
+    <!-- 没有键的行（「外面下着雨」）带 data-nt-plain，默认横跨整行 -->
+  </div>
+</div>
+
+<div data-nt-block="options">
+  <div data-nt-part="title">选项</div>
+  <ol data-nt-part="body">
+    <li data-nt-part="option" data-nt-marker="1">
+      <span data-nt-part="marker">1</span>
+      <span data-nt-part="option-text">坐到她对面</span>
+    </li>
+  </ol>
+</div>
+
+<details data-nt-block="data">
+  <summary data-nt-part="title">变量更新</summary>
+  <pre data-nt-part="body">…原文…</pre>
+</details>
+```
+
+- `--nt-meter` 是 0–1 的比例，写在 `[data-nt-part='value']` 上；
+  `60/100`、`42%`、`★★★☆☆`、`▰▰▱▱` 都认得出，认不出就没有 `data-nt-meter`，也没有轨道元素。
+- **数值条是一小段独立轨道**（`meter` + `meter-fill`），别去算文字宽度：
+  素是 1px 的线、书斋是竹尺、酒馆是黄铜刻度、琉璃是冰棱、雨夜是水位、暖房是软糖条。
+- 骨架的默认形态在 `themes/blocks.css`（= 「素」：不填色、1px 线、靠留白成形），
+  和 `materials.css` 一样在 `@layer components` 里，你的 `@scope` 规则压得过它。
+
+### 10.3 卡自带的前端
+
+角色卡 / 世界书 / 预设的正则可以直接吐 HTML（社区叫「正则前端」）。渲染策略见
+`apps/web/src/features/chat/cardHtml.ts`：白名单净化 → `<style>` 的 CSS 用 `@scope`
+关进 `[data-nt-html="<消息 id>"]` → `<script>` 不执行。
+
+**这块不归主题管**：卡自己带样式，你的 `blocks.css` 不要去动 `.nt-md [data-nt-html] *`，
+那是卡作者的地盘。你只负责 `data-nt-block`。
+
+### 10.4 自检
+
+两个开关在设置 → 外观 →「正文」（`richBlocks` / `cardHtml`），默认都开。
+截图时按 §9 的办法，会话里放一条含状态栏 / 思考 / 选项 / 摘要 / 旁白 / 变量更新的助手消息，
+逐项对照 DESIGN 你那一节：**块的材质必须和你世界里的面板同源**，不能是另一个世界的做法。

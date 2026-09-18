@@ -3,6 +3,7 @@
 @source './themes';
 @import './themes/slots.css';
 @import './themes/materials.css';
+@import './themes/blocks.css';
 
 html {
   background-color: var(--canvas);
