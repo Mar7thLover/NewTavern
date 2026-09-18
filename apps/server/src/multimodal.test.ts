@@ -385,12 +385,14 @@ describe('组装前内联', () => {
       { type: 'text', text: '[paper.pdf]\nPDF-BODY\n\nq1' },
       { type: 'document', assetId: scanned.id, mime: 'application/pdf', name: 'scan.pdf' },
     ]);
-    // 没有抽取文本的 PDF 交给适配器按能力告警丢弃，告警进节点 extra.warnings
+    // 没有抽取文本的 PDF 原样交给适配器：不按目录能力丢弃，端点收不收由它自己说
     const done1 = (await send('vision-1', 'q1b')).at(-1)!;
     expect(done1.event).toBe('done');
-    expect((done1.data as { node: Node }).node.extra?.warnings).toContain(
+    expect((done1.data as { node: Node }).node.extra?.warnings ?? []).not.toContain(
       '模型不支持 PDF 输入，已丢弃 2 个 PDF',
     );
+    const sent = captured.at(-1)!.request.body as { messages: { content: unknown }[] };
+    expect(JSON.stringify(sent.messages.at(-1)?.content)).toContain('scan.pdf');
 
     await send('vision-doc', 'q2');
     const kept = lastUserSegment(captured.at(-1)!.ir);

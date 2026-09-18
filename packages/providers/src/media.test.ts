@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 
-import { loadCatalog } from './catalog.js';
 import {
   classifyDocumentMime,
   createMediaRenderer,
@@ -146,7 +145,6 @@ describe('媒体工具函数', () => {
   it('不支持的文档类型：丢弃并告警（不计入 PDF 汇总）', () => {
     const warnings: string[] = [];
     const renderer = createMediaRenderer({
-      caps: loadCatalog().defaults,
       label: 'X',
       warnings,
     });

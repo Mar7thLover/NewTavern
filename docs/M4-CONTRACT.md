@@ -431,3 +431,17 @@ export function treeToStChat(input: {
 7. **生图开关的默认值**由前端按连接的 provider 推断显示（`openai-responses` 默认关，其余 `caps.imageOut` 为真的默认开，与 §1.2 一致）；开关只写 boolean，不写 `null`。
 8. **设置页分区标题**：「存储」的导航文字用 `settings.storage.title`（不往 `settings.sections.*` 里加键，守 §0 的命名空间规则）。
 9. **[MSW→UX]** `MessageList.tsx` 的 `estimateMessageHeight` 只按文本估高，带图片的消息首次测量时位置修正会大一些（单图约 +330px、方格网格约 +200–400px）；建议按 `node.parts` 里的 image / document 数补一段估高。`MessageItem` 没有改 `MessageList` 的任何接口。
+
+### 修正（2026-09-17，主会话）
+
+1. **§3.1「caps.imageIn / documentIn 为 false 就丢弃媒体」作废**：能力目录必然滞后于新模型，也压不住网关上带前缀的 id——
+   真机上 `glm-5.3-flash` 明明能看图，却被 `catalog.json` 里 `{ match: 'glm-*', imageIn: false }` 一条整代通配判成不收图片，
+   用户附的图被静默丢掉，只在节点 `extra.warnings` 里留一句没人看的告警。改为：**用户附上的图片 / PDF 一律照发**，
+   收不收由提供商说了算（报错可见，好过自欺欺人）。`createMediaRenderer` 不再接 `caps`，
+   告警 `模型不支持图片输入，已丢弃 N 张图片` / `模型不支持 PDF 输入，已丢弃 N 个 PDF` 随之取消。
+   保留的丢弃只剩三类，都不是对模型能力的猜测：**角色形状**（OpenAI 的 assistant/system content 不接受 image_url、
+   Anthropic 顶层 system 只收文本、Gemini 的 systemInstruction 同理——放进去整条请求 400，连同这次的图片一起废掉）、
+   **资产读不到**、**mime 不是图片 / PDF / 文本**。目录里的 `imageIn` / `documentIn` 从此只用于 UI 提示。
+2. **§3.4 托盘提示**：「当前模型看不到图片，发送时会被丢弃」（`chat.attach.imageDropped`）与
+   「PDF 发送时会被丢弃」（`chat.attach.pdfDropped`）两条随之删除（两个 i18n 键一并删）。
+   只留 `pdfAsText`：`documentIn` 为 false 时服务端仍按 §3.3 把 PDF 抽出的文本内联进正文（内容不丢，只是换了形态），提示一句。

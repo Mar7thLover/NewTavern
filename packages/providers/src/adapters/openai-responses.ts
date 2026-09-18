@@ -192,7 +192,6 @@ function buildRequest(
     .join('\n\n');
 
   const media = createMediaRenderer({
-    caps,
     resolveAsset: opts?.resolveAsset,
     label: 'Responses',
     warnings,

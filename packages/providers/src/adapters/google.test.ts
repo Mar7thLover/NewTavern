@@ -741,7 +741,8 @@ describe('google 多模态', () => {
     expect(req.warnings).toBeUndefined();
   });
 
-  it('imageIn / documentIn 为 false：丢弃并汇总告警；只有媒体的 content 用零宽空格占位', () => {
+  // 能力目录只用来给 UI 提示，不决定丢不丢：连 modelOverrides 明说不支持也照发
+  it('模型能力标着不支持媒体也照样发，不告警', () => {
     const noMedia: Connection = {
       ...conn,
       modelOverrides: { [LEVEL_MODEL]: { imageIn: false, documentIn: false } },
@@ -749,18 +750,20 @@ describe('google 多模态', () => {
     const ir = makeIr([
       seg('h1', 'user', [
         { type: 'image', assetId: 'img1', mime: 'image/png' },
-        { type: 'image', assetId: 'img2', mime: 'image/png' },
         { type: 'document', assetId: 'doc1', mime: 'application/pdf' },
       ]),
     ]);
-    for (const opts of [{ resolveAsset }, undefined]) {
-      const req = googleAdapter.buildRequest(ir, noMedia, LEVEL_MODEL, opts);
-      expect((req.body as Body).contents).toEqual([{ role: 'user', parts: [{ text: '​' }] }]);
-      expect(req.warnings).toEqual([
-        '模型不支持图片输入，已丢弃 2 张图片',
-        '模型不支持 PDF 输入，已丢弃 1 个 PDF',
-      ]);
-    }
+    const req = googleAdapter.buildRequest(ir, noMedia, LEVEL_MODEL, { resolveAsset });
+    expect((req.body as Body).contents).toEqual([
+      {
+        role: 'user',
+        parts: [
+          { inlineData: { mimeType: 'image/png', data: PNG_B64 } },
+          { inlineData: { mimeType: 'application/pdf', data: PDF_B64 } },
+        ],
+      },
+    ]);
+    expect(req.warnings).toBeUndefined();
   });
 
   it('systemInstruction 只收文本：里面的图片丢弃并告警；找不到的资产丢弃并告警', () => {

@@ -704,7 +704,8 @@ describe('openai-responses 多模态', () => {
     expect(req.warnings).toBeUndefined();
   });
 
-  it('imageIn / documentIn 为 false（o3-mini）：图片与 PDF 全部丢弃并汇总告警', () => {
+  // 目录里 o3-mini 标着没有视觉：照发不误，端点拒绝就让它拒绝，不替用户做主
+  it('目录标不支持视觉的模型（o3-mini）照样发图片与 PDF，不告警', () => {
     const ir = plainIr([
       seg('h1', 'user', [
         { type: 'text', text: '读图读文档' },
@@ -713,11 +714,12 @@ describe('openai-responses 多模态', () => {
       ]),
     ]);
     const req = openaiResponsesAdapter.buildRequest(ir, conn, 'o3-mini', { resolveAsset });
-    expect(inputOf(req)[0]?.content).toEqual([{ type: 'input_text', text: '读图读文档' }]);
-    expect(req.warnings).toEqual([
-      '模型不支持图片输入，已丢弃 1 张图片',
-      '模型不支持 PDF 输入，已丢弃 1 个 PDF',
+    expect(inputOf(req)[0]?.content).toEqual([
+      { type: 'input_text', text: '读图读文档' },
+      { type: 'input_image', image_url: PNG_DATA_URL },
+      { type: 'input_file', filename: '设定集.pdf', file_data: PDF_DATA_URL },
     ]);
+    expect(req.warnings).toBeUndefined();
   });
 
   it('assistant 消息里的图片丢弃并告警；只剩图片的 assistant 消息整条不出现（Responses 允许相邻 user 项）', () => {

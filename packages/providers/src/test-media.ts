@@ -23,4 +23,6 @@ export function resolveAsset(assetId: string): ResolvedAsset | undefined {
 }
 
 export const PNG_DATA_URL = `data:image/png;base64,${PNG_B64}`;
+/** img2：mime 是 JPEG（字节仍用 PNG 头，测试只看 data URL 的拼法） */
+export const JPEG_DATA_URL = `data:image/jpeg;base64,${PNG_B64}`;
 export const PDF_DATA_URL = `data:application/pdf;base64,${PDF_B64}`;

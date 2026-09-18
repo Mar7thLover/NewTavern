@@ -178,8 +178,8 @@ interface TrayHint {
 }
 
 /**
- * 托盘下方的轻提示：失败项挡住发送时说一句；当前模型看不到图片 / 读不了 PDF 时说一句。
- * 能力未知（没有连接、目录里查不到）时不猜。
+ * 托盘下方的轻提示：失败项挡住发送时说一句；PDF 会被换成抽取的文本时说一句。
+ * 图片与 PDF 一律照发（能力目录不决定丢不丢，见 providers/media.ts），所以没有「会被丢弃」这类提示。
  */
 function trayHints(tray: TrayState, caps: ModelCapabilities | undefined, t: TFunction): TrayHint[] {
   const hints: TrayHint[] = [];
@@ -206,21 +206,11 @@ function trayHints(tray: TrayState, caps: ModelCapabilities | undefined, t: TFun
   }
   if (!caps) return hints;
 
-  const live = tray.items.filter((item) => item.status !== 'error');
-  if (caps.imageIn === false && live.some((item) => item.kind === 'image')) {
-    hints.push({ key: 'image', text: t('chat.attach.imageDropped'), tone: 'muted' });
-  }
-  const pdfs = live.filter((item) => item.kind === 'pdf');
+  // documentIn 为 false 时服务端会把抽出的文本内联进正文（media-inline.ts），提示一句免得意外
+  const pdfs = tray.items.filter((item) => item.status === 'done' && item.kind === 'pdf');
   if (caps.documentIn === false && pdfs.length > 0) {
-    // 还没传完的 PDF 不知道有没有文字，等它传完再下结论
-    const settled = pdfs.filter((item) => item.status === 'done');
-    if (settled.length > 0) {
-      const allText = settled.every((item) => (item.asset?.textLength ?? 0) > 0);
-      hints.push({
-        key: 'pdf',
-        text: allText ? t('chat.attach.pdfAsText') : t('chat.attach.pdfDropped'),
-        tone: 'muted',
-      });
+    if (pdfs.every((item) => (item.asset?.textLength ?? 0) > 0)) {
+      hints.push({ key: 'pdf', text: t('chat.attach.pdfAsText'), tone: 'muted' });
     }
   }
   return hints;

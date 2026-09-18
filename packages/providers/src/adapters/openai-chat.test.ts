@@ -2,7 +2,14 @@ import type { Part, PromptIR, Role, Segment } from '@newtavern/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { HttpError } from '../http.js';
-import { PDF_DATA_URL, PNG_B64, PNG_DATA_URL, resolveAsset, TXT_CONTENT } from '../test-media.js';
+import {
+  JPEG_DATA_URL,
+  PDF_DATA_URL,
+  PNG_B64,
+  PNG_DATA_URL,
+  resolveAsset,
+  TXT_CONTENT,
+} from '../test-media.js';
 import type { Connection, GenEvent } from '../types.js';
 import { detectQuirks, openaiChatAdapter } from './openai-chat.js';
 
@@ -50,6 +57,63 @@ const conn: Connection = {
   baseUrl: 'https://api.openai.com/v1/',
   apiKey: 'sk-test',
 };
+
+describe('Claude Code bridge thinking controls', () => {
+  const bridge: Connection = {
+    ...conn,
+    baseUrl: 'http://127.0.0.1:8788/v1',
+    quirks: { claudeCodeThinking: true, thinkingToggle: true },
+    modelOverrides: {
+      sonnet: {
+        thinking: 'effort',
+        effortLevels: ['low', 'medium', 'high', 'xhigh', 'max'],
+        canDisableThinking: true,
+      },
+      haiku: { thinking: 'budget', canDisableThinking: true },
+      fable: {
+        thinking: 'effort',
+        effortLevels: ['low', 'medium', 'high', 'xhigh', 'max'],
+        canDisableThinking: false,
+      },
+    },
+  };
+  it('preserves the preset max effort for the bridge only', () => {
+    const ir = makeIr([text('u', 'user', 'hi')], { sampling: { reasoningEffort: 'max' } });
+    expect(openaiChatAdapter.buildRequest(ir, bridge, 'sonnet').body).toMatchObject({
+      reasoning_effort: 'max',
+    });
+    expect(
+      openaiChatAdapter.buildRequest(ir, { ...bridge, quirks: {} }, 'sonnet').body,
+    ).toMatchObject({ reasoning_effort: 'high' });
+  });
+  it('transmits xhigh, thinking off, and Haiku budget controls', () => {
+    const ir = makeIr([text('u', 'user', 'hi')]);
+    expect(
+      openaiChatAdapter.buildRequest(ir, bridge, 'sonnet', { thinking: { effort: 'xhigh' } }).body,
+    ).toMatchObject({ reasoning_effort: 'xhigh' });
+    expect(
+      openaiChatAdapter.buildRequest(ir, bridge, 'sonnet', { thinking: { enabled: false } }).body,
+    ).toMatchObject({ thinking: { type: 'disabled' } });
+    expect(
+      openaiChatAdapter.buildRequest(ir, bridge, 'haiku', { thinking: { budgetTokens: 2048 } })
+        .body,
+    ).toMatchObject({ thinking: { type: 'enabled', budget_tokens: 2048 } });
+    const ordinary = openaiChatAdapter.buildRequest(ir, { ...bridge, quirks: {} }, 'haiku', {
+      thinking: { budgetTokens: 2048 },
+    });
+    expect(ordinary.body).not.toHaveProperty('thinking');
+    expect(ordinary.warnings).toContain(
+      'OpenAI Chat 用 reasoning_effort 档位控制推理，budgetTokens 已丢弃',
+    );
+  });
+  it('does not emit unsupported thinking-off for Fable', () => {
+    const req = openaiChatAdapter.buildRequest(makeIr([text('u', 'user', 'hi')]), bridge, 'fable', {
+      thinking: { enabled: false },
+    });
+    expect(req.body).not.toHaveProperty('thinking');
+    expect(req.warnings).toContain('模型 fable 不支持关闭推理，已按默认处理');
+  });
+});
 
 function sseResponse(body: string, status = 200): Response {
   return new Response(body, {
@@ -528,7 +592,9 @@ describe('openai-chat 多模态', () => {
     expect(req.warnings).toBeUndefined();
   });
 
-  it('imageIn=false：丢弃全部图片并汇总告警（有无 resolver 都一样）', () => {
+  // 目录说「不支持图片」也照发：能力目录必然滞后于新模型（glm-5.3-flash 就被 `glm-*` 一条通配
+  // 判成不收图片），宁可让提供商报错，也不悄悄把用户附上的图片吞掉
+  it('目录标 imageIn=false 的模型照样发图片，不告警（有无 resolver 都一样）', () => {
     const ir = plainIr([
       seg('h1', 'user', [
         { type: 'text', text: '两张图' },
@@ -536,14 +602,26 @@ describe('openai-chat 多模态', () => {
         { type: 'image', assetId: 'img2', mime: 'image/jpeg' },
       ]),
     ]);
-    for (const opts of [{ resolveAsset }, undefined]) {
-      const req = openaiChatAdapter.buildRequest(ir, deepseek, 'deepseek-chat', opts);
-      expect(messagesOf(req)[0]?.content).toBe('两张图');
-      expect(req.warnings).toEqual(['模型不支持图片输入，已丢弃 2 张图片']);
-    }
+    const withResolver = openaiChatAdapter.buildRequest(ir, deepseek, 'deepseek-chat', {
+      resolveAsset,
+    });
+    expect(messagesOf(withResolver)[0]?.content).toEqual([
+      { type: 'text', text: '两张图' },
+      { type: 'image_url', image_url: { url: PNG_DATA_URL } },
+      { type: 'image_url', image_url: { url: JPEG_DATA_URL } },
+    ]);
+    expect(withResolver.warnings).toBeUndefined();
+
+    const preview = openaiChatAdapter.buildRequest(ir, deepseek, 'deepseek-chat');
+    expect(messagesOf(preview)[0]?.content).toEqual([
+      { type: 'text', text: '两张图' },
+      { type: 'image_url', image_url: { url: 'asset:img1' } },
+      { type: 'image_url', image_url: { url: 'asset:img2' } },
+    ]);
+    expect(preview.warnings).toBeUndefined();
   });
 
-  it('documentIn=false：PDF 丢弃并告警（未登记模型默认不收 file part）', () => {
+  it('目录没登记的模型照样发 PDF（file part），不告警', () => {
     const ir = plainIr([
       seg('h1', 'user', [
         { type: 'text', text: '读一下' },
@@ -553,8 +631,11 @@ describe('openai-chat 多模态', () => {
     const req = openaiChatAdapter.buildRequest(ir, openrouter, 'some/unknown-model', {
       resolveAsset,
     });
-    expect(messagesOf(req)[0]?.content).toBe('读一下');
-    expect(req.warnings).toEqual(['模型不支持 PDF 输入，已丢弃 1 个 PDF']);
+    expect(messagesOf(req)[0]?.content).toEqual([
+      { type: 'text', text: '读一下' },
+      { type: 'file', file: { filename: '设定集.pdf', file_data: PDF_DATA_URL } },
+    ]);
+    expect(req.warnings).toBeUndefined();
   });
 
   it('assistant / system 消息里的图片丢弃并按角色告警（接口不接受）', () => {

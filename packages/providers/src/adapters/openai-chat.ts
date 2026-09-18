@@ -182,7 +182,6 @@ function buildRequest(
   }
 
   const media = createMediaRenderer({
-    caps,
     resolveAsset: opts?.resolveAsset,
     label: 'OpenAI Chat',
     warnings,
@@ -222,7 +221,13 @@ function buildRequest(
   // 推理控制：会话覆盖 > IR 扩展 > 预设 reasoning_effort（见 thinking.ts）
   const resolved = resolveThinking(ir, opts);
   const thinkingOpt: ThinkingOptions = resolved.stEffort
-    ? { effort: stEffortToOpenAI(resolved.stEffort, model) }
+    ? {
+        effort: quirks.claudeCodeThinking
+          ? resolved.stEffort === 'min'
+            ? 'low'
+            : resolved.stEffort
+          : stEffortToOpenAI(resolved.stEffort, model),
+      }
     : resolved.thinking;
   const sendsEffort = caps.thinking === 'effort' && quirks.reasoningEffort !== false;
   if (thinkingOpt.enabled === false) {
@@ -250,7 +255,13 @@ function buildRequest(
     }
   }
   if (thinkingOpt.budgetTokens !== undefined && thinkingOpt.enabled !== false) {
-    warnings.push('OpenAI Chat 用 reasoning_effort 档位控制推理，budgetTokens 已丢弃');
+    if (quirks.claudeCodeThinking && caps.thinking === 'budget') {
+      body.thinking = { type: 'enabled', budget_tokens: thinkingOpt.budgetTokens };
+    } else {
+      warnings.push('OpenAI Chat 用 reasoning_effort 档位控制推理，budgetTokens 已丢弃');
+    }
+  } else if (quirks.claudeCodeThinking && thinkingOpt.enabled === true) {
+    body.thinking = { type: 'enabled' };
   }
 
   const headers: Record<string, string> = {

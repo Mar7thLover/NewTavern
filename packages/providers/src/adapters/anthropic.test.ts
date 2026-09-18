@@ -752,7 +752,8 @@ describe('anthropic 多模态', () => {
     expect(req.warnings).toBeUndefined();
   });
 
-  it('imageIn / documentIn 为 false（GLM 兼容端点）：丢弃并汇总告警；只有媒体的消息用零宽空格占位', () => {
+  // 目录标着不收图片的模型（`glm-*` 这类整代通配）照样发：收不收由端点说了算
+  it('目录标 imageIn / documentIn 为 false 的模型照样发媒体，不告警', () => {
     const ir = makeIr([
       seg('h1', 'user', [
         { type: 'image', assetId: 'img1', mime: 'image/png' },
@@ -760,11 +761,19 @@ describe('anthropic 多模态', () => {
       ]),
     ]);
     const { req, body: b } = body(ir, 'glm-5.3-flash', { resolveAsset });
-    expect(b.messages).toEqual([{ role: 'user', content: [{ type: 'text', text: '​' }] }]);
-    expect(req.warnings).toEqual([
-      '模型不支持图片输入，已丢弃 1 张图片',
-      '模型不支持 PDF 输入，已丢弃 1 个 PDF',
+    expect(b.messages).toEqual([
+      {
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'base64', media_type: 'image/png', data: PNG_B64 } },
+          {
+            type: 'document',
+            source: { type: 'base64', media_type: 'application/pdf', data: PDF_B64 },
+          },
+        ],
+      },
     ]);
+    expect(req.warnings).toBeUndefined();
   });
 
   it('assistant 与顶层 system 里的媒体丢弃并按角色告警', () => {

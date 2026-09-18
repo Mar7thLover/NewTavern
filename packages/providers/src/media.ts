@@ -5,10 +5,11 @@ import type { BuildOptions, ModelCapabilities, ResolvedAsset } from './types.js'
 /**
  * 多模态（image / document part）渲染的共用逻辑与请求体脱敏。见 docs/M4-CONTRACT.md §3.1 / §3.2。
  *
- * 各适配器只关心「这一块最终长什么样」，丢弃规则（能力、角色、资产缺失）与告警文案统一在这里：
- * - caps.imageIn 为 false：丢弃全部图片，汇总告警「模型不支持图片输入，已丢弃 N 张图片」；
- * - caps.documentIn 为 false：丢弃全部 PDF，汇总告警；
- * - 该角色的消息不接受媒体（例如 OpenAI 的 assistant 消息）：丢弃并按角色汇总告警；
+ * 各适配器只关心「这一块最终长什么样」，丢弃规则（角色、资产缺失）与告警文案统一在这里：
+ * - **不按目录能力过滤**：用户附上的图片 / PDF 一律照发，模型收不收由提供商说了算（报错也比
+ *   悄悄丢掉强；目录里的 imageIn / documentIn 只用于 UI 提示，不再决定丢不丢）；
+ * - 该角色的消息不接受媒体（例如 OpenAI 的 assistant 消息）：丢弃并按角色汇总告警——
+ *   这是协议的硬约束（放进去整条请求 400，连同用户这次的图片一起废掉），不是对模型能力的猜测；
  * - 没有 resolver（检查器预览、黄金测试）：渲染为 `asset:<id>` 占位，不告警；
  * - resolver 返回 undefined：丢弃并告警「找不到资产 <id>」；
  * - 文本类文档本应由服务端组装前内联；万一到达，解码为文本块。
@@ -88,7 +89,6 @@ export interface MediaRoleContext {
 }
 
 export interface MediaRendererOptions {
-  caps: ModelCapabilities;
   resolveAsset?: BuildOptions['resolveAsset'];
   /** 适配器名，用于告警文案（「OpenAI Chat」「Anthropic」…） */
   label: string;
@@ -104,9 +104,7 @@ export interface MediaRenderer {
 }
 
 export function createMediaRenderer(opts: MediaRendererOptions): MediaRenderer {
-  const { caps, resolveAsset, label, warnings } = opts;
-  let imagesUnsupported = 0;
-  let pdfsUnsupported = 0;
+  const { resolveAsset, label, warnings } = opts;
   /** 角色 → 被拒的媒体数（保持首次出现顺序） */
   const roleDropped = new Map<string, number>();
 
@@ -125,10 +123,6 @@ export function createMediaRenderer(opts: MediaRendererOptions): MediaRenderer {
   }
 
   function renderImage(part: MediaPart, role: MediaRoleContext): RenderedMedia | undefined {
-    if (!caps.imageIn) {
-      imagesUnsupported += 1;
-      return undefined;
-    }
     if (!role.accepts) {
       rejectRole(role);
       return undefined;
@@ -164,10 +158,6 @@ export function createMediaRenderer(opts: MediaRendererOptions): MediaRenderer {
       warnings.push(`不支持的文档类型 ${part.mime}，已丢弃 ${part.assetId}`);
       return undefined;
     }
-    if (!caps.documentIn) {
-      pdfsUnsupported += 1;
-      return undefined;
-    }
     if (!role.accepts) {
       rejectRole(role);
       return undefined;
@@ -197,17 +187,9 @@ export function createMediaRenderer(opts: MediaRendererOptions): MediaRenderer {
       return part.type === 'image' ? renderImage(part, role) : renderDocument(part, role);
     },
     flush() {
-      if (imagesUnsupported > 0) {
-        warnings.push(`模型不支持图片输入，已丢弃 ${imagesUnsupported} 张图片`);
-      }
-      if (pdfsUnsupported > 0) {
-        warnings.push(`模型不支持 PDF 输入，已丢弃 ${pdfsUnsupported} 个 PDF`);
-      }
       for (const [role, count] of roleDropped) {
         warnings.push(`${label} 的 ${role} 消息不接受图片 / PDF，已丢弃 ${count} 个`);
       }
-      imagesUnsupported = 0;
-      pdfsUnsupported = 0;
       roleDropped.clear();
     },
   };

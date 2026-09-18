@@ -316,7 +316,6 @@ function buildRequest(
   if (tail && tail.role !== 'user') working.push(placeholder(CONTINUE_PLACEHOLDER));
 
   const media = createMediaRenderer({
-    caps,
     resolveAsset: opts?.resolveAsset,
     label: 'Gemini',
     warnings,

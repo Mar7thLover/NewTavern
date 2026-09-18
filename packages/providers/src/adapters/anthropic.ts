@@ -233,7 +233,6 @@ function buildRequest(
   }
 
   const media = createMediaRenderer({
-    caps,
     resolveAsset: opts?.resolveAsset,
     label: 'Anthropic',
     warnings,
