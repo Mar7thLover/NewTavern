@@ -168,14 +168,24 @@ const BRACKET_PATTERN = alternation(BRACKET_KIND.keys());
 const PROTECTED_RE =
   /```[\s\S]*?(?:```|$)|~~~[\s\S]*?(?:~~~|$)|`[^`\n]*`|<(pre|code|style|script)\b[\s\S]*?(?:<\/\1\s*>|$)/gi;
 
-function protectedRanges(text: string): [number, number][] {
+/**
+ * `<details>…</details>` 的范围。里面的 `<summary>` 是 HTML 原生的折叠标题
+ * （卡 / 预设自带的正则里遍地都是），不能当成我们的「摘要」块吃掉。
+ */
+const DETAILS_RE = /<details\b[\s\S]*?(?:<\/details\s*>|$)/gi;
+
+function matchRanges(text: string, re: RegExp): [number, number][] {
   const ranges: [number, number][] = [];
-  PROTECTED_RE.lastIndex = 0;
+  re.lastIndex = 0;
   let match: RegExpExecArray | null;
-  while ((match = PROTECTED_RE.exec(text)) !== null) {
+  while ((match = re.exec(text)) !== null) {
     ranges.push([match.index, match.index + match[0].length]);
   }
   return ranges;
+}
+
+function protectedRanges(text: string): [number, number][] {
+  return matchRanges(text, PROTECTED_RE);
 }
 
 function overlaps(ranges: readonly [number, number][], start: number, end: number): boolean {
@@ -395,6 +405,7 @@ function tagHits(
   // 用 `(?=[\s/>])` 而不是 `\b` 收尾：`\b` 看的是 [A-Za-z0-9_]，中文标签名后面根本没有词边界
   const re = new RegExp(`<(${TAG_PATTERN})(?=[\\s/>])([^>]*)>([\\s\\S]*?)(?:</\\1\\s*>|$)`, 'gi');
   const guard = protectedRanges(text);
+  const details = matchRanges(text, DETAILS_RE);
   const hits: Hit[] = [];
   let match: RegExpExecArray | null;
   while ((match = re.exec(text)) !== null) {
@@ -405,6 +416,8 @@ function tagHits(
     if (!kind || skip.has(kind)) continue;
     const end = match.index + match[0].length;
     if (overlaps(guard, match.index, end)) continue;
+    // `<details><summary>` 是原生折叠标题，交给 HTML 自己渲染
+    if (raw.toLowerCase() === 'summary' && overlaps(details, match.index, end)) continue;
     // 中文标签自带标题（`<状态栏>` → 状态栏）；英文标签走 i18n 默认名
     const explicit = /[^ -~]/.test(raw) ? raw : null;
     hits.push({

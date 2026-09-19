@@ -128,6 +128,40 @@ describe('卡自带的 HTML 前端', () => {
   });
 });
 
+describe('缩进排版过的 HTML（卡 / 预设自带的正则吐出来的那种）', () => {
+  /** 外层 div 里夹了空行，后面各层缩进 4 格以上——CommonMark 原本会整段当代码块 */
+  const nested = [
+    '<div style="margin:10px auto;">',
+    '    <div style="height:2px;"></div>',
+    '    ',
+    '    <details style="background:#1a1625;">',
+    '        <summary style="padding:12px;">',
+    '            <span style="color:#c084fc;">STORY SYNOPSIS</span>',
+    '        </summary>',
+    '        ',
+    '        <div style="padding:15px;">',
+    '            <span style="color:#e2e8f0;">海滨沙滩</span>',
+    '        </div>',
+    '    </details>',
+    '</div>',
+  ].join('\n');
+
+  it('照常渲染成 HTML，不会掉进代码块', () => {
+    const html = render(nested);
+    expect(html).not.toContain('<pre');
+    expect(html).not.toContain('&lt;div');
+    expect(html).toContain('<details');
+    expect(html).toContain('<summary');
+    expect(html).toContain('海滨沙滩');
+  });
+
+  it('围栏代码块照旧是代码块', () => {
+    const html = render('```\n<div>x</div>\n```');
+    expect(html).toContain('<pre');
+    expect(html).toContain('&lt;div');
+  });
+});
+
 describe('两个开关都关掉时', () => {
   it('HTML 照旧被转义，不解析', () => {
     const html = renderPlain('<div class="panel">x</div>');

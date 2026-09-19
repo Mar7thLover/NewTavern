@@ -160,6 +160,15 @@ describe('不该动的地方', () => {
     expect(enrich(text)).toBe(text);
   });
 
+  it('details 里的 summary 是原生折叠标题，不当摘要块', () => {
+    const text = '<details>\n<summary>STORY SYNOPSIS</summary>\n<div>正文</div>\n</details>';
+    expect(enrich(text)).toBe(text);
+  });
+
+  it('details 之外的 summary 照旧是摘要块', () => {
+    expect(enrich('<summary>前情提要</summary>')).toContain('data-nt-block="summary"');
+  });
+
   it('普通叙述原样返回', () => {
     const text = '她推开门，雨声一下子大了起来。';
     expect(enrich(text)).toBe(text);

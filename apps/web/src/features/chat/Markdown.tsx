@@ -175,9 +175,26 @@ const components: Components = {
   ),
 };
 
+/**
+ * 解析原生 HTML 时关掉 CommonMark 的「行首缩进四格 = 代码块」规则。
+ *
+ * 卡 / 预设自带的正则吐出来的几乎都是排版过的 HTML：`<details>` 里再套三四层 `<div>`，
+ * 层与层之间还夹着空行。CommonMark 的 HTML 块一遇空行就结束，后面那些缩进四格以上的行
+ * 于是被当成代码块整段吐出来——用户看到的就是一大坨 `<div style="…">` 源码
+ * （Freesia Petals 那类预设的状态栏 / 摘要卡全中招）。
+ * ST 用的 showdown 是先按成对标签把 HTML 整块挖走、再跑代码块规则，所以它从没这问题。
+ * 围栏代码块（``` 与 ~~~）不受影响，模型写代码照样有代码块。
+ */
+function remarkNoIndentedCode(this: { data: () => Record<string, unknown> }) {
+  const data = this.data();
+  const extensions = (data.micromarkExtensions ?? (data.micromarkExtensions = [])) as unknown[];
+  extensions.push({ disable: { null: ['codeIndented'] } });
+}
+
 /* eslint-disable @typescript-eslint/no-explicit-any -- rehype 插件签名依赖 unified 的间接类型 */
 const plainPlugins = [rehypeQuoteHighlight as any];
 const remarkPlugins = [remarkGfm];
+const htmlRemarkPlugins = [remarkGfm, remarkNoIndentedCode as any];
 
 /**
  * 开了 HTML 之后的顺序是有讲究的：
@@ -240,7 +257,7 @@ export const Markdown = memo(function Markdown({
       {...(html ? { 'data-nt-html': uid } : {})}
     >
       <ReactMarkdown
-        remarkPlugins={remarkPlugins}
+        remarkPlugins={html ? htmlRemarkPlugins : remarkPlugins}
         rehypePlugins={rehypePlugins}
         components={components}
         urlTransform={urlTransform}
