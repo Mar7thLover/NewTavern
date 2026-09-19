@@ -801,6 +801,8 @@
       "title": "Scripts from cards and presets",
       "hint": "Regex that came with an imported character card, preset or lorebook, grouped by source. They only apply in chats using that card or preset, and keep the original order.",
       "groupCount": "{{total}} script(s)",
+      "collapse": "Collapse scripts from {{name}}",
+      "expand": "Expand scripts from {{name}}",
       "toggleAll": "Enable all",
       "unknownOwner": "Deleted source",
       "scopes": {

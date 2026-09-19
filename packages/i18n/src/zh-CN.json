@@ -801,6 +801,8 @@
       "title": "卡 / 预设自带的脚本",
       "hint": "角色卡、预设、世界书导入时自带的正则，按来源分组。它们只在用到那张卡 / 那份预设的会话里生效；顺序跟着原件走。",
       "groupCount": "{{total}} 条",
+      "collapse": "折叠 {{name}} 的附属脚本",
+      "expand": "展开 {{name}} 的附属脚本",
       "toggleAll": "整组启用",
       "unknownOwner": "已删除的来源",
       "scopes": {

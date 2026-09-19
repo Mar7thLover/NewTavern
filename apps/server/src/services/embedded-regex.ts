@@ -24,8 +24,13 @@ import { stRegexToScript, toRegexColumns, type RegexScope } from './regex-map.js
 export interface EmbeddedRegexExtra {
   /** 原始 ST 条目（往返与「恢复原样」用） */
   raw: unknown;
-  /** 原件里它本来是不是禁用的：用户点「启用」时按这个恢复，而不是一律打开 */
+  /** 原件里它本来是不是禁用的：第一次启用整组时按这个恢复，而不是一律打开 */
   sourceDisabled: boolean;
+  /**
+   * 关闭来源总开关前，这条脚本是不是禁用的。
+   * 只在整组关闭期间存在；重新启用后恢复此状态并删除快照。
+   */
+  disabledBeforeOwnerToggle?: boolean;
   /** 抽自哪个文件 / 哪张卡（只作展示） */
   ownerName?: string;
 }
@@ -117,7 +122,13 @@ export function summarize(
 
 /**
  * 启用 / 停用某个来源的全部自带正则。
- * 启用时按 `extra.sourceDisabled` 恢复——原件里作者就关掉的那几条不会被一键打开。
+ *
+ * - 第一次启用时按 `extra.sourceDisabled` 恢复，尊重原件里作者设置的状态；
+ * - 关闭时把每条脚本当前的 `disabled` 存进 `extra.disabledBeforeOwnerToggle`；
+ * - 再次启用时恢复关闭前的逐条状态，并清掉快照。
+ *
+ * 快照随 `extra` 持久化，因此刷新页面或重启应用也不会丢失。重复关闭不会把快照
+ * 覆盖成「全部禁用」，重复启用也不会把当前状态重置为原件状态。
  */
 export function setOwnerRegexEnabled(
   db: Db,
@@ -130,18 +141,58 @@ export function setOwnerRegexEnabled(
     .from(schema.regexScripts)
     .where(and(eq(schema.regexScripts.scope, scope), eq(schema.regexScripts.ownerId, ownerId)))
     .all();
-  let changed = 0;
-  for (const row of rows) {
-    const extra = (row.extra ?? {}) as Partial<EmbeddedRegexExtra>;
-    const disabled = enabled ? extra.sourceDisabled === true : true;
-    if (disabled === row.disabled) continue;
-    db.update(schema.regexScripts)
-      .set({ disabled, updatedAt: new Date() })
-      .where(eq(schema.regexScripts.id, row.id))
-      .run();
-    changed += 1;
-  }
-  return changed;
+  const extras = rows.map((row) => (row.extra ?? {}) as Partial<EmbeddedRegexExtra>);
+  const hasSnapshot = extras.some((extra) => typeof extra.disabledBeforeOwnerToggle === 'boolean');
+  const anyEnabled = rows.some((row) => !row.disabled);
+
+  return db.transaction((tx) => {
+    let changed = 0;
+    for (const [index, row] of rows.entries()) {
+      const extra = extras[index] ?? {};
+
+      if (!enabled) {
+        // 已经由总开关关闭时保持第一次快照，避免重复请求把它覆盖成 true。
+        const nextExtra =
+          hasSnapshot && !anyEnabled
+            ? extra
+            : { ...extra, disabledBeforeOwnerToggle: row.disabled };
+        if (!row.disabled || nextExtra !== extra) {
+          tx.update(schema.regexScripts)
+            .set({
+              disabled: true,
+              extra: nextExtra as Record<string, unknown>,
+              updatedAt: new Date(),
+            })
+            .where(eq(schema.regexScripts.id, row.id))
+            .run();
+        }
+        if (!row.disabled) changed += 1;
+        continue;
+      }
+
+      // 有快照说明这是一次「重新打开」；没有快照且已有子项启用，则是重复请求，保持现状。
+      if (!hasSnapshot && anyEnabled) continue;
+      const disabled =
+        typeof extra.disabledBeforeOwnerToggle === 'boolean'
+          ? extra.disabledBeforeOwnerToggle
+          : extra.sourceDisabled === true;
+      const nextExtra = { ...extra };
+      delete nextExtra.disabledBeforeOwnerToggle;
+      const hadSnapshot = typeof extra.disabledBeforeOwnerToggle === 'boolean';
+      if (disabled !== row.disabled || hadSnapshot) {
+        tx.update(schema.regexScripts)
+          .set({
+            disabled,
+            extra: nextExtra as Record<string, unknown>,
+            updatedAt: new Date(),
+          })
+          .where(eq(schema.regexScripts.id, row.id))
+          .run();
+      }
+      if (disabled !== row.disabled) changed += 1;
+    }
+    return changed;
+  });
 }
 
 /** 某个来源的脚本（组装与显示侧都用它） */

@@ -1365,8 +1365,8 @@ export interface RegexOwnerInput {
 }
 
 /**
- * 一次开关某个来源自带的全部脚本。启用时按原件里的状态恢复
- * （作者本来就关掉的那几条不会被一键打开）。
+ * 一次开关某个来源自带的全部脚本。第一次启用按原件状态恢复；之后关闭会记住
+ * 每个子项的状态，再次启用时原样恢复。
  */
 export function useSetRegexOwnerEnabled() {
   const queryClient = useQueryClient();
@@ -1389,8 +1389,7 @@ function useRegexMutation<TVariables>(mutationFn: (variables: TVariables) => Pro
     // （`['characters', id, 'regex']` / `['presets', id, 'regex']`，显示侧正则读它们）
     onSuccess: () =>
       queryClient.invalidateQueries({
-        predicate: (query) =>
-          query.queryKey[0] === 'regex' || query.queryKey[2] === 'regex',
+        predicate: (query) => query.queryKey[0] === 'regex' || query.queryKey[2] === 'regex',
       }),
   });
 }

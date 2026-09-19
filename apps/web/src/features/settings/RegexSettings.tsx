@@ -45,7 +45,7 @@ interface ScriptGroup {
  * 分两类展示（M3 契约 §3.2 修正）：
  * - **我的脚本**（scope=global）：可排序、可删；
  * - **自带的脚本**：角色卡 / 预设 / 世界书导入时抽进来的，按来源分组，
- *   一组一个总开关（启用时按原件里的状态恢复，作者关掉的那几条不会被一键打开），
+ *   一组一个总开关（第一次启用按原件状态恢复；之后关闭、打开会记住逐条状态），
  *   也可以单条开关。顺序跟着原件，不提供排序。
  */
 export function RegexSettings() {
@@ -56,6 +56,7 @@ export function RegexSettings() {
   const remove = useDeleteRegexScript();
   const setOwnerEnabled = useSetRegexOwnerEnabled();
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => new Set());
   const [pendingDelete, setPendingDelete] = useState<RegexScript | null>(null);
 
   const all = useMemo(() => scripts.data ?? [], [scripts.data]);
@@ -232,18 +233,46 @@ export function RegexSettings() {
           <div className="space-y-4">
             {groups.map((group) => {
               const anyEnabled = group.scripts.some((script) => !script.disabled);
+              const collapsed = collapsedGroups.has(group.key);
+              const contentId = `regex-group-${group.key}`;
               return (
                 <div key={group.key}>
                   <div className="flex items-center justify-between gap-2 py-1">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <Badge variant="muted">{t(`regex.embedded.scopes.${group.scope}`)}</Badge>
-                        <span className="truncate text-sm font-medium">{group.title}</span>
+                    <button
+                      type="button"
+                      aria-expanded={!collapsed}
+                      aria-controls={contentId}
+                      aria-label={t(
+                        collapsed ? 'regex.embedded.expand' : 'regex.embedded.collapse',
+                        { name: group.title },
+                      )}
+                      onClick={() =>
+                        setCollapsedGroups((current) => {
+                          const next = new Set(current);
+                          if (next.has(group.key)) next.delete(group.key);
+                          else next.add(group.key);
+                          return next;
+                        })
+                      }
+                      className="focus-ring-inset flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-left"
+                    >
+                      <ChevronDown
+                        aria-hidden
+                        className={cn(
+                          'size-4 shrink-0 text-ink-2 motion-transform',
+                          collapsed && '-rotate-90',
+                        )}
+                      />
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <Badge variant="muted">{t(`regex.embedded.scopes.${group.scope}`)}</Badge>
+                          <span className="truncate text-sm font-medium">{group.title}</span>
+                        </div>
+                        <p className="mt-0.5 text-xs text-ink-2">
+                          {t('regex.embedded.groupCount', { total: group.scripts.length })}
+                        </p>
                       </div>
-                      <p className="mt-0.5 text-xs text-ink-2">
-                        {t('regex.embedded.groupCount', { total: group.scripts.length })}
-                      </p>
-                    </div>
+                    </button>
                     <Switch
                       checked={anyEnabled}
                       label={t('regex.embedded.toggleAll')}
@@ -258,7 +287,11 @@ export function RegexSettings() {
                       }
                     />
                   </div>
-                  <ul className="edge-rule border-t">{group.scripts.map((script) => renderRow(script))}</ul>
+                  {!collapsed && (
+                    <ul id={contentId} className="edge-rule border-t">
+                      {group.scripts.map((script) => renderRow(script))}
+                    </ul>
+                  )}
                 </div>
               );
             })}

@@ -158,15 +158,18 @@ async function readJson(c: Context): Promise<Record<string, unknown> | undefined
 export function createRegexRoutes(db: Db) {
   return (
     new Hono()
-      .get('/', (c) => c.json(c.req.query('scope') === 'all' ? listAllScripts(db) : listScripts(db)))
+      .get('/', (c) =>
+        c.json(c.req.query('scope') === 'all' ? listAllScripts(db) : listScripts(db)),
+      )
       /**
        * 一次开关某个来源自带的全部脚本（导入时的「是否启用」问句、设置页的来源开关）。
-       * 启用时按原件里的状态恢复：作者本来就关掉的那几条不会被一键打开。
+       * 第一次启用按原件状态恢复；之后关闭会记住逐条状态，再次启用原样恢复。
        */
       .post('/owner', async (c) => {
         const body = await readJson(c);
         if (!body) return c.json({ error: 'invalid', message: '请求体不是合法 JSON' }, 400);
-        if (!isEmbeddedScope(body.scope)) return c.json({ error: 'invalid', message: 'scope 非法' }, 400);
+        if (!isEmbeddedScope(body.scope))
+          return c.json({ error: 'invalid', message: 'scope 非法' }, 400);
         if (typeof body.ownerId !== 'string' || body.ownerId === '') {
           return c.json({ error: 'invalid', message: 'ownerId 非法' }, 400);
         }

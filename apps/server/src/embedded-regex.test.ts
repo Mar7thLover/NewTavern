@@ -67,7 +67,10 @@ function uploadCharacter(app: ReturnType<typeof makeTestApp>['app'], card: unkno
 
 function uploadPreset(app: ReturnType<typeof makeTestApp>['app'], preset: unknown) {
   const form = new FormData();
-  form.append('file', new File([JSON.stringify(preset)], '预设.json', { type: 'application/json' }));
+  form.append(
+    'file',
+    new File([JSON.stringify(preset)], '预设.json', { type: 'application/json' }),
+  );
   return app.request('/api/import/preset', { method: 'POST', body: form });
 }
 
@@ -155,7 +158,9 @@ describe('自带正则：启用之后才进提示词', () => {
       .from(schema.messageNodes)
       .all()
       .filter((node) => node.chatId === chatId);
-    return JSON.stringify(nodes.map((node) => (node.extra as { request?: unknown } | null)?.request));
+    return JSON.stringify(
+      nodes.map((node) => (node.extra as { request?: unknown } | null)?.request),
+    );
   }
 
   it('卡自带的正则：启用前不跑，启用后跑；作者关掉的那条仍然不跑', async () => {
@@ -164,7 +169,10 @@ describe('自带正则：启用之后才进提示词', () => {
     registerFakeAdapter({
       id: 'regex-fake-1',
       renderMessages: true,
-      events: [{ type: 'text.delta', text: '好。' }, { type: 'stop', reason: 'end' }] as GenEvent[],
+      events: [
+        { type: 'text.delta', text: '好。' },
+        { type: 'stop', reason: 'end' },
+      ] as GenEvent[],
     });
     const character = (await (await uploadCharacter(app, CARD)).json()) as {
       id: string;
@@ -201,7 +209,10 @@ describe('自带正则：启用之后才进提示词', () => {
     registerFakeAdapter({
       id: 'regex-fake-2',
       renderMessages: true,
-      events: [{ type: 'text.delta', text: '好。' }, { type: 'stop', reason: 'end' }] as GenEvent[],
+      events: [
+        { type: 'text.delta', text: '好。' },
+        { type: 'stop', reason: 'end' },
+      ] as GenEvent[],
     });
     const preset = (await (await uploadPreset(app, PRESET)).json()) as { id: string };
     await app.request(
@@ -224,6 +235,68 @@ describe('自带正则：启用之后才进提示词', () => {
     const text = await promptText(app, db, withoutPreset.id);
     // 这条会话没绑这份预设 → 预设自带的正则不参与
     expect(text.split('改写').length - 1).toBe(0);
+  });
+
+  it('总开关关闭后再次打开，会恢复用户调整过的逐条状态', async () => {
+    const { app } = makeTestApp(dataDir);
+    const character = (await (await uploadCharacter(app, CARD)).json()) as { id: string };
+
+    // 第一次启用仍尊重原件状态：第一条开、第二条关。
+    const firstEnabled = (await (
+      await app.request(
+        '/api/regex/owner',
+        post({ scope: 'character', ownerId: character.id, enabled: true }),
+      )
+    ).json()) as { scripts: Script[] };
+    const imported = firstEnabled.scripts.filter((script) => script.ownerId === character.id);
+    expect(imported.map((script) => script.disabled)).toEqual([false, true]);
+
+    // 用户把两条的状态反过来，作为关闭总开关前需要记住的状态。
+    await app.request(`/api/regex/${imported[0]?.id}`, put({ disabled: true }));
+    await app.request(`/api/regex/${imported[1]?.id}`, put({ disabled: false }));
+
+    const disabled = (await (
+      await app.request(
+        '/api/regex/owner',
+        post({ scope: 'character', ownerId: character.id, enabled: false }),
+      )
+    ).json()) as { scripts: Script[] };
+    expect(
+      disabled.scripts
+        .filter((script) => script.ownerId === character.id)
+        .map((script) => script.disabled),
+    ).toEqual([true, true]);
+
+    // 重复关闭也不能用「全关」覆盖已经保存的快照。
+    await app.request(
+      '/api/regex/owner',
+      post({ scope: 'character', ownerId: character.id, enabled: false }),
+    );
+
+    const restored = (await (
+      await app.request(
+        '/api/regex/owner',
+        post({ scope: 'character', ownerId: character.id, enabled: true }),
+      )
+    ).json()) as { scripts: Script[] };
+    expect(
+      restored.scripts
+        .filter((script) => script.ownerId === character.id)
+        .map((script) => script.disabled),
+    ).toEqual([true, false]);
+
+    // 已经打开时重复启用同样保持用户状态，不回退到原件状态。
+    const repeated = (await (
+      await app.request(
+        '/api/regex/owner',
+        post({ scope: 'character', ownerId: character.id, enabled: true }),
+      )
+    ).json()) as { scripts: Script[] };
+    expect(
+      repeated.scripts
+        .filter((script) => script.ownerId === character.id)
+        .map((script) => script.disabled),
+    ).toEqual([true, false]);
   });
 });
 

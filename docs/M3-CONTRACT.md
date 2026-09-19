@@ -846,11 +846,14 @@ WI-10 与 SB-4 作废。ST `world-info.js` 里 `let world_info_recursive = false
 **改成什么样**（与 ST 的三类脚本 + 两张允许名单对齐）：
 
 1. `regex_scripts.scope` 扩成 `global | character | preset | book`，自带的脚本在**导入时**
-   抽进表，`owner_id` 指向卡 / 预设 / 世界书；`extra = { raw, sourceDisabled, ownerName }`。
+   抽进表，`owner_id` 指向卡 / 预设 / 世界书；
+   `extra = { raw, sourceDisabled, ownerName, disabledBeforeOwnerToggle? }`。
    原件里的 `extensions.regex_scripts` **原样保留**，导出仍然无损（表里的编辑不写回原件）。
 2. **默认不启用**。导入接口在响应里带 `embeddedRegex: { scope, ownerId, ownerName, count }`，
    前端弹一句「已经收进正则库，现在启用吗」；点启用走 `POST /api/regex/owner`
-   `{ scope, ownerId, enabled }`，按 `extra.sourceDisabled` 恢复——**作者本来就关掉的那几条不会被一键打开**。
+   `{ scope, ownerId, enabled }`。第一次启用按 `extra.sourceDisabled` 恢复——**作者本来就关掉的
+   那几条不会被一键打开**；之后关闭总开关时，把各子项状态持久化到
+   `disabledBeforeOwnerToggle`，再次启用逐条恢复并清除快照，刷新或重启也不会丢失。
 3. **运行时只读表**：`readRegexScripts` 按 ST `getRegexScripts` 的次序取
    **全局 → 预设自带 → 角色卡自带**（都滤掉 disabled），不再直接读卡 / 预设里的字段，
    免得同一条跑两遍。`GET /api/characters/:id/regex` 与新增的 `GET /api/presets/:id/regex`
