@@ -68,6 +68,8 @@ pnpm dev
 
 The frontend runs at [http://localhost:5173](http://localhost:5173), with the API server on port `8787`. Vite proxies `/api` requests automatically.
 
+The server `dev` script uses Node’s built-in `--watch` (`node --watch --import tsx`) instead of `tsx watch`: the latter’s child process stalls during module loading once `pnpm -r --parallel` takes over stdio, so the server silently never starts (reproducible on Windows).
+
 ```bash
 pnpm typecheck
 pnpm lint

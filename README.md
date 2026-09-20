@@ -68,6 +68,8 @@ pnpm dev
 
 前端地址为 [http://localhost:5173](http://localhost:5173)，API 服务端口为 `8787`，Vite 自动代理 `/api` 请求。
 
+服务端的 `dev` 脚本用 Node 自带的 `--watch`（`node --watch --import tsx`），而不是 `tsx watch`：后者的子进程在 `pnpm -r --parallel` 接管 stdio 时会卡在模块加载阶段，表现为服务端一声不吭地起不来（Windows 上稳定复现）。
+
 ```bash
 pnpm typecheck
 pnpm lint
