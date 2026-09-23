@@ -1107,5 +1107,14 @@
     },
     "scriptButtons": "脚本按钮",
     "loading": "界面加载中…"
-  }
+  },
+  "studio": {},
+  "writing": {},
+  "backgrounds": {},
+  "sprites": {},
+  "themeVariants": {},
+  "scripts": {},
+  "variableEditor": {},
+  "imageGen": {},
+  "toast": {}
 }

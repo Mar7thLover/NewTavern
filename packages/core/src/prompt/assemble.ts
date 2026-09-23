@@ -180,7 +180,64 @@ export interface AssembleInputV2 extends AssembleInput {
   idleDurationMs?: number;
   /** 检查器：不推进 WI 时间态、不返回变量副作用 */
   dryRun?: boolean;
+  /**
+   * 临时注入（M5（三）契约 §3.4：前端卡 `generate({injects})`、`injectPrompts`、slash `/inject`）。
+   * 只影响本次组装，不落库。由 S 实现。
+   */
+  extraInjections?: AssembleExtraInjection[];
+  /**
+   * 前端卡 `generate({overrides})`：按 ST 的覆盖语义替换对应占位符的内容（M5（三）契约 §3.4）。
+   * 由 S 实现。
+   */
+  promptOverrides?: AssemblePromptOverrides;
+  /**
+   * EJS 提示词模板渲染器（M5（三）契约 §4）。同步：宿主函数都是同步的，异步 `await` 在沙箱内部
+   * 用 pending jobs 跑完。缺省 = 不渲染（黄金测试路径）。由 E 实现并在服务端注入。
+   */
+  templateRenderer?: TemplateRenderer;
 }
+
+/** 前端卡 / slash 的临时注入（酒馆助手 `InjectionPrompt` 的子集） */
+export interface AssembleExtraInjection {
+  id: string;
+  content: string;
+  role: 'system' | 'user' | 'assistant';
+  /** `in_chat` = 按 depth 插进历史；`none` = 只参与世界书扫描不进提示词 */
+  position: 'in_chat' | 'none';
+  depth: number;
+  /** 同 depth 内的排序（小的在前），缺省 100 */
+  order?: number;
+  /** true：内容参与世界书扫描 */
+  scan?: boolean;
+}
+
+/** 酒馆助手 `generate({overrides})` 的子集（字段名照 4.9.3 `Overrides`） */
+export interface AssemblePromptOverrides {
+  world_info_before?: string;
+  persona_description?: string;
+  char_description?: string;
+  char_personality?: string;
+  scenario?: string;
+  world_info_after?: string;
+  dialogue_examples?: string;
+  /** 覆盖聊天历史：with_depth_entries=false 时不插深度注入；author_note 覆盖作者注释 */
+  chat_history?: { with_depth_entries?: boolean; author_note?: string; prompts?: { role: 'system' | 'user' | 'assistant'; content: string }[] };
+}
+
+/**
+ * EJS 渲染回调。`site` 说明模板出现在哪（检查器据此标注），`vars` 是本次组装的变量工作副本
+ * （模板里 `setvar` 直接改它，组装结束随 `AssembleResult.variables` 返回）。
+ * 返回渲染后的文本；模板出错时返回原文并通过 `warn` 报告，不中断组装。
+ */
+export type TemplateRenderer = (
+  text: string,
+  ctx: {
+    site: 'worldinfo' | 'preset' | 'character' | 'authors_note' | 'persona' | 'history';
+    ref?: string;
+    vars: { chat: Record<string, unknown>; global: Record<string, unknown> };
+    warn: (message: string) => void;
+  },
+) => string;
 
 export interface AssembleResult {
   ir: PromptIR;

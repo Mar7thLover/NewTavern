@@ -98,6 +98,8 @@ export interface PromptIR {
      * 与 ST 在 `ChatCompletion.squashSystemMessages` 里合并的时机一致。
      */
     squashSystemMessages?: boolean;
+    /** 内容经过 EJS 模板渲染的段 id（M5（三）契约 §4，检查器据此标注） */
+    templated?: string[];
   };
 }
 

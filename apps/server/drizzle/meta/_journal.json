@@ -22,6 +22,13 @@
       "when": 1789438209187,
       "tag": "0002_lucky_stryfe",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1790122449620,
+      "tag": "0003_thankful_thaddeus_ross",
+      "breakpoints": true
     }
   ]
 }

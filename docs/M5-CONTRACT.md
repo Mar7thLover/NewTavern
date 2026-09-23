@@ -293,3 +293,140 @@ MVU 的 `mag_variable_initiailized` / `mag_variable_update_started` / `mag_comma
 ## 8. 修正
 
 （暂无）
+
+
+---
+---
+
+# 第二部分：M5（三）契约——变量管理器、脚本库、slash、前端卡生成补全、EJS
+
+| 项目 | 内容 |
+| ---- | ---- |
+| 版本 | v1（2026-09-22） |
+| 范围 | §1 变量管理器与 schema；§2 全局脚本库；§3 slash / 前端卡 generate 补全 / 提示条 / 卡的主题贴合 / MVU 补全；§4 EJS 提示词模板 |
+| 仍不做 | 音频接口、`registerMacroLike`、`installExtension`、`createCharacter` / `deleteCharacter`、QuickReply、完整 STscript（只做契约列出的命令） |
+
+表结构已由主会话在迁移 `0003` 加好：`scripts`；`variables.scope` 可取 `'preset'`。本部分不再新增迁移。
+`AssembleInputV2` 已由主会话加好三个字段的类型（`extraInjections` / `promptOverrides` / `templateRenderer`）和 `ir.meta.templated`，实现归下表。
+
+**代号与目录归属**：
+
+| 代号 | 内容 | 独占 | 共享（最小改动，改前重读） |
+| ---- | ---- | ---- | ---- |
+| S | §1 §2 §3 | `apps/web/src/features/{cards,inspector,scripts}/**`、`apps/web/src/components/ui/toast.tsx`（新）、`packages/core/src/slash/**`（新）、`packages/sandbox-sdk/**`、`routes/scripts.ts`、`services/scripts.ts`、`packages/compat/src/mvu/**` | `packages/core/src/prompt/assemble.ts`（只实现 extraInjections / promptOverrides）、`routes/{sandbox,variables,chats}.ts`、`services/{assemble-input,mvu,variables,st-migration}.ts`、`features/settings/SettingsPage.tsx`、`app.ts`、i18n `scripts.* variableEditor.* toast.* cards.*` |
+| E | §4 | `packages/compat/src/ejs/**`（新，单独入口 `@newtavern/compat/ejs`）、`services/ejs.ts`（新） | `packages/core/src/prompt/assemble.ts`（只在渲染点调用 templateRenderer）、`services/assemble-input.ts`（注入渲染器）、检查器段落标注（`features/inspector/SegmentList.tsx` 一处小改，和 S 协调：改前重读） |
+
+参照物：酒馆助手 4.9.3 源码在本机 `D:\Projects\SillyTavern\data\default-user\extensions\JS-Slash-Runner`（`@types/` 完整声明，`dist/index.js.map` 带 sourcesContent）；ST 的 slash 实现在 `D:\Projects\SillyTavern\public\scripts\slash-commands*.js`；EJS 参照 GitHub `zonde306/ST-Prompt-Template`（没有本地副本，按它的 README 与源码核对）。
+
+---
+
+## 1. 变量管理器（S）
+
+- 检查器「变量」页签从只读改为可编辑的树：作用域切换 message（=chat，当前节点快照）/ global / character / script / **preset**。
+  - 节点：对象可展开；叶子可改值（字符串、数字、布尔、null、JSON 文本四种编辑形态，可切类型）；增加键、删除键、重命名键。
+  - MVU `[值, 说明]` 二元组：只编辑值，说明灰显只读；`$meta` 等 `$` 开头的簿记键默认折叠。
+  - 保存 = 整表 PUT（现有 `PUT /api/chats/:id/variables` 与 `PUT /api/variables/:scope`），保存前显示改动计数，支持撤销到打开时的状态。
+  - 编辑 message 作用域只改**当前节点**快照，提示「从这里往后的楼层不会自动重算，需要时点『从这条重算』」。
+- `preset` 作用域打通：`routes/variables.ts` 接受 `preset`（ownerId = presetId），`assemble-input` 把当前预设的变量表喂进 `variables.preset`；前端卡 `getVariables({type:'preset'})` / `replaceVariables(…, {type:'preset'})` 可读写。
+- `registerVariableSchema(schema, { type })`（酒馆助手签名）：guest 端把 zod schema 用 `z.toJSONSchema()` 转成 JSON Schema，经 RPC `variables.registerSchema` 交给宿主；宿主存进 `chats.metadata.variableSchemas[type]`（按会话）。变量管理器按 schema 校验并就地标错（不阻止保存，但保存前列出错误）；MVU 应用 `<UpdateVariable>` 后若有 message 作用域的 schema，校验失败只写 warning 到节点 `extra.mvuWarnings`，不回滚。
+
+## 2. 全局脚本库（S）
+
+### 2.1 接口
+
+- `GET /api/scripts?scope=global|preset&ownerId=` → `ScriptRow[]`（按 displayOrder）。
+- `POST /api/scripts` `{ scope, ownerId?, name, content, enabled?, buttons? }`；`PUT /api/scripts/:id`（部分字段）；`DELETE /api/scripts/:id`；`PUT /api/scripts/order` `{ ids: string[] }`。
+- `POST /api/scripts/import`（multipart 或 JSON）：接受酒馆助手导出的单个脚本 JSON 与脚本数组 / 脚本树（文件夹展平，文件夹名进 `data.folder`）；原件整份存 `data`；默认 `enabled:false`，返回导入条数（前端问「现在启用吗」，与自带正则同一交互）。
+- `GET /api/scripts/:id/export` → 酒馆助手格式（以 `data` 为底叠加列值）。
+- 预设自带脚本：导入预设时把 `extensions.tavern_helper.scripts`（及旧字段）抽成 `scope:'preset'` 行（原件不动、导出无损，做法同自带正则）；启动回填一次。
+- ST 迁移：读 `settings.json` 里 JS-Slash-Runner 的全局脚本（字段名照 4.9.3 源码核对），导入为 global 脚本，保持原启用状态。
+
+### 2.2 运行
+
+- `ScriptRunner` 运行顺序：全局 → 当前预设的 → 当前角色卡的；每个脚本仍是独立隐藏 iframe；关闭总开关（设置 → 前端卡 → 脚本库）则都不跑。
+- 按钮：三类脚本的按钮合并显示在输入框上方，按上面的顺序。
+
+### 2.3 界面
+
+- 设置里新增一节「脚本库」（`?section=scripts`）：分组（全局 / 当前预设）列表，拖拽排序、启用开关、导入、导出、新建、删除。
+- 脚本编辑器 `features/scripts/ScriptEditor.tsx`（导出给工作台复用）：懒加载 CodeMirror 6（JavaScript 语法高亮、行号、搜索）、名称、按钮列表编辑（名称 + 是否显示）、「作者说明」（`data.info`）。编辑器颜色只用槽位。
+
+## 3. slash、前端卡 generate、提示条、主题贴合、MVU 补全（S）
+
+### 3.1 slash（`packages/core/src/slash/`）
+
+- 解析器：命令 `/name`、位置参数与 `key=value` 命名参数、单双引号、管道 `|`（上一条结果进 `{{pipe}}` 与下一条的无名参数）、闭包 `{: … :}`、`{{var::name}}` 与 `{{getvar::}}` 宏、转义 `\|`、`\{`。
+- 执行器：`runSlash(script, host: SlashHost, opts: { maxIterations: 100 })`，host 接口由 web 实现（`features/cards/slash-host.ts`）；未知命令抛 `SlashError('unknown command /xxx')`，**不静默**。
+- 命令（共 40 条，别名写在括号里）：
+  - 输出与流程：`/echo` `/pass` `/return` `/abort` `/run`（执行闭包或已命名的快速命令变量） `/if left= right= rule=(eq|neq|lt|gt|lte|gte|in|nin) else={: :} {: :}` `/times n {: :}` `/while left= right= rule= {: :}`
+  - 变量：`/setvar key= [index=]` `/getvar` `/addvar` `/incvar` `/decvar` `/flushvar` `/listvar` `/setglobalvar` `/getglobalvar` `/addglobalvar` `/incglobalvar` `/decglobalvar` `/flushglobalvar`
+  - 数学与字符串：`/add` `/sub` `/mul` `/div` `/mod` `/rand [from= to= round=]` `/len`
+  - 消息：`/send` `/sendas name=` `/sys` `/narrate`（=sys） `/comment` `/hide` `/unhide` `/cut` `/del n` `/messages [names=] range` `/setinput`
+  - 生成：`/gen [lock=] prompt` `/genraw prompt` `/trigger` `/continue` `/regenerate`
+  - 注入：`/inject id= position=chat depth= role= [scan=]` `/listinjects` `/flushinjects`
+  - 其他模块：`/bg name|assetId`（M4（二）§A）、`/emote label`（§B）、`/imagine prompt`（§D）
+- 原 `features/cards/slash.ts` 改为调用 core 的解析执行器；`triggerSlash` 与 Composer 里以 `/` 开头的输入都走它（Composer：输入以 `/` 开头且第一个词是已知命令时执行而不发送；未知命令给提示条，不发送）。
+
+### 3.2 前端卡 generate 与注入
+
+- `generate` / `generateRaw` 支持 `injects`、`overrides`、`tools`、`json_schema`、`preset_name`（按名称找预设，找不到报错）：
+  - `injects` → `AssembleInputV2.extraInjections`（字段照 4.9.3 `InjectionPrompt`：`position:'in_chat'|'none'`、`depth`、`role`、`should_scan`）；
+  - `overrides` → `promptOverrides`（字段见 assemble.ts 的类型，未列出的覆盖项给 warning）；
+  - `tools` / `json_schema` → IR 的 `tools` / `responseFormat`（M6 契约 §1），工具调用结果按酒馆助手的返回形态交回卡。
+- `injectPrompts(prompts, { once? })` / `uninjectPrompts(ids)`：存进 `chats.metadata.injects`（`once:true` 的在下一次生成成功后删除）；组装时并入 `extraInjections`。slash `/inject` 同一存储。
+- `getPreset(name)` / `loadPreset(name)`（切换会话预设）；`formatAsTavernRegexedString(text, source, destination, {depth, character_name})` 改为真正调用 core 正则引擎（与显示侧同一套脚本选择规则）。
+- 同步更新 M5 契约 §5.2 的兼容矩阵（本文件第一部分），标出这些接口的新状态。
+
+### 3.3 应用级提示条
+
+- `components/ui/toast.tsx`：`toast({ title, description?, tone: 'info'|'success'|'warning'|'danger', action? })`，右下（手机为顶部）堆叠最多 3 条，5 秒自动消失（danger 不自动消失），只用槽位与材质类；`prefers-reduced-motion` 下无位移动画。挂在 `AppLayout`。
+- `FrontendCardFrame.tsx:132` 的遗留改用它；卡内 `toastr` 仍是卡自己的（不动）。
+
+### 3.4 卡的主题贴合
+
+- `buildSrcdoc` 的 `themeCss` 填入当前世界（含变体）的槽位值：从 `getComputedStyle(document.documentElement)` 读 `slots.css` 声明的槽位清单，生成 `:root{--nt-canvas:…;--nt-ink:…}` 并同时给酒馆助手常见的 `--SmartThemeBodyColor`、`--SmartThemeEmColor`、`--SmartThemeQuoteColor`、`--SmartThemeBlurTintColor`、`--SmartThemeBorderColor` 映射；切换主题时通过已有的镜像通道推送更新，不重建 iframe。
+
+### 3.5 MVU 补全
+
+- 额外模型解析：settings KV `mvu` 加 `extraModel?: { connectionId, model, when: 'missing' | 'always' }`；本轮正文里没有 `<UpdateVariable>` / `<JSONPatch>` 且 when='missing'（或 'always'）时，用 `callLlm`（M6 契约 §1.5）以「当前变量 + 本轮正文 + 卡里的变量更新规则（世界书里含 `[mvu_update]` / 名称含「变量更新规则」的条目）」请求一段 `<UpdateVariable>`，再走原引擎应用；节点 `extra.mvuSource = 'extra-model'`。
+- 旧楼层快照清理：settings `mvu.keepSnapshots`（缺省 0 = 不清理）；>0 时在每次写入后，把当前路径上距 head 超过 N 层的节点的 `variables` 置为 `{ $pruned: true }`（重放遇到时从最近的完整快照起算并提示）。
+
+## 4. EJS 提示词模板（E）
+
+### 4.1 引擎（`packages/compat/src/ejs/`，入口 `@newtavern/compat/ejs`，只在服务端用）
+
+- 语法（ST-Prompt-Template 兼容子集）：`<% code %>`、`<%_ code _%>`（吃掉前后空白）、`<%= expr %>`（HTML 转义——与 ST-Prompt-Template 一致，核对后以它为准）、`<%- expr %>`（原样）、`-%>`（吃掉后面的换行）、`<%%` 字面量。模板编译为一个 async 函数体。
+- 执行：**quickjs-emscripten**（同步变体）沙箱。每段模板 200ms 超时（interrupt handler）、内存上限 32 MB、栈上限；没有 `require` / 网络 / 文件。编译结果按模板文本哈希缓存（LRU 500）。宿主函数全部同步，`await` 在沙箱内跑 pending jobs 解决。
+- 宿主函数（对齐 ST-Prompt-Template 的名字与参数）：
+  - `getvar(path, { scope?, defaults? })`、`setvar(path, value, { scope? })`、`incvar` / `decvar`；scope 缺省为 message(=chat)；`getvar('stat_data.昔涟.好感度')` 取点路径；VWD `[值, 说明]` 二元组按原样返回（与 ST-Prompt-Template 行为核对）。
+  - `getwi(book | null, titleOrUid)`：在本次组装可见的世界书里按 comment（标题）或 uid 找条目，返回**渲染后的**内容（递归渲染，深度上限 5）；book 为 null 时搜全部。
+  - `getchar(field?)`、`getpreset?` 不做；`print(...)` 追加输出；`_`（lodash 的 get/set/has/clone/merge/isEqual 子集，在沙箱里注入的纯 JS 实现）。
+  - 未实现的 ST-Prompt-Template 函数调用时抛错，错误信息指出函数名。
+- 导出：
+
+```ts
+export function createEjsRenderer(host: EjsHost, opts?: { timeoutMs?: number; memoryMb?: number }): {
+  render(text: string, ctx: Parameters<TemplateRenderer>[1]): string;   // 与 core 的 TemplateRenderer 同签名
+  dispose(): void;
+};
+export function hasEjs(text: string): boolean;   // 快速判断，免得每段都进沙箱
+```
+
+### 4.2 接入组装（core + 服务端）
+
+- `assemblePrompt` 在这些点调用 `templateRenderer`（有且 `hasEjs` 为真时）：已激活世界书条目的 content（在 WI 激活之后、放置之前）、预设条目正文、角色卡字段（description / personality / scenario / system_prompt / post_history_instructions / mes_example / first_mes）、作者注释、persona 描述。**历史消息不渲染**（ST-Prompt-Template 默认也不渲染聊天消息里的模板，核对后以它为准，若它默认渲染则在 §5 修正里说明并照做）。
+  - 渲染发生在宏展开**之前**（与 ST-Prompt-Template 的处理顺序核对后以它为准）。
+  - 被渲染过的段 id 记进 `ir.meta.templated`；检查器段落列表给这些段加「模板」小标。
+- 服务端 `services/ejs.ts`：按请求创建渲染器（host 闭包里拿到本次的 lorebooks 与变量工作副本），组装结束 `dispose`；settings KV `ejs: { enabled: boolean }`，**默认 true**；设置 → 前端卡 里加开关。
+- 模板里的 `setvar` 写进本次组装的变量工作副本，随 `AssembleResult.variables` 返回并按现有规则落库（dryRun / 检查器不落库）。
+
+### 4.3 验收
+
+- 单测：语法（五种标签、空白吞吐、嵌套 if/else、for 循环、async getwi）、超时（死循环 200ms 内中断并返回原文 + warning）、内存上限、缓存。
+- 真样本：导入本机 ST 的「黄金庭院」卡与世界书，把 `stat_data.昔涟.好感度` 分别改为 20 / 50 / 70 / 95，检查器里「昔涟」人设条目依次变成阶段 01 / 02 / 03 / 04 的内容。
+- 黄金测试 62/62（缺省无渲染器，行为不变）。
+- QuickJS 冷启动时间记录在报告里（首次渲染与后续渲染的耗时）。
+
+## 5. 待协调与修正（M5（三））
+
+（暂无）

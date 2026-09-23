@@ -1107,5 +1107,14 @@
     },
     "scriptButtons": "Script buttons",
     "loading": "Loading the card…"
-  }
+  },
+  "studio": {},
+  "writing": {},
+  "backgrounds": {},
+  "sprites": {},
+  "themeVariants": {},
+  "scripts": {},
+  "variableEditor": {},
+  "imageGen": {},
+  "toast": {}
 }

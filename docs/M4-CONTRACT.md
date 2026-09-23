@@ -445,3 +445,192 @@ export function treeToStChat(input: {
 2. **§3.4 托盘提示**：「当前模型看不到图片，发送时会被丢弃」（`chat.attach.imageDropped`）与
    「PDF 发送时会被丢弃」（`chat.attach.pdfDropped`）两条随之删除（两个 i18n 键一并删）。
    只留 `pdfAsText`：`documentIn` 为 false 时服务端仍按 §3.3 把 PDF 抽出的文本内联进正文（内容不丢，只是换了形态），提示一句。
+
+
+---
+---
+
+# 第二部分：M4（二）契约——背景、立绘表情、主题变体、外接生图
+
+| 项目 | 内容 |
+| ---- | ---- |
+| 版本 | v1（2026-09-22） |
+| 范围 | §A 背景；§B 立绘表情；§C 主题变体（导入导出）；§D 外接生图后端 |
+| 不含 | 视觉小说全屏模式、立绘动画 / Live2D、生图的局部重绘 / 图生图、群聊立绘 |
+
+表结构已由主会话在迁移 `0003` 加好：`character_sprites`；`connections.provider` 可取 `image-sd | image-comfy | image-novelai | image-openai`；`assets.kind` 早已有 `background` / `emotion`。**本部分不再新增迁移**，其余数据进 settings KV 与已有 JSON 列。
+
+用户已定（2026-09-22）：
+- **背景由各世界各自处理**：琉璃＝隔冰模糊（背景在冰板后，`blur` + 冰蓝白罩，虹边照旧）；雨夜＝隔湿玻璃（背景在玻璃后压暗偏蓝，雨与颗粒照常在最上层）；酒馆＝窗外景（背景只出现在一个带木窗框的区域里，四周暗角，羊皮纸与皮革不透明）；暖房＝柔光衰减（背景褪成暖奶油色调的淡影）。**素与书斋默认不显示背景**；外观设置里的「在素 / 书斋里也显示背景」打开后，两者统一用一层按模式调色的淡化遮罩（canvas 色 85% 覆盖），不做任何材质。
+- 立绘框、背景处理都属于各世界自己的皮肤，写在 `themes/<id>/theme.css`（或新增 `themes/<id>/media.css`，由 apply.ts 一并懒加载），不得在骨架里写死某个世界的样式。
+
+**代号与目录归属**：
+
+| 代号 | 内容 | 独占 | 共享（最小改动，改前重读） |
+| ---- | ---- | ---- | ---- |
+| V | §A §B §C | `apps/web/src/features/{backgrounds,sprites}/**`、`apps/web/src/themes/**`（含六个世界的 css）、`routes/{backgrounds,sprites}.ts`、`services/{backgrounds,sprites,expression}.ts` | `AppLayout.tsx`、`features/chat/{ChatView,SessionPanel,SessionSettings}.tsx`、`features/settings/AppearanceSettings.tsx`、`services/{importer,st-migration}.ts`、`app.ts`、`store/ui.ts`、i18n `backgrounds.* sprites.* themeVariants.*` |
+| IMG | §D | `packages/providers/src/image/**`、`routes/imagine.ts`、`services/{image-gen,jobs}.ts`、`apps/web/src/features/imagine/**` | `routes/connections.ts`、`features/settings/ConnectionsPage.tsx`、`features/chat/Composer.tsx`、`services/assemble-input.ts`（过滤生图节点）、`packages/sandbox-sdk`（`generateImage`）、`features/cards/host-bridge.ts`、i18n `imageGen.*` |
+
+---
+
+## A. 背景（V）
+
+### A.1 数据
+
+- 背景库 = `assets.kind='background'`，`meta.name` 存显示名（上传时的文件名去扩展名）。
+- 生效顺序：**会话 > 角色 > 全局**。
+  - 会话：`chats.metadata.background`：`assetId` | `'none'`（本会话明确不要背景）| 缺省（继承）。
+  - 角色：settings KV `backgroundByCharacter: Record<characterId, assetId>`（不动卡数据）。
+  - 全局：settings KV `defaultBackground: assetId | null`。
+- 「素 / 书斋也显示背景」是本机偏好，放 `useUiStore`（`backdropInMinimalWorlds: boolean`，默认 false）。
+
+### A.2 接口
+
+- `GET /api/backgrounds` → `{ assetId, name, width, height, createdAt }[]`（新的在前）。
+- `POST /api/backgrounds`（multipart `file`，图片 ≤ 20 MB；复用 `assets.save`）→ 同上单项。
+- `PATCH /api/backgrounds/:assetId` `{ name }`；`DELETE /api/backgrounds/:assetId`（同时清掉引用它的 settings 项；会话 metadata 里的悬空引用在读取时当作缺省）。
+- 会话绑定走现有 `PATCH /api/chats/:id { metadata: { background } }`；角色 / 全局走 settings。
+- `media-gc` 不回收 `background`（现状如此，保持）。
+
+### A.3 渲染
+
+- `BackdropLayer`（`themes/signature.tsx` 一带）接收 `imageUrl | null`；有图时在 `<html>`（或应用根）上设 `data-has-backdrop=""`，并把图挂在 `--user-backdrop: url(…)` 上（只由应用自己写，变体 JSON 不能写 url，见 §C）。
+- 每个世界按上面的「用户已定」写 `[data-has-backdrop]` 规则；**生成中动画、雨、颗粒等既有层次不能被背景盖住**；阅读面的对比度必须仍达标（CDP 抽测正文与阅读面的对比度 ≥ 4.5）。
+- `prefers-reduced-motion` 与移动端：背景不做视差、不做动画；390 宽用 `background-size: cover` + 居中。
+
+### A.4 界面
+
+- 会话面板「背景」：缩略图网格（第一格「继承」、第二格「无」），点选即切；「上传」；「设为此角色默认 / 设为全局默认」。
+- 设置 → 外观：全局默认背景、背景库管理（重命名、删除）、「在素 / 书斋里也显示背景」开关。
+- 命令面板：「切换背景」动作（打开会话面板的背景页）。
+
+### A.5 ST 迁移
+
+- 迁移向导导入 `backgrounds/` 下全部图片（本机 23 张）为背景库；ST 聊天 `chat_metadata.custom_background`（形如 `url("backgrounds/xxx.jpg")`）映射到对应会话的 `metadata.background`。
+- 迁移结果里单列「背景 N 张」。
+
+---
+
+## B. 立绘表情（V）
+
+### B.1 数据与接口
+
+- 标签集合：ST 的 28 个默认表情——`admiration amusement anger annoyance approval caring confusion curiosity desire disappointment disapproval disgust embarrassment excitement fear gratitude grief joy love nervousness neutral optimism pride realization relief remorse sadness surprise`；允许自定义标签（`[a-z0-9_-]{1,32}` 或任意中文，去首尾空白）。
+- `GET /api/characters/:id/sprites` → `{ label, assetId }[]`。
+- `PUT /api/characters/:id/sprites/:label`（multipart `file`）/ `DELETE …/:label`。
+- `POST /api/characters/:id/sprites/import`（multipart zip：ST 的立绘包，文件名 = 标签；同名覆盖）。
+- 导入角色卡时：CHARX 里 `type:'emotion'` 的资源（`name` 为标签）自动写进 `character_sprites`；PNG 的 `chara-ext-asset_:` 资源同理（有 `type:'emotion'` 描述的才算）。
+- ST 迁移：`characters/<角色名>/` 目录下的图片按文件名（去扩展名）作标签导入到同名角色（本机样本 Seraphina）。
+
+### B.2 表情选择
+
+- settings KV `sprites`：`{ mode: 'off' | 'classify' | 'manual', connectionId?: string, model?: string, fallback: string /* 默认 'neutral' */ }`，默认 `mode:'classify'`，未配连接时用会话当前连接。
+- `POST /api/chats/:id/nodes/:nodeId/expression` `{ label?: string }`：
+  - 带 label = 手动指定；
+  - 不带 = 分类：取该节点正文（去掉代码块与 HTML，截最后 1500 字），用 `callLlm`（M6 契约 §1.5）+ 结构化输出 `{ label: enum(该角色已有立绘的标签) }` 一次短调用（`maxTokens` 32，关闭推理）；失败或角色没有立绘时返回 fallback。F1 未交付前可先用 `callLlm` 的签名写，测试用 fake adapter。
+  - 结果写进节点 `extra.expression`，返回 `{ label }`。
+- 前端在一轮生成**结束后**（非流式期间）对当前角色的最新助手节点调用一次；swipe 切换时读节点里已有的 `extra.expression`，没有就再分类。
+- slash `/emote <label>`（S 实现命令，调用本接口的手动形式）。
+
+### B.3 界面
+
+- 对话页立绘区：桌面宽屏（≥1280）放在消息区右侧、底部对齐；窄屏在输入框上方一条可折叠的小窗（默认折叠成头像大小）。无立绘的角色不出现立绘区。
+- 切换表情做 200ms 透明度过渡（素：120ms；书斋：无动画，直接换）。
+- 立绘框是各世界的记忆物件延伸：琉璃＝冰板相框、书斋＝裱画轴、素＝无框、酒馆＝铜框挂在皮革上、雨夜＝窗玻璃后的剪影、暖房＝贴纸描边。写在各自主题目录，注入方式同 `signature`（在 `ThemeSignature` 里加可选 `SpriteFrame`，缺省用素的无框实现）。
+- 工作台的角色卡编辑器会复用上传组件：导出 `SpriteManager({ characterId })`（`features/sprites/SpriteManager.tsx`）。
+
+---
+
+## C. 主题变体（V）
+
+### C.1 格式
+
+```jsonc
+{
+  "format": "newtavern-theme-variant@1",
+  "id": "v-<nanoid>",          // 导入时冲突则重新生成
+  "name": "夜航琉璃",
+  "base": "liuli",             // 六个世界之一
+  "slots": {                   // 只允许 slots.css 声明过的槽位（白名单常量表）
+    "light": { "--accent": "oklch(0.70 0.12 190)" },
+    "dark":  { "--canvas": "oklch(0.18 0.03 235)" }
+  },
+  "options": { "rain": false }   // 只允许 base 主题声明过的 options
+}
+```
+
+- 值校验：长度 ≤ 200；禁止包含 `url(`、`;`、`{`、`}`、`@`、`<`、反斜杠、`expression(`、`/*`；颜色槽位必须能被 `CSS.supports('color', v)` 接受；字体槽位只能从允许列表里选（各世界已声明的字体 + 系统栈）；长度类槽位（圆角等）只允许 `0`–`64px`。
+- 模式：只允许 base 主题支持的模式键；不支持的键导入时丢弃并提示。
+
+### C.2 运行时
+
+- settings KV `themeVariants: Variant[]`；当前选择放 `useUiStore`（`variantId: string | null`，切换世界时若 base 不符自动置空）。
+- registry 加 `registerVariants(list)`；`applyTheme` 在 `<html>` 上多设 `data-variant`，并维护一段 `<style id="nt-theme-variant">`：选择器 `[data-theme='<base>'][data-variant='<id>'][data-mode='<mode>']`，优先级高于该主题 theme.css 的槽位赋值。
+- 世界的形态（材质类覆盖、记忆物件、纹理）**不因变体改变**——变体只动槽位值与 options。
+
+### C.3 界面
+
+- 设置 → 外观：世界预览卡下方「变体」一行（该世界的变体小卡 + 「派生变体」）。
+- 变体编辑器（抽屉）：分组编辑颜色（表面 / 文字 / 强调 / 语义）、字体（下拉）、形（圆角滑块）、影（开关 + 预设档位）；实时预览卡（复用主题选择器的活预览）；对比度不足（正文 vs 阅读面 < 4.5）时就地提示。
+- 导出（下载 `.nt-theme.json`）、导入（文件选择，校验失败逐条列出原因）、复制、删除。
+
+---
+
+## D. 外接生图后端（IMG）
+
+### D.1 后端适配（`packages/providers/src/image/`）
+
+```ts
+export type ImageBackendId = 'image-sd' | 'image-comfy' | 'image-novelai' | 'image-openai';
+export interface ImageGenParams {
+  prompt: string; negative?: string; width: number; height: number;
+  steps?: number; cfg?: number; sampler?: string; seed?: number; model?: string;
+  /** ComfyUI：工作流 JSON（API 格式），占位 %prompt% %negative% %seed% %width% %height% %steps% %cfg% %model% */
+  workflow?: Record<string, unknown>;
+}
+export interface ImageBackend {
+  id: ImageBackendId;
+  listModels(conn: Connection): Promise<{ id: string; name?: string }[]>;
+  generate(conn: Connection, p: ImageGenParams, signal: AbortSignal,
+           onProgress?: (fraction: number) => void): Promise<{ images: { mime: string; data: string }[]; seed?: number }>;
+}
+```
+
+| 后端 | 端点 |
+| ---- | ---- |
+| SD WebUI / Forge | `POST {base}/sdapi/v1/txt2img`；模型 `GET /sdapi/v1/sd-models`；进度 `GET /sdapi/v1/progress` 轮询 |
+| ComfyUI | `POST {base}/prompt`（替换占位后的工作流）→ 轮询 `GET /history/{prompt_id}` → `GET /view?filename=…&type=output`；模型 `GET /object_info/CheckpointLoaderSimple` |
+| NovelAI | `POST https://image.novelai.net/ai/generate-image`（Bearer Key，返回 zip，取第一张 png） |
+| OpenAI 兼容 | `POST {base}/v1/images/generations`（`b64_json`）；模型用 `/v1/models` |
+
+`Connection.provider` 的类型要放宽以容纳生图后端（`ProviderId | ImageBackendId`，或生图单独一个 `ImageConnection` 类型）——由 IMG 决定，改动写进 §E 修正。
+
+### D.2 服务端
+
+- 连接：`connections` 表复用（Key 同样加密、同样的代理与自定义 Header）；`GET /api/connections` 的结果里带 `kind: 'chat' | 'image'`，对话相关的连接下拉只列 chat；连接测试对生图后端调 `listModels`。
+- settings KV `imageGen`：`{ connectionId, model?, defaults: { width, height, steps, cfg, sampler, negative }, promptWriter?: { connectionId, model }, comfyWorkflow?: object, stylePrefix?: string }`。
+- `POST /api/chats/:id/imagine`（SSE）`{ mode: 'free' | 'last_message' | 'character', prompt?, negative?, width?, height?, parentId? }`：
+  1. 建 `jobs` 行（kind `image_gen`，status 流转 pending → running → done / failed）；
+  2. `last_message` / `character`：先用 promptWriter（缺省 = 会话连接）调 `callLlm`（M6 契约 §1.5）写一段英文生图提示词（参照 ST SD 扩展的「描述最后一条消息 / 描述角色外貌」两种模板，写在 `packages/i18n/prompts/imagine.{zh-CN,en}.md`）；
+  3. 调后端，事件：`job {id, status}`、`prompt {text}`、`progress {fraction}`、`node {…MessageNode}`、`error {message}`、`done`；
+  4. 结果存为 `generated` 资产，追加为当前 head 的子节点：`role:'assistant'`、`name` = 角色名、parts = `[{type:'image',…}]`、`extra: { generatedBy: 'image', imagePrompt, backend, seed }`，并移动 head。
+- **生图节点默认不进提示词**：`assemble-input` 线性化历史时跳过 `extra.generatedBy==='image'` 的节点（它的子节点照常）；检查器里显示为「已跳过（生图）」。
+- `GET /api/jobs/:id`（查状态，前端刷新页面后续看进度用）。
+
+### D.3 前端
+
+- 连接页：「生图后端」分组，新建时选四种之一；ComfyUI 额外有「导入工作流 JSON」。
+- Composer：附件按钮旁「生图」菜单——「画最后一条消息」「画角色」「自由描述…」（弹出输入框，可改尺寸与负面词）；进行中显示进度条，可取消（abort SSE）。
+- 生图消息正常显示（已有的图片 part 渲染与灯箱），可「重画」（同参数新 seed，作为该节点的 swipe 兄弟）。
+- 前端卡原生 API：`newtavern.generateImage({ prompt, negative?, width?, height? }) → Promise<{ assetUrl }>`（只生成并存资产，不写消息树）；RPC 名 `image.generate`。slash `/imagine [prompt]`（S 实现命令，调用 `/api/chats/:id/imagine` 的 free 模式）。
+
+### D.4 验收
+
+- 四个后端各一组 mock HTTP 服务的集成测试（本机没有 SD / ComfyUI / NovelAI Key）：参数映射、进度、错误归一化、ComfyUI 占位替换。报告里写明「只做了 mock 验证」。
+- 路由测试：imagine 三种模式、节点入树与 head 移动、组装时跳过生图节点、job 状态。
+
+---
+
+## E. 待协调与修正（M4（二））
+
+（暂无）

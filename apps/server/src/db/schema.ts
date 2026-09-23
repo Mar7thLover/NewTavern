@@ -5,7 +5,8 @@ import { index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqli
 /**
  * 领域模型表。见 docs/PLAN.md §3.3。
  * 灵活字段用 JSON 列，可查询字段拉平。DB 是唯一真源，文件系统只存二进制与原始导入件。
- * writing_projects/documents/game_states 等 M7/M8 表届时再加。
+ * M4（二）/ M5（三）/ M6 / M7 的表（scripts、character_sprites、writing_projects、documents、
+ * document_versions）在迁移 0003 一次加齐；game_states 等 M8 表届时再加。
  */
 
 const id = () =>
@@ -66,6 +67,11 @@ export const characters = sqliteTable(
     /** 原始导入件相对路径（未修改则导出原件） */
     sourcePath: text('source_path'),
     originalHash: text('original_hash'),
+    /**
+     * 在新酒馆里编辑过卡字段的时间（工作台 PUT 写入）。非空时导出不再回原件字节，
+     * 而是从 data 重新写（M6 契约）。
+     */
+    editedAt: integer('edited_at', { mode: 'timestamp_ms' }),
     tags: text('tags', { mode: 'json' }).$type<string[]>().notNull().default([]),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -247,7 +253,9 @@ export const variables = sqliteTable(
   'variables',
   {
     id: id(),
-    scope: text('scope', { enum: ['global', 'character', 'chat', 'script'] }).notNull(),
+    scope: text('scope', {
+      enum: ['global', 'character', 'chat', 'script', 'preset'],
+    }).notNull(),
     ownerId: text('owner_id').notNull().default(''),
     key: text('key').notNull(),
     value: text('value', { mode: 'json' }),
@@ -271,6 +279,10 @@ export const variableEvents = sqliteTable('variable_events', {
 
 export const connections = sqliteTable('connections', {
   id: id(),
+  /**
+   * 对话提供商（openai-chat / openai-responses / anthropic / google），
+   * 或外接生图后端（image-sd / image-comfy / image-novelai / image-openai，M4（二））。
+   */
   provider: text('provider').notNull(),
   label: text('label').notNull().default(''),
   baseUrl: text('base_url').notNull(),
@@ -366,6 +378,106 @@ export const promptLibrary = sqliteTable('prompt_library', {
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
+
+/**
+ * 酒馆助手脚本库（M5（三））：用户自己的全局脚本与预设绑定脚本。
+ * 角色卡脚本仍存在卡的 `extensions` 里（保证往返无损），不进这张表。
+ * `data` 保存原件（酒馆助手导出的脚本 JSON）全部字段，导出时以它为底叠加列值。
+ */
+export const scripts = sqliteTable('scripts', {
+  id: id(),
+  scope: text('scope', { enum: ['global', 'preset'] })
+    .notNull()
+    .default('global'),
+  /** scope='preset' 时指向 presets.id */
+  ownerId: text('owner_id'),
+  name: text('name').notNull(),
+  content: text('content').notNull().default(''),
+  enabled: integer('enabled', { mode: 'boolean' }).notNull().default(false),
+  /** 酒馆助手的脚本按钮：{ name, visible }[] */
+  buttons: text('buttons', { mode: 'json' }).$type<Record<string, unknown>[]>().notNull().default([]),
+  data: text('data', { mode: 'json' }).$type<Record<string, unknown>>(),
+  displayOrder: integer('display_order').notNull().default(0),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+/** 立绘表情（M4（二））：每个角色每个表情标签一张图 */
+export const characterSprites = sqliteTable(
+  'character_sprites',
+  {
+    id: id(),
+    characterId: text('character_id')
+      .notNull()
+      .references(() => characters.id, { onDelete: 'cascade' }),
+    /** ST 表情标签（neutral / joy / anger …）或用户自定义标签 */
+    label: text('label').notNull(),
+    assetId: text('asset_id').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex('character_sprites_char_label_idx').on(t.characterId, t.label)],
+);
+
+/** 长篇写作项目（M7） */
+export const writingProjects = sqliteTable('writing_projects', {
+  id: id(),
+  title: text('title').notNull().default(''),
+  /** { connectionId?, model?, layoutMode?, styleGuide?, systemPrompt?, contextBudget? } */
+  settings: text('settings', { mode: 'json' }).$type<Record<string, unknown>>(),
+  /** 设定圣经：复用世界书 */
+  lorebookIds: text('lorebook_ids', { mode: 'json' }).$type<string[]>().notNull().default([]),
+  outline: text('outline').notNull().default(''),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+/** 写作项目里的章节与笔记（M7） */
+export const documents = sqliteTable(
+  'documents',
+  {
+    id: id(),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => writingProjects.id, { onDelete: 'cascade' }),
+    kind: text('kind', { enum: ['chapter', 'note'] })
+      .notNull()
+      .default('chapter'),
+    title: text('title').notNull().default(''),
+    docOrder: integer('doc_order').notNull().default(0),
+    /** ProseMirror (TipTap) JSON */
+    content: text('content', { mode: 'json' }).$type<Record<string, unknown>>(),
+    /** 纯文本（组装上下文、字数、导出用） */
+    text: text('text').notNull().default(''),
+    summary: text('summary').notNull().default(''),
+    /** 正文在摘要生成之后又改过 */
+    summaryStale: integer('summary_stale', { mode: 'boolean' }).notNull().default(false),
+    /** 章节已完成（完成时自动生成摘要） */
+    done: integer('done', { mode: 'boolean' }).notNull().default(false),
+    wordCount: integer('word_count').notNull().default(0),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index('documents_project_idx').on(t.projectId)],
+);
+
+export const documentVersions = sqliteTable(
+  'document_versions',
+  {
+    id: id(),
+    documentId: text('document_id')
+      .notNull()
+      .references(() => documents.id, { onDelete: 'cascade' }),
+    version: integer('version').notNull(),
+    content: text('content', { mode: 'json' }).$type<Record<string, unknown>>(),
+    text: text('text').notNull().default(''),
+    author: text('author', { enum: ['user', 'ai'] })
+      .notNull()
+      .default('user'),
+    label: text('label'),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex('document_versions_idx').on(t.documentId, t.version)],
+);
 
 export const jobs = sqliteTable('jobs', {
   id: id(),
