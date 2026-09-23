@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { branchPath, buildChatMirror, toChatMessage } from './host-bridge';
 import { selectSandboxLibs } from './libs';
-import { parseSlashCommand } from './slash';
+import { composerSlashKind } from './slash';
 import { readCharacterScripts } from './ScriptRunner';
 import type { ChatDetail, CharacterDetail, MessageNode } from '../../lib/api';
 
@@ -97,24 +97,16 @@ describe('消息树 → 酒馆助手的楼层', () => {
   });
 });
 
-describe('slash 子集', () => {
-  it('解析命名参数与其余部分', () => {
-    expect(parseSlashCommand('/setvar key=好感度 35')).toEqual({
-      name: 'setvar',
-      named: { key: '好感度' },
-      rest: '35',
-    });
-    expect(parseSlashCommand('/echo 你好世界')).toEqual({ name: 'echo', named: {}, rest: '你好世界' });
-    expect(parseSlashCommand('/setvar key="带 空格" 值')).toEqual({
-      name: 'setvar',
-      named: { key: '带 空格' },
-      rest: '值',
-    });
-  });
-
-  it('不是 slash 命令时返回 null', () => {
-    expect(parseSlashCommand('好感度 +5')).toBeNull();
-    expect(parseSlashCommand('')).toBeNull();
+describe('Composer 的 slash 判定', () => {
+  it('已知命令执行、未知命令提示、普通文字照常发送', () => {
+    expect(composerSlashKind('/setvar key=好感度 35')).toBe('command');
+    expect(composerSlashKind('  /echo 你好 | /pass')).toBe('command');
+    expect(composerSlashKind('/sys 旁白')).toBe('command');
+    expect(composerSlashKind('/不存在的命令 x')).toBe('text');
+    expect(composerSlashKind('/foo bar')).toBe('unknown');
+    expect(composerSlashKind('好感度 +5')).toBe('text');
+    expect(composerSlashKind('// 注释行')).toBe('text');
+    expect(composerSlashKind('/')).toBe('text');
   });
 });
 

@@ -174,6 +174,7 @@ export function sandboxGuest(): void {
     if (payload.kind === 'mirror') {
       mirrors[payload.slice] = payload.snapshot;
       if (payload.slice === 'variables') dispatch('newtavern:variables', [payload.snapshot]);
+      if (payload.slice === 'theme') applyTheme(payload.snapshot);
       return;
     }
   });
@@ -188,7 +189,16 @@ export function sandboxGuest(): void {
   }
 
   function variablesMirror(): any {
-    return mirrors.variables ?? { message: {}, chat: {}, character: {}, global: {}, script: {} };
+    return (
+      mirrors.variables ?? { message: {}, chat: {}, character: {}, global: {}, script: {}, preset: {} }
+    );
+  }
+
+  /** 主题贴合（M5（三）§3.4）：宿主推来新的槽位声明串，改写 `#nt-theme`，不重建 iframe */
+  function applyTheme(css: any): void {
+    if (typeof css !== 'string') return;
+    const style = document.getElementById('nt-theme');
+    if (style) style.textContent = `:root{${css}}`;
   }
 
   function macroMirror(): any {
@@ -267,10 +277,14 @@ export function sandboxGuest(): void {
 
   function variableScope(option: any): string {
     const type = option?.type;
-    if (type === 'chat' || type === 'character' || type === 'global' || type === 'script') return type;
-    if (type === 'preset') {
-      forwardLog('warn', ['[新酒馆] preset 作用域的变量还不支持，读到的是空表']);
-      return 'preset';
+    if (
+      type === 'chat' ||
+      type === 'character' ||
+      type === 'global' ||
+      type === 'script' ||
+      type === 'preset'
+    ) {
+      return type;
     }
     return 'message';
   }
@@ -370,6 +384,7 @@ export function sandboxGuest(): void {
     const table = variablesMirror();
     const out: any = {};
     mergeDeep(out, clone(table.global ?? {}));
+    mergeDeep(out, clone(table.preset ?? {}));
     mergeDeep(out, clone(table.character ?? {}));
     mergeDeep(out, clone(table.script ?? {}));
     mergeDeep(out, clone(table.message ?? {}));
@@ -470,7 +485,7 @@ export function sandboxGuest(): void {
         return value === undefined || value === null ? '' : typeof value === 'string' ? value : JSON.stringify(value);
       })
       .replace(
-        /{{get_(message|chat|character|global)_variable::([^}]+)}}/gi,
+        /{{get_(message|chat|character|global|preset)_variable::([^}]+)}}/gi,
         (_match: string, type: string, path: string) => {
           const value = getPath(getVariables({ type }), path.trim());
           return value === undefined || value === null ? '' : typeof value === 'string' ? value : JSON.stringify(value);
@@ -484,7 +499,17 @@ export function sandboxGuest(): void {
 
   let generationSeq = 0;
 
-  function runGenerate(config: any, mode: 'generate' | 'raw'): Promise<string> {
+  /** 去掉函数（`filter`）与不可克隆的值：结构化克隆过不去 postMessage */
+  function plain(value: any): any {
+    if (value === undefined) return undefined;
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch {
+      return undefined;
+    }
+  }
+
+  function runGenerate(config: any, mode: 'generate' | 'raw'): Promise<any> {
     generationSeq += 1;
     const generationId = config?.generation_id ?? `${frame.frameId}:gen:${generationSeq}`;
     const known = [
@@ -494,6 +519,13 @@ export function sandboxGuest(): void {
       'ordered_prompts',
       'generation_id',
       'preset_name',
+      'injects',
+      'overrides',
+      'tools',
+      'tool_choice',
+      'json_schema',
+      // 酒馆助手里只影响「停止按钮」的开关，新酒馆的卡生成本来就不占停止按钮
+      'should_silence',
     ];
     const unsupportedFields = Object.keys(config ?? {}).filter((key) => !known.includes(key));
     return call('generate', {
@@ -502,9 +534,165 @@ export function sandboxGuest(): void {
       userInput: config?.user_input,
       shouldStream: config?.should_stream !== false,
       maxChatHistory: config?.max_chat_history,
-      orderedPrompts: config?.ordered_prompts,
+      orderedPrompts: plain(config?.ordered_prompts),
+      injects: plain(config?.injects),
+      overrides: plain(config?.overrides),
+      tools: plain(config?.tools),
+      toolChoice: plain(config?.tool_choice),
+      jsonSchema: plain(config?.json_schema),
+      presetName: config?.preset_name,
       unsupported: unsupportedFields,
-    }).then((result: any) => String(result?.text ?? ''));
+    }).then((result: any) => {
+      // 模型调用了工具：按酒馆助手 `GenerateToolCallResult` 的形状交回
+      if (Array.isArray(result?.toolCalls) && result.toolCalls.length > 0) {
+        return { content: String(result?.text ?? ''), tool_calls: result.toolCalls };
+      }
+      return String(result?.text ?? '');
+    });
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* 注入（injectPrompts / uninjectPrompts）                           */
+  /* ---------------------------------------------------------------- */
+
+  let injectSeq = 0;
+
+  function injectPrompts(prompts: any[], options?: any): any {
+    const list = (Array.isArray(prompts) ? prompts : []).map((prompt: any) => {
+      injectSeq += 1;
+      if (typeof prompt?.filter === 'function') {
+        forwardLog('warn', ['[新酒馆] injectPrompts 的 filter 函数不支持（注入存在服务端），已忽略']);
+      }
+      return {
+        id: typeof prompt?.id === 'string' && prompt.id !== '' ? prompt.id : `${frame.frameId}:inject:${injectSeq}`,
+        content: String(prompt?.content ?? ''),
+        role: prompt?.role ?? 'system',
+        position: prompt?.position === 'none' ? 'none' : 'in_chat',
+        depth: Number(prompt?.depth ?? 0),
+        should_scan: prompt?.should_scan === true,
+      };
+    });
+    void call('prompts.inject', { prompts: list, once: options?.once === true }).catch((error: Error) =>
+      reportError(error),
+    );
+    let removed = false;
+    return {
+      uninject: () => {
+        if (removed) return;
+        removed = true;
+        uninjectPrompts(list.map((item: any) => item.id));
+      },
+    };
+  }
+
+  function uninjectPrompts(ids: string[]): void {
+    void call('prompts.uninject', { ids: Array.isArray(ids) ? ids.map(String) : [] }).catch(
+      (error: Error) => reportError(error),
+    );
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* 预设（同步读镜像）                                                  */
+  /* ---------------------------------------------------------------- */
+
+  function presetsMirror(): any {
+    return mirrors.presets ?? { names: [], loaded: '', current: null };
+  }
+
+  function getPreset(name?: string): any {
+    const state = presetsMirror();
+    const target = name === undefined || name === 'in_use' ? state.loaded : String(name);
+    if (target !== '' && target === state.loaded && state.current) return clone(state.current);
+    if (!state.names.includes(target)) throw new Error(`预设不存在：${String(name)}`);
+    // 同步接口只能读镜像：非当前预设的全文不随镜像下发（几十 KB 一份），明确报错比给个空壳好查
+    throw new Error(
+      `[新酒馆] getPreset 只能同步读取当前预设（${state.loaded || '无'}）；读「${target}」请先 loadPreset 切过去`,
+    );
+  }
+
+  function loadPreset(name: string): boolean {
+    const state = presetsMirror();
+    if (!state.names.includes(String(name))) return false;
+    void call('preset.load', { name: String(name) }).catch((error: Error) => reportError(error));
+    return true;
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* 酒馆正则（formatAsTavernRegexedString）                             */
+  /* ---------------------------------------------------------------- */
+
+  const REGEX_SOURCE: Record<string, number> = {
+    user_input: 1,
+    ai_output: 2,
+    slash_command: 3,
+    world_info: 5,
+    reasoning: 6,
+  };
+
+  /**
+   * 与显示侧同一套脚本（宿主推的 `regex` 镜像）+ 同一个引擎（`/sandbox/lib/nt-regex.js`，
+   * 由 core 的 `regex/engine.ts` 打成的经典脚本）。引擎没加载到时原文返回并警告。
+   */
+  function formatAsTavernRegexedString(
+    text: string,
+    source: string,
+    destination: string,
+    option?: any,
+  ): string {
+    const engine = scope.__NT_REGEX__;
+    const state = mirrors.regex;
+    if (!engine || !state) {
+      forwardLog('warn', ['[新酒馆] 正则引擎没加载，formatAsTavernRegexedString 原文返回']);
+      return text;
+    }
+    const placement = REGEX_SOURCE[source];
+    if (placement === undefined) return text;
+    const charName =
+      typeof option?.character_name === 'string' ? option.character_name : (state.charName ?? '');
+    const userName = state.userName ?? '';
+    return engine.applyRegexScripts(state.scripts ?? [], String(text ?? ''), {
+      placement,
+      direction: destination === 'prompt' ? 'prompt' : 'display',
+      ...(typeof option?.depth === 'number' ? { depth: option.depth } : {}),
+      substitute: (value: string, postProcess?: (item: string) => string) => {
+        const post = postProcess ?? ((item: string) => item);
+        return String(value ?? '')
+          .replace(/{{char}}/gi, () => post(charName))
+          .replace(/{{user}}/gi, () => post(userName));
+      },
+    });
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* 变量 schema（registerVariableSchema）                              */
+  /* ---------------------------------------------------------------- */
+
+  /**
+   * 酒馆助手签名 `registerVariableSchema(zodSchema, { type })`。zod 4 的 `z.toJSONSchema`
+   * 转成 JSON Schema 交给宿主（按会话存），变量管理器与 MVU 按它校验。
+   * `io:'input'`：`.prefault()` / `.transform()` 这类 MVU 常用写法按「输入」描述，不会把多余的键判错。
+   */
+  function registerVariableSchema(schema: any, option?: any): void {
+    const type = option?.type ?? 'message';
+    const zod = scope.z;
+    let json: any = null;
+    try {
+      if (schema && typeof schema === 'object' && typeof schema.safeParse !== 'function') {
+        json = schema; // 已经是 JSON Schema
+      } else if (zod && typeof zod.toJSONSchema === 'function') {
+        json = zod.toJSONSchema(schema, { io: 'input', unrepresentable: 'any' });
+      }
+    } catch (error) {
+      forwardLog('warn', ['[新酒馆] registerVariableSchema 转换 schema 失败', String(error)]);
+      return;
+    }
+    if (!json) {
+      forwardLog('warn', ['[新酒馆] registerVariableSchema：没有 zod，无法转换 schema']);
+      return;
+    }
+    void call('variables.registerSchema', { type, schema: plain(json) }).catch((error: Error) =>
+      reportError(error),
+    );
   }
 
   /* ---------------------------------------------------------------- */
@@ -752,6 +940,8 @@ export function sandboxGuest(): void {
     generate: (config_: any) => runGenerate(config_, 'generate'),
     generateRaw: (config_: any) => runGenerate(config_, 'raw'),
     stopGeneration: (generationId: string) => call('generate.stop', { generationId }),
+    /** 外接生图：`{ prompt, negative?, width?, height? }` → `{ assetUrl }`（只存资产，不写消息） */
+    generateImage: (options: any) => call('image.generate', options ?? {}),
     slash: (command: string) => call('slash.run', { command }),
     lorebook,
     character: () => clone(mirrors.charData ?? null),
@@ -778,7 +968,7 @@ export function sandboxGuest(): void {
     deleteVariable,
     updateVariablesWith,
     getAllVariables,
-    registerVariableSchema: () => undefined,
+    registerVariableSchema,
     generate: (config_: any) => runGenerate(config_, 'generate'),
     generateRaw: (config_: any) => runGenerate(config_, 'raw'),
     stopGenerationById: (generationId: string) => call('generate.stop', { generationId }),
@@ -820,10 +1010,7 @@ export function sandboxGuest(): void {
         : `TH-message--${frame.messageId ?? 0}--${frame.index ?? 0}`,
     substitudeMacros,
     substituteMacros: substitudeMacros,
-    formatAsTavernRegexedString: (text: string) => {
-      forwardLog('warn', ['[新酒馆] formatAsTavernRegexedString 还不支持，原文返回']);
-      return text;
-    },
+    formatAsTavernRegexedString,
     triggerSlash: (command: string) => call('slash.run', { command }),
     reloadIframe: () => window.location.reload(),
     errorCatched,
@@ -836,11 +1023,14 @@ export function sandboxGuest(): void {
     getAudioList: unsupported('getAudioList'),
     createCharacter: unsupported('createCharacter'),
     deleteCharacter: unsupported('deleteCharacter'),
-    getPreset: unsupported('getPreset'),
+    getPreset,
+    loadPreset,
+    getPresetNames: () => clone(presetsMirror().names ?? []),
+    getLoadedPresetName: () => presetsMirror().loaded ?? '',
     setPreset: unsupported('setPreset'),
-    loadPreset: unsupported('loadPreset'),
     installExtension: unsupported('installExtension'),
-    injectPrompts: unsupported('injectPrompts'),
+    injectPrompts,
+    uninjectPrompts,
     registerMacroLike: unsupported('registerMacroLike'),
   };
 

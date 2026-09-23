@@ -12,6 +12,7 @@ import {
   parseRegexScripts,
   parseWorldbook,
   presetApiFamily,
+  readCardEmbeddedAssets,
   readCardFromPng,
   readCharx,
   removePngTextChunksWhere,
@@ -44,7 +45,10 @@ import {
   type ImportStChatResult,
 } from './chat-transfer.js';
 import { extractEmbeddedRegex, nextGlobalOrder, summarize } from './embedded-regex.js';
+import { extractPresetScripts, summarizeScripts } from './scripts.js';
 import { stRegexToScript, toRegexColumns, toRegexScript, type RegexScript } from './regex-map.js';
+import { recordCurrentVersion } from './versions.js';
+import { importCardSprites } from './sprites.js';
 
 export type CharacterFormat = 'png' | 'charx' | 'json';
 
@@ -135,6 +139,26 @@ function toV3Card(data: unknown): V3Card {
   return normalizeCard({ spec: 'chara_card_v3', spec_version: '3.0', data });
 }
 
+/** 原件卡 JSON 顶层除 spec / spec_version / data 之外的字段（V1 平铺卡没有这一层，返回空） */
+function originalTopLevel(
+  original: { format: string; bytes: Uint8Array } | undefined,
+): Record<string, unknown> {
+  if (!original) return {};
+  try {
+    const raw: Record<string, unknown> =
+      original.format === 'png'
+        ? readCardFromPng(original.bytes).raw
+        : original.format === 'charx'
+          ? readCharx(original.bytes).card
+          : parseCardJson(parseJsonBytes(original.bytes, '角色卡')).raw;
+    if (typeof raw.spec !== 'string') return {};
+    const { spec: _spec, spec_version: _version, data: _data, ...rest } = raw;
+    return rest;
+  } catch {
+    return {};
+  }
+}
+
 export function createImporter(db: Db, assets: AssetsService, dataDir: string) {
   function saveOriginal(bytes: Uint8Array, format: CharacterFormat) {
     const sha256 = createHash('sha256').update(bytes).digest('hex');
@@ -156,6 +180,19 @@ export function createImporter(db: Db, assets: AssetsService, dataDir: string) {
     return { asset, bytes: new Uint8Array(fs.readFileSync(absPath)) };
   }
 
+  /** 原始导入件（编辑过的卡重写导出时取它的内嵌资源）；不存在返回 undefined */
+  function readOriginal(sourcePath: string | null) {
+    if (!sourcePath) return undefined;
+    const absPath = path.join(dataDir, sourcePath);
+    if (!fs.existsSync(absPath)) return undefined;
+    const format = sourcePath.endsWith('.png')
+      ? 'png'
+      : sourcePath.endsWith('.charx')
+        ? 'charx'
+        : 'json';
+    return { format, bytes: new Uint8Array(fs.readFileSync(absPath)) };
+  }
+
   function getCharacter(id: string) {
     return db.select().from(schema.characters).where(eq(schema.characters.id, id)).get();
   }
@@ -166,6 +203,7 @@ export function createImporter(db: Db, assets: AssetsService, dataDir: string) {
       let card: V3Card;
       let spec: 'v2' | 'v3';
       let avatar: { bytes: Uint8Array; mime: string } | undefined;
+      let charxFiles: Map<string, Uint8Array> | undefined;
 
       if (format === 'png') {
         const parsed = guard(() => readCardFromPng(bytes));
@@ -180,6 +218,7 @@ export function createImporter(db: Db, assets: AssetsService, dataDir: string) {
         const charx = guard(() => readCharx(bytes));
         spec = 'v3';
         card = charx.card;
+        charxFiles = charx.files;
         const icon = card.data.assets?.find((a) => a.type === 'icon' && resolveEmbeddedUri(a.uri));
         const iconPath = icon ? resolveEmbeddedUri(icon.uri) : undefined;
         const iconBytes = iconPath ? charx.files.get(iconPath) : undefined;
@@ -212,6 +251,9 @@ export function createImporter(db: Db, assets: AssetsService, dataDir: string) {
         .get();
       // 内嵌世界书抽表（契约 §3.1）：data.character_book 原样保留
       const bookId = extractCharacterBook(db, row);
+      // 导入即第 1 版（M6 §2.2）：卡与抽出来的内嵌书各一版
+      recordCurrentVersion(db, 'character', row.id);
+      if (bookId) recordCurrentVersion(db, 'lorebook', bookId);
       // 自带的正则也抽进正则库（默认不启用，由前端问过用户再开；§3.2 修正）
       const embeddedRegex = summarize(
         'character',
@@ -224,6 +266,11 @@ export function createImporter(db: Db, assets: AssetsService, dataDir: string) {
           data: row.data,
         }),
       );
+      // 卡里 type:'emotion' 的资源进立绘表（M4（二）§B.1）
+      importCardSprites(db, assets, row.id, card, {
+        ...(charxFiles ? { charxFiles } : {}),
+        ...(format === 'png' ? { pngBytes: bytes } : {}),
+      });
       return { ...row, ...(bookId ? { bookId } : {}), ...(embeddedRegex ? { embeddedRegex } : {}) };
     },
 
@@ -237,29 +284,64 @@ export function createImporter(db: Db, assets: AssetsService, dataDir: string) {
       // 书被编辑过 → 用表重建 character_book，不能再走原始字节
       const rebuiltBook = rebuildCharacterBook(db, row);
 
-      if (!rebuiltBook && row.sourcePath && row.sourcePath.endsWith(`.${format}`)) {
+      // 卡在新酒馆里编辑过（editedAt，M6 §2.1）→ 同样从 data 重写，不回原件字节
+      if (
+        !rebuiltBook &&
+        !row.editedAt &&
+        row.sourcePath &&
+        row.sourcePath.endsWith(`.${format}`)
+      ) {
         const absPath = path.join(dataDir, row.sourcePath);
         if (fs.existsSync(absPath)) {
           return { fileName, mime, bytes: new Uint8Array(fs.readFileSync(absPath)) };
         }
       }
 
+      const original = readOriginal(row.sourcePath);
       const card = toV3Card(
         rebuiltBook
           ? { ...(row.data as Record<string, unknown>), character_book: rebuiltBook }
           : row.data,
       );
+      // 库里只存 data：原件顶层的未知字段（spec / spec_version / data 之外）从原件取回
+      Object.assign(card, originalTopLevel(original), {
+        spec: card.spec,
+        spec_version: card.spec_version,
+        data: card.data,
+      });
       const avatar = readAssetBytes(row.avatarAssetId);
       if (format === 'json') {
         return { fileName, mime, bytes: new TextEncoder().encode(JSON.stringify(card, null, 4)) };
       }
+      // 原件里除卡 JSON 之外的内嵌资源（PNG 的 chara-ext-asset_ chunk / CHARX 包内文件）照样带上
       if (format === 'png') {
         const base = avatar?.asset.mime === 'image/png' ? avatar.bytes : null;
-        return { fileName, mime, bytes: writeCardToPng(base, card) };
+        const embedded =
+          original?.format === 'png' ? readCardEmbeddedAssets(original.bytes) : undefined;
+        return {
+          fileName,
+          mime,
+          bytes: writeCardToPng(base, card, embedded && embedded.size > 0 ? embedded : undefined),
+        };
       }
-      const files = new Map<string, Uint8Array>();
+      const files = new Map<string, Uint8Array>(
+        original?.format === 'charx' ? guard(() => readCharx(original.bytes)).files : [],
+      );
+      const icon = card.data.assets?.find((a) => a.type === 'icon' && resolveEmbeddedUri(a.uri));
+      const iconPath = icon ? resolveEmbeddedUri(icon.uri) : undefined;
       const hasIcon = card.data.assets?.some((a) => a.type === 'icon');
-      if (avatar && !hasIcon) {
+      if (avatar && icon && iconPath && files.has(iconPath)) {
+        // 头像可能在新酒馆里换过：包里的图标文件换成当前头像（扩展名不符时改写 uri）
+        const ext =
+          Object.entries(IMAGE_MIME).find(([, m]) => m === avatar.asset.mime)?.[0] ?? icon.ext;
+        const target = ext === icon.ext ? iconPath : iconPath.replace(/\.[^./]+$/, `.${ext}`);
+        if (target !== iconPath) {
+          files.delete(iconPath);
+          icon.uri = `embeded://${target}`;
+          icon.ext = ext;
+        }
+        files.set(target, avatar.bytes);
+      } else if (avatar && !hasIcon) {
         const ext =
           Object.entries(IMAGE_MIME).find(([, m]) => m === avatar.asset.mime)?.[0] ?? 'png';
         const iconPath = `assets/icon/images/main.${ext}`;
@@ -301,7 +383,15 @@ export function createImporter(db: Db, assets: AssetsService, dataDir: string) {
           data: preset,
         }),
       );
-      return { ...row, ...(embeddedRegex ? { embeddedRegex } : {}) };
+      // 预设自带的酒馆助手脚本也抽进脚本库（默认关闭，前端问过再开；M5（三）§2.1）
+      const embeddedScripts = summarizeScripts(row.id, row.name, extractPresetScripts(db, row));
+      // 导入即第 1 版（M6 §2.2）
+      recordCurrentVersion(db, 'preset', row.id);
+      return {
+        ...row,
+        ...(embeddedRegex ? { embeddedRegex } : {}),
+        ...(embeddedScripts ? { embeddedScripts } : {}),
+      };
     },
 
     exportPreset(id: string): ExportedFile | undefined {
@@ -350,6 +440,8 @@ export function createImporter(db: Db, assets: AssetsService, dataDir: string) {
             data: book,
           }),
         );
+        // 导入即第 1 版（M6 §2.2）
+        recordCurrentVersion(tx, 'lorebook', row.id);
         return {
           ...row,
           entryCount: items.length,

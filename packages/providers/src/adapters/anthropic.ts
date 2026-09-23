@@ -13,6 +13,7 @@ import {
 import { irToChatMessages, mergeAdjacentSameRole, type ChatMessage } from '../messages.js';
 import { parseSseStream } from '../sse.js';
 import { canDisableThinking, resolveThinking, stEffortToClaude } from '../thinking.js';
+import { checkForcedTool, parseToolArgsObject, syntheticCallId } from '../tools.js';
 import type {
   BuildOptions,
   Connection,
@@ -96,6 +97,8 @@ function renderParts(
   warnings: string[],
 ): AnthropicBlock[] {
   const head: AnthropicBlock[] = [];
+  /** tool_result 必须排在 user content 的最前面（紧接上一条 assistant 的 tool_use） */
+  const results: AnthropicBlock[] = [];
   const body: AnthropicBlock[] = [];
   const roleCtx = { accepts: role === 'user', role };
   for (const part of parts) {
@@ -127,9 +130,122 @@ function renderParts(
           head.push(part.payload as Record<string, unknown>);
         }
         break;
+      case 'tool_call': {
+        if (role !== 'assistant') {
+          warnings.push(`工具调用只能出现在 assistant 消息里，已丢弃 ${part.name}`);
+          break;
+        }
+        // tool_use.input 要对象：参数不是 JSON 对象时用 {} 顶上并告警
+        let input = parseToolArgsObject(part.args);
+        if (input === undefined) {
+          warnings.push(`工具调用 ${part.name} 的参数不是 JSON 对象，已按 {} 回传`);
+          input = {};
+        }
+        body.push({ type: 'tool_use', id: part.id, name: part.name, input });
+        break;
+      }
+      case 'tool_result':
+        if (role !== 'user') {
+          warnings.push(`工具结果只能出现在 user 段里，已丢弃 ${part.name}`);
+          break;
+        }
+        results.push({
+          type: 'tool_result',
+          tool_use_id: part.callId,
+          content: part.content,
+          ...(part.isError ? { is_error: true } : {}),
+        });
+        break;
     }
   }
-  return [...head, ...body];
+  return [...head, ...results, ...body];
+}
+
+/** 结构化输出模拟工具的说明（模型看得到） */
+const STRUCTURED_TOOL_DESCRIPTION =
+  'Return the final answer by calling this tool. The input must follow the schema exactly.';
+
+/**
+ * ir.tools / toolChoice / responseFormat → 请求体字段。
+ * 结构化输出用「强制调用单个工具」模拟：追加一个以 responseFormat.name 命名的工具，
+ * 返回该工具名，collectStream 据此把它的参数还原为正文。
+ * 强制类 tool_choice（any / tool）与推理不兼容（API 400）：能关推理就关，否则退回 auto。
+ */
+function applyTools(
+  body: AnthropicBody,
+  ir: PromptIR,
+  caps: ModelCapabilities,
+  model: string,
+  warnings: string[],
+): string | undefined {
+  const tools = ir.tools ?? [];
+  const rf = ir.responseFormat;
+  if (tools.length === 0 && !rf) {
+    if (ir.toolChoice !== undefined) warnings.push('没有 tools，已忽略 toolChoice');
+    return undefined;
+  }
+  if (tools.length > 0 && !caps.tools) {
+    warnings.push(`模型 ${model} 未标注支持工具调用，仍按原样发送 tools`);
+  }
+  const rendered: Record<string, unknown>[] = tools.map((t) => ({
+    name: t.name,
+    description: t.description,
+    input_schema: t.parameters,
+    ...(t.strict === true ? { strict: true } : {}),
+  }));
+  checkForcedTool(ir, warnings);
+
+  let choice: Record<string, unknown> | undefined;
+  const irChoice = ir.toolChoice;
+  if (irChoice === 'auto') choice = { type: 'auto' };
+  else if (irChoice === 'none') choice = { type: 'none' };
+  else if (irChoice === 'required') choice = { type: 'any' };
+  else if (typeof irChoice === 'object') choice = { type: 'tool', name: irChoice.name };
+
+  let structuredTool: string | undefined;
+  if (rf) {
+    if (tools.some((t) => t.name === rf.name)) {
+      warnings.push(`结构化输出名 ${rf.name} 与已有工具重名，已忽略 responseFormat`);
+    } else {
+      structuredTool = rf.name;
+      rendered.push({
+        name: rf.name,
+        description: STRUCTURED_TOOL_DESCRIPTION,
+        input_schema: rf.schema,
+        ...(rf.strict === true ? { strict: true } : {}),
+      });
+      if (tools.length === 0 || irChoice === 'none') {
+        // 只有结构化输出（或工具被禁用）：强制调用输出工具
+        choice = { type: 'tool', name: rf.name };
+      } else if (typeof irChoice === 'object') {
+        warnings.push(
+          `toolChoice 强制调用 ${irChoice.name}，与结构化输出冲突：本轮不强制输出格式，回复可能不是 JSON`,
+        );
+      } else {
+        // 有其他工具：要求必须调用某个工具，最终答案经输出工具给出
+        choice = { type: 'any' };
+        warnings.push(
+          '结构化输出与 tools 同时使用：tool_choice 改为 any，最终答案须经输出工具给出',
+        );
+      }
+    }
+  }
+
+  body.tools = rendered;
+  const forced = choice?.type === 'any' || choice?.type === 'tool';
+  const thinking = body.thinking as { type?: string } | undefined;
+  if (forced && thinking && thinking.type !== 'disabled') {
+    if (canDisableThinking(caps)) {
+      body.thinking = { type: 'disabled' };
+      delete body.output_config;
+      warnings.push('强制工具调用与推理不兼容，本轮已关闭推理');
+    } else {
+      choice = { type: 'auto' };
+      warnings.push(`模型 ${model} 不能关闭推理，强制工具调用已退回 auto`);
+    }
+  }
+  if (choice) body.tool_choice = choice;
+  return structuredTool;
 }
 
 function lastTextIndex(blocks: readonly AnthropicBlock[]): number {
@@ -346,12 +462,16 @@ function buildRequest(
   if (s.seed !== undefined) warnings.push('Anthropic 不支持 seed，已丢弃');
   if (opts?.imageOutput === true) warnings.push('该提供商不支持图片输出，已忽略 imageOutput');
 
+  // 8. 工具调用与结构化输出（M6 契约 §1.2；放在 thinking 之后：强制工具调用要关推理）
+  const structuredOutputTool = applyTools(body, ir, caps, model, warnings);
+
   return {
     method: 'POST',
     url: `${trimTrailingSlash(conn.baseUrl)}/v1/messages`,
     headers: anthropicHeaders(conn),
     body,
     ...(warnings.length > 0 ? { warnings } : {}),
+    ...(structuredOutputTool === undefined ? {} : { structuredOutputTool }),
   };
 }
 
@@ -460,6 +580,9 @@ interface BlockState {
   thinking: string;
   signature: string;
   data?: string;
+  /** tool_use 块：调用 id 与工具名（input_json_delta 只带 index，靠它回填） */
+  toolId?: string;
+  toolName?: string;
 }
 
 async function* stream(
@@ -477,6 +600,7 @@ async function* stream(
   };
   let sawUsage = false;
   let stopEvent: Extract<GenEvent, { type: 'stop' }> | undefined;
+  let toolCount = 0;
 
   function absorbUsage(u: AnthropicUsage | undefined): void {
     if (!u) return;
@@ -518,12 +642,26 @@ async function* stream(
         case 'content_block_start': {
           const index = chunk.index as number;
           const cb = (chunk.content_block ?? {}) as Record<string, unknown>;
-          blocks.set(index, {
+          const state: BlockState = {
             type: typeof cb.type === 'string' ? cb.type : 'text',
             thinking: typeof cb.thinking === 'string' ? cb.thinking : '',
             signature: typeof cb.signature === 'string' ? cb.signature : '',
             ...(typeof cb.data === 'string' ? { data: cb.data } : {}),
-          });
+          };
+          blocks.set(index, state);
+          if (state.type === 'tool_use') {
+            state.toolId =
+              typeof cb.id === 'string' && cb.id !== '' ? cb.id : syntheticCallId(toolCount);
+            state.toolName = typeof cb.name === 'string' ? cb.name : '';
+            toolCount += 1;
+            // 起始块的 input 通常是 {}，参数随后由 input_json_delta 给出；个别兼容端点一次给全
+            const input = cb.input;
+            const initial =
+              typeof input === 'object' && input !== null && Object.keys(input).length > 0
+                ? JSON.stringify(input)
+                : '';
+            yield { type: 'tool.call', id: state.toolId, name: state.toolName, argsDelta: initial };
+          }
           break;
         }
         case 'content_block_delta': {
@@ -537,6 +675,15 @@ async function* stream(
             if (delta.thinking !== '') yield { type: 'reasoning.delta', text: delta.thinking };
           } else if (delta.type === 'signature_delta' && typeof delta.signature === 'string') {
             if (state) state.signature += delta.signature;
+          } else if (delta.type === 'input_json_delta' && typeof delta.partial_json === 'string') {
+            if (state?.toolId !== undefined && delta.partial_json !== '') {
+              yield {
+                type: 'tool.call',
+                id: state.toolId,
+                name: state.toolName ?? '',
+                argsDelta: delta.partial_json,
+              };
+            }
           }
           break;
         }
@@ -610,6 +757,11 @@ async function* stream(
       cacheWrite: usage.cache_creation_input_tokens,
       reasoning: 0,
     };
+  }
+  // 强制工具调用时 stop_reason 可能是 end_turn（兼容端点）：有调用就归一化为 tool
+  if (toolCount > 0 && (stopEvent === undefined || stopEvent.reason === 'end')) {
+    yield { type: 'stop', reason: 'tool' };
+    return;
   }
   yield stopEvent ?? { type: 'stop', reason: 'end' };
 }

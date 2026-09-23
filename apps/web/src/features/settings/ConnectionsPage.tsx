@@ -24,6 +24,7 @@ import {
   type ProviderId,
 } from '../../lib/api';
 import { cn } from '../../lib/utils';
+import { ImageBackendsSection } from '../imagine/ImageBackendsSection';
 import {
   EmptyState,
   LibraryHeader,
@@ -211,6 +212,9 @@ export function ConnectionsPage() {
             })}
           </ul>
         ))}
+
+      {/* 外接生图后端（M4（二）§D.3）：独立分组，不进对话连接的下拉 */}
+      <ImageBackendsSection />
 
       {formTarget !== null && (
         <ConnectionFormModal

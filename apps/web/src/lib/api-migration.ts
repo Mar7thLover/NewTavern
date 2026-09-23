@@ -40,11 +40,16 @@ export interface StInventory {
   presets: { file: string; name: string; exists: boolean; error?: string }[];
   lorebooks: { file: string; name: string; entryCount: number; exists: boolean; error?: string }[];
   regex: { count: number; newCount: number };
+  /** 酒馆助手全局脚本（M5（三）§2.1）；globalEnabled = ST 里脚本库总开关 */
+  scripts?: { count: number; newCount: number; globalEnabled: boolean };
   personas: { avatar: string; name: string; exists: boolean }[];
   defaultPersona: string | null;
   worldInfo: { globalBooks: string[]; hasSettings: boolean };
+  /** `backgrounds/` 下的图片（M4（二）§A.5）；newCount = 库里还没有的 */
+  backgrounds?: { count: number; newCount: number };
   skipped: {
-    backgrounds: number;
+    /** M4（二）起背景会迁移，服务端不再报这一项 */
+    backgrounds?: number;
     instruct: number;
     context: number;
     themes: number;
@@ -61,12 +66,24 @@ export interface MigrationSelect {
   lorebooks: string[];
   personas: string[];
   regex: boolean;
+  /** 酒馆助手全局脚本 */
+  scripts?: boolean;
   worldInfo: boolean;
   defaultPersona: boolean;
+  /** 背景库（M4（二）§A.5） */
+  backgrounds?: boolean;
 }
 
 export type MigrationCategory =
-  'lorebooks' | 'characters' | 'personas' | 'presets' | 'regex' | 'settings' | 'chats';
+  | 'backgrounds'
+    | 'lorebooks'
+  | 'characters'
+  | 'personas'
+  | 'presets'
+  | 'regex'
+  | 'scripts'
+  | 'settings'
+  | 'chats';
 
 export type MigrationStatus = 'imported' | 'skipped' | 'failed';
 

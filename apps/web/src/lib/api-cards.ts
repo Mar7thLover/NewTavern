@@ -12,7 +12,7 @@ import { fetchJson, mutate, queryKeys, useSetSetting, useSetting } from './api';
 /* 变量                                                                */
 /* ------------------------------------------------------------------ */
 
-export type VariableScopeName = 'message' | 'chat' | 'character' | 'global' | 'script';
+export type VariableScopeName = 'message' | 'chat' | 'character' | 'global' | 'script' | 'preset';
 
 export interface ChatVariables {
   /** 快照所属节点（不传 nodeId 时是 head） */
@@ -23,6 +23,11 @@ export interface ChatVariables {
   chat: Record<string, unknown>;
   global: Record<string, unknown>;
   character: Record<string, unknown>;
+  /** 当前会话预设的变量表（M5（三）§1）；老服务端没有这个字段 */
+  preset?: Record<string, unknown>;
+  presetId?: string | null;
+  /** registerVariableSchema 交上来的 JSON Schema，按作用域 */
+  schemas?: Partial<Record<VariableScopeName, Record<string, unknown>>>;
 }
 
 export interface MvuUpdateInfo {
@@ -192,14 +197,43 @@ export function normalizeCardSettings(value: unknown): CardSettings {
   };
 }
 
+export interface MvuExtraModel {
+  connectionId: string;
+  model: string;
+  /** missing：本轮正文里没有更新命令时才调；always：每轮都用额外模型 */
+  when: 'missing' | 'always';
+}
+
 export interface MvuSettings {
   /** 自动解析模型输出里的 `<UpdateVariable>` */
   enabled: boolean;
+  /** 额外模型解析（M5（三）§3.5） */
+  extraModel?: MvuExtraModel;
+  /** 只保留最近 N 层的完整快照；0 = 不清理 */
+  keepSnapshots: number;
 }
 
 export function normalizeMvuSettings(value: unknown): MvuSettings {
   const source = (typeof value === 'object' && value !== null ? value : {}) as Record<string, unknown>;
-  return { enabled: typeof source.enabled === 'boolean' ? source.enabled : true };
+  const extra = source.extraModel as Record<string, unknown> | undefined;
+  const keep = Number(source.keepSnapshots);
+  return {
+    enabled: typeof source.enabled === 'boolean' ? source.enabled : true,
+    ...(extra &&
+    typeof extra.connectionId === 'string' &&
+    extra.connectionId !== '' &&
+    typeof extra.model === 'string' &&
+    extra.model !== ''
+      ? {
+          extraModel: {
+            connectionId: extra.connectionId,
+            model: extra.model,
+            when: extra.when === 'always' ? 'always' : 'missing',
+          },
+        }
+      : {}),
+    keepSnapshots: Number.isFinite(keep) && keep > 0 ? Math.floor(keep) : 0,
+  };
 }
 
 export const CARD_SETTING_KEYS = { cards: 'cards', mvu: 'mvu' } as const;
@@ -233,6 +267,25 @@ export interface SandboxGenerateBody {
   orderedPrompts?: unknown;
   shouldStream?: boolean;
   unsupported?: string[];
+  /** 酒馆助手 generate 的补全字段（M5（三）§3.2），原样转给服务端 */
+  injects?: unknown;
+  overrides?: unknown;
+  tools?: unknown;
+  toolChoice?: unknown;
+  jsonSchema?: unknown;
+  presetName?: string;
+}
+
+/** 酒馆助手 `GenerateToolCallResult.tool_calls` 的一项 */
+export interface SandboxToolCall {
+  id: string;
+  type: 'function';
+  function: { name: string; arguments: string };
+}
+
+export interface SandboxGenerateResult {
+  text: string;
+  toolCalls?: SandboxToolCall[];
 }
 
 export interface SandboxGenerateHandlers {
@@ -249,7 +302,7 @@ export async function sandboxGenerate(
   chatId: string,
   body: SandboxGenerateBody,
   handlers: SandboxGenerateHandlers = {},
-): Promise<string> {
+): Promise<SandboxGenerateResult> {
   const response = await fetch(
     `/api/chats/${encodeURIComponent(chatId)}/sandbox/generate`,
     {
@@ -260,13 +313,21 @@ export async function sandboxGenerate(
     },
   );
   if (!response.ok || !response.body) {
-    throw new Error(`生成失败：HTTP ${response.status}`);
+    let message = `生成失败：HTTP ${response.status}`;
+    try {
+      const payload = (await response.json()) as { message?: string };
+      if (payload.message) message = payload.message;
+    } catch {
+      /* 不是 JSON 就用状态码 */
+    }
+    throw new Error(message);
   }
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
   let text = '';
+  let toolCalls: SandboxToolCall[] | undefined;
   let failure: string | null = null;
 
   const handleBlock = (block: string) => {
@@ -290,6 +351,7 @@ export async function sandboxGenerate(
       handlers.onWarning?.(payload.warnings as string[]);
     } else if (event === 'done' && typeof payload.text === 'string') {
       text = payload.text;
+      if (Array.isArray(payload.toolCalls)) toolCalls = payload.toolCalls as SandboxToolCall[];
     } else if (event === 'error') {
       const error = payload.error as { message?: string } | undefined;
       failure = error?.message ?? '生成失败';
@@ -309,5 +371,62 @@ export async function sandboxGenerate(
   }
   if (buffer.trim() !== '') handleBlock(buffer);
   if (failure !== null) throw new Error(failure);
-  return text;
+  return toolCalls && toolCalls.length > 0 ? { text, toolCalls } : { text };
+}
+
+/* ------------------------------------------------------------------ */
+/* 会话级注入与变量 schema（M5（三）§1 / §3.2）                           */
+/* ------------------------------------------------------------------ */
+
+export interface ChatInject {
+  id: string;
+  content: string;
+  role: 'system' | 'user' | 'assistant';
+  position: 'in_chat' | 'none';
+  depth: number;
+  order?: number;
+  scan?: boolean;
+  once?: boolean;
+}
+
+export function fetchChatInjects(chatId: string): Promise<{ injects: ChatInject[] }> {
+  return fetchJson(`/api/chats/${encodeURIComponent(chatId)}/injects`);
+}
+
+/** `injectPrompts`：按 id 覆盖写入；字段名酒馆助手的（`should_scan`）与新酒馆的（`scan`）都认 */
+export function postChatInjects(
+  chatId: string,
+  prompts: unknown[],
+  once = false,
+): Promise<{ injects: ChatInject[] }> {
+  return mutate(`/api/chats/${encodeURIComponent(chatId)}/injects`, 'POST', { prompts, once });
+}
+
+/** `uninjectPrompts`；不给 ids = 全部清空 */
+export function deleteChatInjects(chatId: string, ids?: string[]): Promise<{ injects: ChatInject[] }> {
+  return mutate(`/api/chats/${encodeURIComponent(chatId)}/injects`, 'DELETE', ids ? { ids } : {});
+}
+
+export function putVariableSchema(
+  chatId: string,
+  type: VariableScopeName,
+  schema: Record<string, unknown> | null,
+): Promise<{ schemas: Record<string, unknown> }> {
+  return mutate(`/api/chats/${encodeURIComponent(chatId)}/variable-schemas`, 'PUT', { type, schema });
+}
+
+/** 与会话无关的变量表（`/api/variables/:scope`）：脚本作用域用它 */
+export function fetchVariableTable(
+  scope: 'global' | 'character' | 'script' | 'preset',
+  ownerId: string,
+): Promise<{ variables: Record<string, unknown> }> {
+  return fetchJson(`/api/variables/${scope}?ownerId=${encodeURIComponent(ownerId)}`);
+}
+
+export function putVariableTable(
+  scope: 'global' | 'character' | 'script' | 'preset',
+  ownerId: string,
+  variables: Record<string, unknown>,
+): Promise<{ variables: Record<string, unknown> }> {
+  return mutate(`/api/variables/${scope}`, 'PUT', { ownerId, variables });
 }

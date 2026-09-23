@@ -68,6 +68,16 @@ window.zod = zod;`,
     contents: `import * as YAML from 'yaml';
 window.YAML = { ...YAML, load: YAML.parse, dump: YAML.stringify };`,
   },
+  {
+    // 新酒馆自己的正则引擎（core 的 regex/engine.ts 原样打包）：酒馆助手的
+    // `formatAsTavernRegexedString` 是同步的，只能在 iframe 里跑同一个引擎（M5（三）§3.2）。
+    // 挂在双下划线名下，不当作给卡用的公开 API。
+    file: 'nt-regex.js',
+    packages: [],
+    sources: ['../../packages/core/src/regex/engine.ts'],
+    contents: `import { applyRegexScripts, REGEX_PLACEMENT } from '../../packages/core/src/regex/engine.ts';
+window.__NT_REGEX__ = { applyRegexScripts, REGEX_PLACEMENT };`,
+  },
 ];
 
 function versionOf(name) {
@@ -83,8 +93,16 @@ function currentStamp() {
   const versions = Object.fromEntries(
     LIBS.flatMap((lib) => lib.packages.map((name) => [name, versionOf(name)])),
   );
+  // 自己的源码（nt-regex）按文件内容进 stamp：引擎改了要重新打包
+  const sources = LIBS.flatMap((lib) => lib.sources ?? []).map((file) => {
+    try {
+      return fs.readFileSync(path.join(webRoot, file), 'utf8');
+    } catch {
+      return '';
+    }
+  });
   const shape = createHash('sha256')
-    .update(JSON.stringify(LIBS.map((lib) => [lib.file, lib.contents])))
+    .update(JSON.stringify([LIBS.map((lib) => [lib.file, lib.contents]), sources]))
     .digest('hex')
     .slice(0, 12);
   return { versions, shape };

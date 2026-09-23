@@ -80,7 +80,13 @@ export type MirrorSlice =
   | 'variables'
   | 'charData'
   | 'macroContext'
-  | 'scriptButtons';
+  | 'scriptButtons'
+  /** 预设：名字列表 + 当前预设（`getPreset` / `getPresetNames` 是同步的，M5（三）§3.2） */
+  | 'presets'
+  /** 显示侧正则脚本（`formatAsTavernRegexedString` 是同步的） */
+  | 'regex'
+  /** 主题槽位（`:root{--canvas:…}` 的声明串），切换主题时推，不重建 iframe（§3.4） */
+  | 'theme';
 
 /* ------------------------------------------------------------------ */
 /* 方法表                                                              */
@@ -121,6 +127,16 @@ export const RPC_METHODS = {
   eventEmit: 'event.emit',
   /** 主动要一次镜像刷新（卡自己调 reload 之后用） */
   mirrorRefresh: 'mirror.refresh',
+  /** registerVariableSchema：guest 已把 zod 转成 JSON Schema（M5（三）§1） */
+  variablesRegisterSchema: 'variables.registerSchema',
+  /** injectPrompts（M5（三）§3.2） */
+  promptsInject: 'prompts.inject',
+  /** uninjectPrompts */
+  promptsUninject: 'prompts.uninject',
+  /** loadPreset：切换会话预设 */
+  presetLoad: 'preset.load',
+  /** 原生 `newtavern.generateImage`：只生成并存资产，不写消息树（M4（二）§D.3） */
+  imageGenerate: 'image.generate',
 } as const;
 
 export type RpcMethod = (typeof RPC_METHODS)[keyof typeof RPC_METHODS];
@@ -159,6 +175,8 @@ export interface SandboxVariables {
   character: Record<string, unknown>;
   global: Record<string, unknown>;
   script: Record<string, unknown>;
+  /** 当前会话预设的变量表（M5（三）§1）；没选预设时是空表 */
+  preset?: Record<string, unknown>;
   /** 别的楼层的快照：楼层号 → 快照（宿主按需推，不全量推） */
   byMessageId?: Record<string, Record<string, unknown>>;
 }
@@ -173,6 +191,23 @@ export interface SandboxMacroContext {
   lastMessageId: number;
   /** 变量宏 `{{getvar::x}}` 读的表（= message 快照） */
   variables: Record<string, unknown>;
+}
+
+/** `presets` 镜像：酒馆助手的预设接口是同步的，只能读镜像 */
+export interface SandboxPresetsMirror {
+  /** 全部预设名（`getPresetNames`） */
+  names: string[];
+  /** 当前会话在用的预设名（`getLoadedPresetName`）；没选时为 '' */
+  loaded: string;
+  /** 当前预设换算成酒馆助手 `Preset` 形状（`getPreset('in_use')`）；没选时 null */
+  current: Record<string, unknown> | null;
+}
+
+/** `regex` 镜像：与显示侧同一套脚本（全局 → 当前预设 → 当前角色卡），字段是 core 的 `RegexScript` */
+export interface SandboxRegexMirror {
+  scripts: unknown[];
+  charName: string;
+  userName: string;
 }
 
 export interface SandboxScriptButton {

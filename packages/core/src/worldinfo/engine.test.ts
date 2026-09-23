@@ -652,3 +652,34 @@ describe('排序与分桶', () => {
     expect(result.newState.messageCount).toBe(0);
   });
 });
+
+describe('诊断输出（M6 §2.5 触发模拟）', () => {
+  const books = [
+    makeBook([
+      makeEntry({ id: 'deco', decorators: { activate: true } }),
+      makeEntry({ id: 'sec', keys: ['apple'], secondaryKeys: ['pie', 'tart'] }),
+      makeEntry({ id: 'plain', keys: ['apple'] }),
+      makeEntry({ id: 'const', constant: true }),
+    ]),
+  ];
+  const history = [userMessage('apple pie')];
+
+  it('diagnostics 打开时标出装饰器与副键，激活集合不变', () => {
+    const plain = runScan({ books, history });
+    const diag = runScan({ books, history, diagnostics: true });
+    expect(activatedIds(diag)).toEqual(activatedIds(plain));
+    expect(diag.rejected).toEqual(plain.rejected);
+    const byId = new Map(diag.activations.map((a) => [a.entry.id, a]));
+    expect(byId.get('deco')?.diagnostic).toEqual({ via: 'decorator' });
+    expect(byId.get('sec')?.diagnostic).toEqual({
+      via: 'secondary',
+      matchedSecondaryKeys: ['pie'],
+    });
+    expect(byId.get('plain')?.diagnostic).toBeUndefined();
+    expect(byId.get('const')?.diagnostic).toBeUndefined();
+  });
+
+  it('diagnostics 关闭时不带 diagnostic 字段', () => {
+    expect(runScan({ books, history }).activations.some((a) => 'diagnostic' in a)).toBe(false);
+  });
+});

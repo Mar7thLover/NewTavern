@@ -236,8 +236,42 @@ export type TemplateRenderer = (
     ref?: string;
     vars: { chat: Record<string, unknown>; global: Record<string, unknown> };
     warn: (message: string) => void;
+    /** 宏替换（ST-PT 的 `evalTemplate()` 结果再过一遍宏）；缺省 = 不替换 */
+    substitute?: (text: string) => string;
+    /** `getwi` 取到的条目正文：ST-PT 先过「世界书」正则、再宏替换，然后才渲染 */
+    prepareWorldInfo?: (content: string) => string;
   },
 ) => string;
+
+type TemplateSite = Parameters<TemplateRenderer>[1]['site'];
+
+/** 段来源 → 模板渲染点；历史 / 本轮输入 / 变量段不渲染 */
+const TEMPLATE_SITE_BY_ORIGIN: Partial<Record<Segment['origin']['kind'], TemplateSite>> = {
+  preset: 'preset',
+  injection: 'preset',
+  global_system: 'preset',
+  character: 'character',
+  persona: 'persona',
+  worldinfo: 'worldinfo',
+  authors_note: 'authors_note',
+};
+
+/** 模板渲染后的变量工作副本并回事务（按顶层键比较引用：渲染器对改过的键做了写时复制） */
+function syncTemplateVariables(
+  transaction: VariableTransaction,
+  vars: { chat: Record<string, unknown>; global: Record<string, unknown> },
+): void {
+  for (const scope of ['chat', 'global'] as const) {
+    const before = transaction.snapshot(scope);
+    const after = vars[scope];
+    for (const [key, value] of Object.entries(after)) {
+      if (!Object.hasOwn(before, key) || before[key] !== value) transaction.set(scope, key, value);
+    }
+    for (const key of Object.keys(before)) {
+      if (!Object.hasOwn(after, key)) transaction.delete(scope, key);
+    }
+  }
+}
 
 export interface AssembleResult {
   ir: PromptIR;
@@ -595,7 +629,9 @@ export function parseExampleIntoIndividual(
 
 // ───────────────────────── 主流程 ─────────────────────────
 
-export function assemblePrompt(input: AssembleInputV2): AssembleResult {
+export function assemblePrompt(rawInput: AssembleInputV2): AssembleResult {
+  // 前端卡 `generate({overrides})`：先把覆盖项落到输入上（纯函数，不改调用方的对象）
+  const input = applyPromptOverrides(rawInput);
   const preset = input.preset ?? DEFAULT_PRESET;
   const data = preset.data;
   const options = input.options ?? {};
@@ -713,6 +749,33 @@ export function assemblePrompt(input: AssembleInputV2): AssembleResult {
   const substitute = (text: string, postProcess?: (value: string) => string): string =>
     substituteMacros(text, postProcess ? { ...ctx, postProcess } : ctx);
 
+  // ── EJS 提示词模板（M5（三）契约 §4.2）：只有注入了渲染器才生效，缺省路径（黄金测试）不受影响
+  const templateRenderer = input.templateRenderer;
+  const templatedIds = new Set<string>();
+  const renderTemplate = (text: string, site: TemplateSite, ref?: string): string => {
+    if (!templateRenderer || !text.includes('<%')) return text;
+    // 每段拿一份变量工作副本；模板里 setvar 改的是它，渲染完按顶层键并回事务
+    const vars = { chat: transaction.snapshot('chat'), global: transaction.snapshot('global') };
+    const rendered = templateRenderer(text, {
+      site,
+      ...(ref === undefined ? {} : { ref }),
+      vars,
+      warn: (message) => warnings.push(message),
+      substitute: (value) => substitute(value),
+      // ST-PT `getwi`：条目正文先过「世界书」正则、再宏替换，然后渲染
+      prepareWorldInfo: (content) =>
+        substitute(
+          applyRegexScripts(regexScripts, content, {
+            placement: REGEX_PLACEMENT.WORLD_INFO,
+            direction: 'prompt',
+            substitute,
+          }),
+        ),
+    });
+    syncTemplateVariables(transaction, vars);
+    return rendered;
+  };
+
   // ── History：root→parent 可见历史 → 提示词侧正则 → 宏
   const visible = input.history.filter((node) => node.isHidden !== true);
   const lastUserIndex = findLastIndex(visible, (node) => node.role === 'user');
@@ -747,7 +810,10 @@ export function assemblePrompt(input: AssembleInputV2): AssembleResult {
               depth,
               substitute,
             });
-      const substituted = substituteMacrosDetailed(regexed, ctx);
+      // EJS：聊天消息里的 `<% … %>` 不执行（ST-PT 默认用仅提示词正则整块删掉），渲染器负责删
+      const filtered =
+        node.role === 'system' ? regexed : renderTemplate(regexed, 'history', node.id);
+      const substituted = substituteMacrosDetailed(filtered, ctx);
       volatile ||= substituted.volatile;
       parts.push({ type: 'text', text: substituted.text });
       texts.push(substituted.text);
@@ -781,9 +847,7 @@ export function assemblePrompt(input: AssembleInputV2): AssembleResult {
     // （world-info.js `checkWorldInfo`）。ST 在扫描之后才设置它，所以切换聊天后的第一次生成
     // 扫不到（`clearChat` 清空了 extension_prompts）；这里取稳态行为，每次都并入。
     // 扫描缓冲里的是 `getExtensionPromptByName` = substituteParams(原始描述)（完整展开）
-    ...(personaPosition === 'at_depth' && personaHasDescription
-      ? { injects: [substitute(input.persona?.description ?? '')] }
-      : {}),
+    ...(scanInjects(input, personaPosition === 'at_depth' && personaHasDescription, substitute)),
     substitute: (text: string) => substitute(text),
     random,
     countTokens: estimateTokens,
@@ -805,8 +869,17 @@ export function assemblePrompt(input: AssembleInputV2): AssembleResult {
   const bucketTexts = (list: readonly WIActivation[]): string[] =>
     list.map(wiContent).filter((text) => text !== '');
 
-  const wiBeforeTexts = bucketTexts(wi.buckets.before);
-  const wiAfterTexts = bucketTexts(wi.buckets.after);
+  // overrides.world_info_before / after：整段替换（空串 = 不要这一段），与酒馆助手一致
+  const wiBeforeOverride = input.promptOverrides?.world_info_before;
+  const wiAfterOverride = input.promptOverrides?.world_info_after;
+  const wiBeforeTexts =
+    wiBeforeOverride === undefined
+      ? bucketTexts(wi.buckets.before)
+      : [substitute(wiBeforeOverride)].filter((text) => text !== '');
+  const wiAfterTexts =
+    wiAfterOverride === undefined
+      ? bucketTexts(wi.buckets.after)
+      : [substitute(wiAfterOverride)].filter((text) => text !== '');
   const wiAnTopTexts = bucketTexts(wi.buckets.anTop);
   const wiAnBottomTexts = bucketTexts(wi.buckets.anBottom);
 
@@ -1094,7 +1167,11 @@ export function assemblePrompt(input: AssembleInputV2): AssembleResult {
                       role: input.persona?.role ?? 0,
                     }
                   : null,
-              wiDepth: wi.buckets.depth,
+              // overrides.chat_history.with_depth_entries=false：不插世界书的深度条目
+              wiDepth:
+                input.promptOverrides?.chat_history?.with_depth_entries === false
+                  ? []
+                  : wi.buckets.depth,
               wiContent,
               nextId,
               onReasoningDropped: () => {
@@ -1174,6 +1251,30 @@ export function assemblePrompt(input: AssembleInputV2): AssembleResult {
     }
   }
 
+  // ── EJS 模板：ST-PT 在 ST 拼好最终消息（宏已展开、outlet 已填）之后逐条消息渲染，
+  // 这里对应为逐段渲染；历史消息在上面已按 ST-PT 的默认做法删掉了模板块
+  if (templateRenderer) {
+    for (let i = segments.length - 1; i >= 0; i -= 1) {
+      const segment = segments[i];
+      if (segment === undefined) continue;
+      const site = TEMPLATE_SITE_BY_ORIGIN[segment.origin.kind];
+      if (site === undefined) continue;
+      if (!segment.parts.some((part) => part.type === 'text' && part.text.includes('<%'))) continue;
+      const parts = segment.parts.map((part) =>
+        part.type === 'text'
+          ? { ...part, text: renderTemplate(part.text, site, segment.id) }
+          : part,
+      );
+      templatedIds.add(segment.id);
+      // 模板把整段渲染成空：与 addTextSegment 一样不留空段
+      if (parts.every((part) => part.type === 'text' && part.text.trim() === '')) {
+        segments.splice(i, 1);
+        continue;
+      }
+      segments[i] = { ...segment, parts };
+    }
+  }
+
   // ── 采样参数
   const samplingSource = isRecord(preset.sampling) ? preset.sampling : data;
   const readSampling = (key: string): number | undefined =>
@@ -1247,6 +1348,9 @@ export function assemblePrompt(input: AssembleInputV2): AssembleResult {
       warnings: [...warnings, ...result.report.warnings],
       tokenEstimate: result.segments.reduce((sum, segment) => sum + segmentTokens(segment), 0),
       squashSystemMessages,
+      ...(templatedIds.size > 0
+        ? { templated: result.segments.filter((s) => templatedIds.has(s.id)).map((s) => s.id) }
+        : {}),
     },
   });
 
@@ -1266,6 +1370,106 @@ export function assemblePrompt(input: AssembleInputV2): AssembleResult {
 }
 
 // ───────────────────────── 子过程 ─────────────────────────
+
+/**
+ * 前端卡 `generate({overrides})` 的覆盖语义（照酒馆助手 4.9.3 `generate/dataProcessor.ts`）：
+ *
+ * - 字符串字段给了就替换对应的卡字段 / 档案描述 / 示例对话；**空串 = 过滤掉这一段**；
+ * - `chat_history.prompts` 给了就整段替换聊天历史（空数组 = 不要历史，同时不插卡的深度提示、
+ *   作者注释与深度档案描述——酒馆助手 `isPromptFiltered('chat_history')` 的连带效果）；
+ * - `chat_history.author_note` 覆盖作者注释正文（空串 = 不要作者注释）；
+ * - `world_info_before/after` 与 `with_depth_entries` 在主流程里就地处理。
+ *
+ * 纯函数：返回新对象，不改调用方的输入。没有 overrides 时原样返回（黄金测试路径）。
+ */
+function applyPromptOverrides(input: AssembleInputV2): AssembleInputV2 {
+  const overrides = input.promptOverrides;
+  if (!overrides) return input;
+  let next: AssembleInputV2 = input;
+
+  const cardFields: [keyof AssemblePromptOverrides, string][] = [
+    ['char_description', 'description'],
+    ['char_personality', 'personality'],
+    ['scenario', 'scenario'],
+    ['dialogue_examples', 'mes_example'],
+  ];
+  const cardPatch: Record<string, string> = {};
+  for (const [key, field] of cardFields) {
+    const value = overrides[key];
+    if (typeof value === 'string') cardPatch[field] = value;
+  }
+  if (Object.keys(cardPatch).length > 0 && next.character) {
+    next = { ...next, character: { ...next.character, data: { ...next.character.data, ...cardPatch } } };
+  }
+
+  if (typeof overrides.persona_description === 'string') {
+    const description = overrides.persona_description;
+    next = {
+      ...next,
+      persona: next.persona
+        ? { ...next.persona, description }
+        : description === ''
+          ? null
+          : { name: '', description },
+    };
+  }
+
+  const chatHistory = overrides.chat_history;
+  if (chatHistory) {
+    if (Array.isArray(chatHistory.prompts)) {
+      next = {
+        ...next,
+        history: chatHistory.prompts.map((prompt, index) => ({
+          id: `override:${index}`,
+          role: prompt.role,
+          parts: [{ type: 'text', text: prompt.content }],
+        })),
+        messageCount: chatHistory.prompts.length,
+      };
+      if (chatHistory.prompts.length === 0) {
+        next = {
+          ...next,
+          authorsNote: null,
+          characterDepthPrompt: null,
+          ...(next.persona?.position === 'at_depth'
+            ? { persona: { ...next.persona, position: 'none' as const } }
+            : {}),
+        };
+      }
+    }
+    if (typeof chatHistory.author_note === 'string') {
+      const text = chatHistory.author_note;
+      next = {
+        ...next,
+        authorsNote:
+          text === ''
+            ? null
+            : next.authorsNote
+              ? { ...next.authorsNote, text }
+              : { text, position: 1, depth: DEFAULT_INJECTION_DEPTH, role: 0, interval: 1 },
+      };
+    }
+  }
+  return next;
+}
+
+/**
+ * 世界书扫描要额外并进的文本：AT_DEPTH 的档案描述（见调用处注释），
+ * 以及 `should_scan` 的临时注入（ST `checkWorldInfo` 把 `scan:true` 的扩展提示词并进扫描源，
+ * 不论它的 position，所以 `position:'none'` 的注入也能拿来激活条目）。
+ */
+function scanInjects(
+  input: AssembleInputV2,
+  personaAtDepth: boolean,
+  substitute: (text: string) => string,
+): { injects?: string[] } {
+  const injects: string[] = [];
+  if (personaAtDepth) injects.push(substitute(input.persona?.description ?? ''));
+  for (const item of input.extraInjections ?? []) {
+    if (item.scan === true && item.content.trim() !== '') injects.push(substitute(item.content));
+  }
+  return injects.length > 0 ? { injects } : {};
+}
 
 /**
  * 卡的 system_prompt / post_history_instructions 覆盖 main / jailbreak。
@@ -1376,6 +1580,25 @@ interface InjectionSource {
   stability: Segment['stability'];
   text: string;
   volatile: boolean;
+  /** ST `extension_prompts` 的键：同 (depth, role) 的扩展注入按它的字典序合并 */
+  key?: string;
+}
+
+/** ST `getExtensionPrompt` 的 `Object.keys(...).sort()`：默认的 UTF-16 码元序 */
+function compareExtensionKeys(a: InjectionSource, b: InjectionSource): number {
+  const left = a.key ?? '';
+  const right = b.key ?? '';
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+/**
+ * 临时注入（前端卡 `generate({injects})` / `injectPrompts` / slash `/inject`）里要进历史的那些。
+ * `position:'none'` 只参与世界书扫描，不在这里。
+ */
+function inChatExtraInjections(input: AssembleInputV2): AssembleExtraInjection[] {
+  return (input.extraInjections ?? []).filter(
+    (item) => item.position === 'in_chat' && item.content.trim() !== '',
+  );
 }
 
 /** 历史段 + 深度注入（ST `populateChatHistory` + `populationInjectionPrompts`） */
@@ -1414,6 +1637,25 @@ function buildHistory(args: BuildHistoryArgs): Segment[] {
    * ST `getExtensionPrompt(IN_CHAT, depth, '\n', role)`：按 key 字典序合并。
    * 相关 key 的字典序：`2_floating_prompt` < `DEPTH_PROMPT` < `PERSONA_DESCRIPTION` < `customDepthWI_*`。
    */
+  const extras = inChatExtraInjections(input);
+  const extraSources = (depth: number, order: number, role: Role): InjectionSource[] =>
+    extras
+      .filter(
+        (item) =>
+          Math.max(0, item.depth) === depth &&
+          (item.order ?? EXTENSION_PROMPT_ORDER) === order &&
+          item.role === role,
+      )
+      .map((item) => ({
+        id: `injection:extra:${item.id}`,
+        origin: { kind: 'injection', ref: item.id } as Segment['origin'],
+        stability: 'turn' as Segment['stability'],
+        // ST `getExtensionPrompt` 对合并后的值做 substituteParams
+        text: substitute(item.content),
+        volatile: false,
+        key: item.id,
+      }));
+
   const extensionAt = (depth: number, role: WIRole): InjectionSource[] => {
     const sources: InjectionSource[] = [];
     if (anText !== '' && anPosition === 1 && anDepth === depth && anRole === role) {
@@ -1423,6 +1665,7 @@ function buildHistory(args: BuildHistoryArgs): Segment[] {
         stability: 'session',
         text: anText,
         volatile: false,
+        key: '2_floating_prompt',
       });
     }
     const charDepth = characterDepthPrompt;
@@ -1438,6 +1681,7 @@ function buildHistory(args: BuildHistoryArgs): Segment[] {
         stability: 'static',
         text: substitute(charDepth.text),
         volatile: false,
+        key: 'DEPTH_PROMPT',
       });
     }
     // ST script.js `addPersonaDescriptionExtensionPrompt`：
@@ -1450,6 +1694,7 @@ function buildHistory(args: BuildHistoryArgs): Segment[] {
         stability: 'static',
         text: persona.text,
         volatile: persona.volatile,
+        key: 'PERSONA_DESCRIPTION',
       });
     }
     for (const bucket of wiDepth) {
@@ -1465,6 +1710,7 @@ function buildHistory(args: BuildHistoryArgs): Segment[] {
         stability: 'turn',
         text,
         volatile: false,
+        key: `customDepthWI_${depth}_${role}`,
       });
     }
     return sources;
@@ -1488,6 +1734,7 @@ function buildHistory(args: BuildHistoryArgs): Segment[] {
     depths.add(personaDepthPrompt.depth);
   }
   for (const bucket of wiDepth) depths.add(bucket.depth);
+  for (const item of extras) depths.add(Math.max(0, item.depth));
 
   const slots = new Map<number, Segment[]>();
 
@@ -1497,6 +1744,9 @@ function buildHistory(args: BuildHistoryArgs): Segment[] {
     );
     const orders = new Set<number>([EXTENSION_PROMPT_ORDER]);
     for (const prompt of depthPrompts) orders.add(prompt.injectionOrder);
+    for (const item of extras) {
+      if (Math.max(0, item.depth) === depth) orders.add(item.order ?? EXTENSION_PROMPT_ORDER);
+    }
 
     const roleMessages: Segment[] = [];
     // ST 按 order 降序遍历，最后整体反转 → 时序为 order 升序
@@ -1517,7 +1767,15 @@ function buildHistory(args: BuildHistoryArgs): Segment[] {
           .filter((source) => source.text !== '');
 
         if (order === EXTENSION_PROMPT_ORDER) {
-          sources.push(...extensionAt(depth, roleToWiRole(role)));
+          // 扩展注入（作者注释 / 卡的深度提示 / 档案描述 / 世界书 / 临时注入）按键的字典序合并
+          const extension = [
+            ...extensionAt(depth, roleToWiRole(role)),
+            ...extraSources(depth, order, role),
+          ];
+          sources.push(...(extras.length > 0 ? extension.sort(compareExtensionKeys) : extension));
+        } else {
+          // 临时注入给了非 100 的 order：像预设注入一样单独成组
+          sources.push(...extraSources(depth, order, role));
         }
 
         const parts = sources.map((source) => source.text.trim()).filter((text) => text !== '');

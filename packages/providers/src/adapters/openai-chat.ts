@@ -13,6 +13,13 @@ import {
 import { irToChatMessages, type ChatMessage } from '../messages.js';
 import { parseSseStream } from '../sse.js';
 import { canDisableThinking, resolveThinking, stEffortToOpenAI } from '../thinking.js';
+import {
+  checkForcedTool,
+  syntheticCallId,
+  toolResultText,
+  type ToolCallPart,
+  type ToolResultPart,
+} from '../tools.js';
 import type {
   BuildOptions,
   Connection,
@@ -88,11 +95,21 @@ type OpenAiContentPart =
   /** PDF：`file_data` 是 data URL（官方 Chat Completions 的 file content part） */
   | { type: 'file'; file: { filename: string; file_data: string } };
 
+interface OpenAiToolCall {
+  id: string;
+  type: 'function';
+  function: { name: string; arguments: string };
+}
+
 interface OpenAiMessage {
   role: string;
-  content: string | OpenAiContentPart[];
+  /** 只有工具调用的 assistant 消息 content 为 null（官方语义：有 tool_calls 时 content 可空） */
+  content: string | OpenAiContentPart[] | null;
   /** 说话人名：ST `names_behavior: COMPLETION` 与示例对话（example_user / example_assistant） */
   name?: string;
+  tool_calls?: OpenAiToolCall[];
+  /** role:'tool' 的结果消息指向的调用 id */
+  tool_call_id?: string;
 }
 
 /**
@@ -135,12 +152,114 @@ function renderParts(
       case 'reasoning_opaque':
         warnings.push('OpenAI Chat 端点无法回传推理块，已丢弃');
         break;
+      case 'tool_call':
+      case 'tool_result':
+        // 由 renderMessage 拆成 tool_calls 字段 / role:'tool' 消息，这里不会走到
+        break;
     }
   }
   if (!hasNonText) {
     return out.map((p) => (p.type === 'text' ? p.text : '')).join('\n');
   }
   return out;
+}
+
+/**
+ * 一条 ChatMessage → 若干 OpenAI 消息：
+ * - assistant 里的 tool_call → 同一条消息的 `tool_calls`（没有正文时 content 为 null）；
+ * - tool_result → 各自一条 `role:'tool'` 消息，排在该条消息其余内容**之前**
+ *   （结果必须紧跟发起调用的 assistant 消息）；
+ * - 角色不对的工具 part 丢弃并告警。
+ */
+function renderMessage(
+  msg: ChatMessage,
+  quirks: Record<string, boolean>,
+  media: MediaRenderer,
+  warnings: string[],
+): OpenAiMessage[] {
+  const calls: ToolCallPart[] = [];
+  const results: ToolResultPart[] = [];
+  const rest: Part[] = [];
+  for (const part of msg.parts) {
+    if (part.type === 'tool_call') {
+      if (msg.role === 'assistant') calls.push(part);
+      else warnings.push(`工具调用只能出现在 assistant 消息里，已丢弃 ${part.name}`);
+    } else if (part.type === 'tool_result') {
+      if (msg.role === 'user') results.push(part);
+      else warnings.push(`工具结果只能出现在 user 段里，已丢弃 ${part.name}`);
+    } else {
+      rest.push(part);
+    }
+  }
+
+  const out: OpenAiMessage[] = results.map((r) => ({
+    role: 'tool',
+    tool_call_id: r.callId,
+    content: toolResultText(r),
+  }));
+  const hasBody = rest.length > 0;
+  if (!hasBody && calls.length === 0) return out;
+
+  const content = hasBody ? renderParts(rest, msg.role, media, warnings) : '';
+  const message: OpenAiMessage = {
+    role: mapRole(msg, quirks),
+    content: calls.length > 0 && content === '' ? null : content,
+    ...(msg.name === undefined ? {} : { name: msg.name }),
+  };
+  if (calls.length > 0) {
+    message.tool_calls = calls.map((c) => ({
+      id: c.id,
+      type: 'function',
+      function: { name: c.name, arguments: c.args },
+    }));
+  }
+  out.push(message);
+  return out;
+}
+
+/** ir.tools / toolChoice / responseFormat → 请求体字段 */
+function applyTools(
+  body: OpenAiBody,
+  ir: PromptIR,
+  caps: ModelCapabilities,
+  model: string,
+  warnings: string[],
+): void {
+  const tools = ir.tools ?? [];
+  if (tools.length > 0) {
+    if (!caps.tools) warnings.push(`模型 ${model} 未标注支持工具调用，仍按原样发送 tools`);
+    body.tools = tools.map((t) => ({
+      type: 'function',
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters,
+        ...(t.strict === undefined ? {} : { strict: t.strict }),
+      },
+    }));
+    checkForcedTool(ir, warnings);
+    const choice = ir.toolChoice;
+    if (choice !== undefined) {
+      body.tool_choice =
+        typeof choice === 'object' ? { type: 'function', function: { name: choice.name } } : choice;
+    }
+  } else if (ir.toolChoice !== undefined) {
+    warnings.push('没有 tools，已忽略 toolChoice');
+  }
+  const rf = ir.responseFormat;
+  if (rf) {
+    if (!caps.structuredOutput) {
+      warnings.push(`模型 ${model} 未标注支持结构化输出，仍按原样发送 response_format`);
+    }
+    body.response_format = {
+      type: 'json_schema',
+      json_schema: {
+        name: rf.name,
+        schema: rf.schema,
+        ...(rf.strict === undefined ? {} : { strict: rf.strict }),
+      },
+    };
+  }
 }
 
 function mapRole(msg: ChatMessage, quirks: Record<string, boolean>): string {
@@ -186,11 +305,9 @@ function buildRequest(
     label: 'OpenAI Chat',
     warnings,
   });
-  const rendered: OpenAiMessage[] = messages.map((msg) => ({
-    role: mapRole(msg, quirks),
-    content: renderParts(msg.parts, msg.role, media, warnings),
-    ...(msg.name === undefined ? {} : { name: msg.name }),
-  }));
+  const rendered: OpenAiMessage[] = messages.flatMap((msg) =>
+    renderMessage(msg, quirks, media, warnings),
+  );
   media.flush();
 
   const s = ir.sampling;
@@ -212,6 +329,9 @@ function buildRequest(
     warnings.push('OpenAI Chat 不支持 repetition_penalty，已丢弃');
 
   if (quirks.streamUsage !== false) body.stream_options = { include_usage: true };
+
+  // 工具调用与结构化输出（M6 契约 §1.2）
+  applyTools(body, ir, caps, model, warnings);
 
   // 生图：OpenRouter 形态 `modalities: ['image','text']`，缺省在 caps.imageOut 时开
   if (resolveImageOutput(opts, caps, caps.imageOut, model, warnings)) {
@@ -418,6 +538,12 @@ async function* stream(
   let stopEvent: Extract<GenEvent, { type: 'stop' }> | undefined;
   /** 已输出过正文：http 图片链接降级成 Markdown 时要先空一行 */
   let sawText = false;
+  /**
+   * 流式工具调用：`delta.tool_calls[]` 只有首个 chunk 带 id / name，后续 chunk 只带 `index` 与参数片段，
+   * 按 index 维护调用状态并回填，保证每个 tool.call 事件都带正确的 id 与 name。
+   */
+  const toolSlots = new Map<number, { id: string; name: string }>();
+  let toolCount = 0;
 
   try {
     const res = await providerFetch(conn, req, signal);
@@ -483,16 +609,31 @@ async function* stream(
           }
           const toolCalls = delta.tool_calls;
           if (Array.isArray(toolCalls)) {
-            for (const tc of toolCalls) {
+            for (const [position, tc] of toolCalls.entries()) {
               const call = tc as {
-                id?: string;
-                function?: { name?: string; arguments?: string };
+                index?: number;
+                id?: string | null;
+                function?: { name?: string | null; arguments?: string | null };
               };
+              // 缺 index 的端点（非流式 message.tool_calls、部分中转）按数组位置
+              const index = typeof call.index === 'number' ? call.index : position;
+              const id = typeof call.id === 'string' ? call.id : '';
+              const name = typeof call.function?.name === 'string' ? call.function.name : '';
+              let slot = toolSlots.get(index);
+              // 同一 index 上来了新的 id + name：是另一个调用（有的兼容端点把并行调用都标成 index 0）
+              if (!slot || (id !== '' && name !== '' && slot.id !== id)) {
+                slot = { id: id || syntheticCallId(toolCount), name };
+                toolSlots.set(index, slot);
+                toolCount += 1;
+              } else if (slot.name === '' && name !== '') {
+                slot.name = name;
+              }
+              const args = call.function?.arguments;
               yield {
                 type: 'tool.call',
-                id: call.id ?? '',
-                name: call.function?.name ?? '',
-                argsDelta: call.function?.arguments ?? '',
+                id: slot.id,
+                name: slot.name,
+                argsDelta: typeof args === 'string' ? args : '',
               };
             }
           }
@@ -511,6 +652,11 @@ async function* stream(
   }
 
   if (usage) yield usage;
+  // 有工具调用而正常结束：有的兼容端点 finish_reason 仍写 stop，统一归一化为 tool
+  if (toolCount > 0 && (stopEvent === undefined || stopEvent.reason === 'end')) {
+    yield { type: 'stop', reason: 'tool' };
+    return;
+  }
   yield stopEvent ?? { type: 'stop', reason: 'end' };
 }
 

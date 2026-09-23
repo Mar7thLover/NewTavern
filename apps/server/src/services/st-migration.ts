@@ -7,9 +7,19 @@ import { asc, eq } from 'drizzle-orm';
 
 import { schema, type Db } from '../db/client.js';
 import type { AssetsService } from './assets.js';
+import { saveBackground, sniffBackgroundMime, stCustomBackgroundFile } from './backgrounds.js';
 import { setOwnerRegexEnabled } from './embedded-regex.js';
 import { ImportError, type Importer } from './importer.js';
 import { DEFAULT_PERSONA_KEY } from './personas.js';
+import { importSpriteFiles } from './sprites.js';
+import {
+  globalScriptKeys,
+  importScripts,
+  parseScriptTrees,
+  scriptKeysOf,
+  setOwnerScriptsEnabled,
+  type ParsedScript,
+} from './scripts.js';
 import {
   mergeWIUiSettings,
   readGlobalBookIds,
@@ -41,6 +51,8 @@ export interface StInventory {
     chatCount: number;
     /** 读不出角色卡（不是卡 PNG / 损坏）时的原因；这类项不能迁移 */
     error?: string;
+    /** `characters/<角色名>/` 下的立绘张数（有才带；M4（二）§B.1） */
+    sprites?: number;
   }[];
   /** file 相对 chats/ */
   chats: { file: string; characterFile: string | null; title: string; exists: boolean }[];
@@ -49,11 +61,14 @@ export interface StInventory {
   presets: { file: string; name: string; exists: boolean; error?: string }[];
   lorebooks: { file: string; name: string; entryCount: number; exists: boolean; error?: string }[];
   regex: { count: number; newCount: number };
+  /** 酒馆助手的全局脚本（M5（三）§2.1）；`globalEnabled`：ST 里脚本库总开关 */
+  scripts: { count: number; newCount: number; globalEnabled: boolean };
   personas: { avatar: string; name: string; exists: boolean }[];
   defaultPersona: string | null;
   worldInfo: { globalBooks: string[]; hasSettings: boolean };
+  /** `backgrounds/` 下的图片（M4（二）§A.5）；newCount = 库里还没有的 */
+  backgrounds: { count: number; newCount: number };
   skipped: {
-    backgrounds: number;
     instruct: number;
     context: number;
     themes: number;
@@ -70,19 +85,33 @@ export interface MigrationSelect {
   lorebooks: string[];
   personas: string[];
   regex: boolean;
+  /** 酒馆助手全局脚本（缺省 false） */
+  scripts: boolean;
   worldInfo: boolean;
   defaultPersona: boolean;
+  /** 导入 `backgrounds/` 下全部图片为背景库 */
+  backgrounds: boolean;
 }
 
 export type MigrationCategory =
-  'lorebooks' | 'characters' | 'personas' | 'presets' | 'regex' | 'settings' | 'chats';
+  | 'backgrounds'
+  | 'lorebooks'
+  | 'characters'
+  | 'personas'
+  | 'presets'
+  | 'regex'
+  | 'scripts'
+  | 'settings'
+  | 'chats';
 
 export const MIGRATION_CATEGORIES: readonly MigrationCategory[] = [
+  'backgrounds',
   'lorebooks',
   'characters',
   'personas',
   'presets',
   'regex',
+  'scripts',
   'settings',
   'chats',
 ];
@@ -267,6 +296,45 @@ function stRegexList(settings: Record<string, unknown> | null): StRegexItem[] {
 
 const regexKey = (scriptName: string, findRegex: string) => JSON.stringify([scriptName, findRegex]);
 
+/**
+ * 酒馆助手（JS-Slash-Runner 4.9.3）的全局脚本与启用名单。字段照源码 `src/type/settings.ts`：
+ * `extension_settings.tavern_helper.script = { enabled: { global, presets[], characters[] }, scripts: ScriptTree[] }`；
+ * 旧版（3.x，`src/type/backward.ts`）是 `extension_settings.TavernHelper_settings.script =
+ * { global_script_enabled, scriptsRepository }`。新旧都有时以新版为准（酒馆助手升级时就是这么迁的）。
+ */
+function stHelperScripts(settings: Record<string, unknown> | null): {
+  scripts: ParsedScript[];
+  globalEnabled: boolean;
+  presets: Set<string>;
+} {
+  const ext = isRecord(settings?.['extension_settings']) ? settings['extension_settings'] : {};
+  const modern = isRecord(ext['tavern_helper']) && isRecord(ext['tavern_helper']['script'])
+    ? ext['tavern_helper']['script']
+    : null;
+  if (modern) {
+    const enabled = isRecord(modern['enabled']) ? modern['enabled'] : {};
+    return {
+      scripts: parseScriptTrees(modern['scripts'] ?? []),
+      globalEnabled: enabled['global'] !== false,
+      presets: new Set(
+        (Array.isArray(enabled['presets']) ? enabled['presets'] : []).map((name) => String(name)),
+      ),
+    };
+  }
+  const legacy =
+    isRecord(ext['TavernHelper_settings']) && isRecord(ext['TavernHelper_settings']['script'])
+      ? ext['TavernHelper_settings']['script']
+      : null;
+  if (legacy) {
+    return {
+      scripts: parseScriptTrees(legacy['scriptsRepository'] ?? []),
+      globalEnabled: legacy['global_script_enabled'] !== false,
+      presets: new Set(),
+    };
+  }
+  return { scripts: [], globalEnabled: true, presets: new Set() };
+}
+
 /* ------------------------------------------------------------------ */
 /* 库里已有什么                                                         */
 /* ------------------------------------------------------------------ */
@@ -351,6 +419,16 @@ function stAllowedRegex(settings: Record<string, unknown> | null): {
   return { characters, presets };
 }
 
+function setScriptEnabled(db: Db, id: string): void {
+  const row = db.select().from(schema.scripts).where(eq(schema.scripts.id, id)).get();
+  if (!row) return;
+  const data = isRecord(row.data) ? row.data : {};
+  db.update(schema.scripts)
+    .set({ enabled: true, data: { ...data, enabled: true }, updatedAt: new Date() })
+    .where(eq(schema.scripts.id, id))
+    .run();
+}
+
 function existingRegexKeys(db: Db): Set<string> {
   return new Set(
     db
@@ -368,6 +446,71 @@ function avatarHashOf(root: string, avatar: string): string | null {
   } catch {
     return null;
   }
+}
+
+/* ------------------------------------------------------------------ */
+/* 背景与立绘（M4（二）§A.5 / §B.1）                                    */
+/* ------------------------------------------------------------------ */
+
+/** ST 背景 / 立绘目录里认的图片扩展名（视频背景不迁移） */
+const IMAGE_EXTS = ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.avif'];
+
+function listImages(dir: string): string[] {
+  if (!isDir(dir)) return [];
+  return fs
+    .readdirSync(dir)
+    .filter(
+      (name) =>
+        IMAGE_EXTS.some((ext) => name.toLowerCase().endsWith(ext)) && isFile(path.join(dir, name)),
+    )
+    .sort((a, b) => a.localeCompare(b));
+}
+
+/** 库里已有的背景：sha256 → assetId */
+function existingBackgroundHashes(db: Db): Map<string, string> {
+  const map = new Map<string, string>();
+  const rows = db
+    .select({
+      id: schema.assets.id,
+      sha: schema.assets.sha256,
+      kind: schema.assets.kind,
+      meta: schema.assets.meta,
+    })
+    .from(schema.assets)
+    .all();
+  for (const row of rows) {
+    if (row.kind === 'background' || row.meta?.['background'] === true) map.set(row.sha, row.id);
+  }
+  return map;
+}
+
+/**
+ * 角色的立绘目录（相对 characters/）：ST `extension_settings.expressionOverrides`
+ * （按头像文件名去扩展名改过文件夹）优先，否则是 `characters/<角色名>/`。不存在返回 null。
+ */
+function spriteDirOf(
+  root: string,
+  settings: Record<string, unknown> | null,
+  avatarFile: string,
+  characterName: string,
+): string | null {
+  const ext = isRecord(settings?.['extension_settings']) ? settings['extension_settings'] : {};
+  const overrides = Array.isArray(ext['expressionOverrides']) ? ext['expressionOverrides'] : [];
+  const override = overrides.find(
+    (item): item is Record<string, unknown> =>
+      isRecord(item) && item['name'] === baseName(avatarFile),
+  );
+  const candidates = [override?.['path'], characterName].filter(
+    (dir): dir is string => typeof dir === 'string' && dir.trim() !== '',
+  );
+  for (const dir of candidates) {
+    try {
+      if (isDir(childPath(root, 'characters', dir))) return dir;
+    } catch {
+      // 名字里带 .. 之类：不算
+    }
+  }
+  return null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -390,7 +533,9 @@ export function scanStDirectory(db: Db, root: string): StInventory {
       const card = readCardFromPng(bytes);
       const name =
         typeof card.data.name === 'string' && card.data.name ? card.data.name : baseName(file);
-      return { file, name, exists, chatCount };
+      const spriteDir = spriteDirOf(root, settings, file, name);
+      const sprites = spriteDir ? listImages(childPath(root, 'characters', spriteDir)).length : 0;
+      return { file, name, exists, chatCount, ...(sprites > 0 ? { sprites } : {}) };
     } catch (e) {
       return { file, name: baseName(file), exists, chatCount, error: (e as Error).message };
     }
@@ -467,6 +612,17 @@ export function scanStDirectory(db: Db, root: string): StInventory {
       .length,
   };
 
+  // 酒馆助手全局脚本
+  const helper = stHelperScripts(settings);
+  const scriptKeys = globalScriptKeys(db);
+  const scripts = {
+    count: helper.scripts.length,
+    newCount: helper.scripts.filter(
+      (item) => !scriptKeysOf(item.script).some((key) => scriptKeys.has(key)),
+    ).length,
+    globalEnabled: helper.globalEnabled,
+  };
+
   // 用户档案
   const personaRows = existingPersonas(db);
   const stPersonas = isRecord(pu['personas']) ? pu['personas'] : {};
@@ -479,6 +635,14 @@ export function scanStDirectory(db: Db, root: string): StInventory {
     });
 
   const wi = wiSource(settings);
+  const backgroundHashes = existingBackgroundHashes(db);
+  const backgroundFiles = listImages(path.join(root, 'backgrounds'));
+  const backgrounds = {
+    count: backgroundFiles.length,
+    newCount: backgroundFiles.filter(
+      (file) => !backgroundHashes.has(sha256(fs.readFileSync(path.join(root, 'backgrounds', file)))),
+    ).length,
+  };
   return {
     root,
     characters,
@@ -487,11 +651,12 @@ export function scanStDirectory(db: Db, root: string): StInventory {
     presets,
     lorebooks,
     regex,
+    scripts,
     personas,
     defaultPersona: typeof pu['default_persona'] === 'string' ? pu['default_persona'] : null,
     worldInfo: { globalBooks: globalSelectOf(wi), hasSettings: wi !== null },
+    backgrounds,
     skipped: {
-      backgrounds: countFiles(path.join(root, 'backgrounds')),
       instruct: countFiles(path.join(root, 'instruct'), '.json'),
       context: countFiles(path.join(root, 'context'), '.json'),
       themes: countFiles(path.join(root, 'themes'), '.json'),
@@ -517,21 +682,27 @@ export function parseMigrationSelect(value: unknown): MigrationSelect {
     lorebooks: stringList(value['lorebooks']),
     personas: stringList(value['personas']),
     regex: value['regex'] === true,
+    scripts: value['scripts'] === true,
     worldInfo: value['worldInfo'] === true,
     defaultPersona: value['defaultPersona'] === true,
+    backgrounds: value['backgrounds'] === true,
   };
 }
 
 /** 这次迁移会产生多少条 item 事件（正则按脚本数） */
 export function countMigrationItems(root: string, select: MigrationSelect): number {
-  const regexCount = select.regex ? stRegexList(readStSettings(root)).length : 0;
+  const settings = select.regex || select.scripts ? readStSettings(root) : null;
+  const regexCount = select.regex ? stRegexList(settings).length : 0;
+  const scriptCount = select.scripts ? stHelperScripts(settings).scripts.length : 0;
   return (
+    (select.backgrounds ? listImages(path.join(root, 'backgrounds')).length : 0) +
     select.characters.length +
     select.chats.length +
     select.presets.length +
     select.lorebooks.length +
     select.personas.length +
     regexCount +
+    scriptCount +
     (select.worldInfo ? 1 : 0) +
     (select.defaultPersona ? 1 : 0)
   );
@@ -600,7 +771,7 @@ export function wiSettingsFromSt(st: Record<string, unknown>, base: WIUiSettings
 }
 
 /**
- * 按勾选逐项迁移。顺序：世界书 → 角色 → 档案 → 预设 → 正则 → 世界书全局设置 / 默认档案 → 聊天。
+ * 按勾选逐项迁移。顺序：背景 → 世界书 → 角色 → 档案 → 预设 → 正则 → 世界书全局设置 / 默认档案 → 聊天。
  * 单项失败不中断；`isAborted()` 为真时在两项之间停下。
  */
 export async function runStMigration(
@@ -643,10 +814,54 @@ export async function runStMigration(
     return !isAborted();
   };
   const allowedRegex = stAllowedRegex(settings);
+  const helperScripts = stHelperScripts(settings);
   const readChild = (sub: string, file: string) => {
     const abs = childPath(root, sub, file);
     if (!isFile(abs)) throw new MigrationError('文件不存在');
     return new Uint8Array(fs.readFileSync(abs));
+  };
+
+  // 0. 背景库：库里已有同样内容的跳过；之后的聊天按文件名映射 custom_background
+  const backgroundIds = new Map<string, string>();
+  const backgroundHashes = existingBackgroundHashes(db);
+  const backgroundFiles = listImages(path.join(root, 'backgrounds'));
+  if (select.backgrounds) {
+    for (const file of backgroundFiles) {
+      const ok = await attempt('backgrounds', file, () => {
+        const bytes = readChild('backgrounds', file);
+        const hash = sha256(bytes);
+        const existing = backgroundHashes.get(hash);
+        if (existing) {
+          backgroundIds.set(file, existing);
+          return { status: 'skipped', id: existing, message: '库里已有这张背景' };
+        }
+        const mime = sniffBackgroundMime(bytes);
+        if (!mime) throw new MigrationError('不是能识别的图片');
+        const row = saveBackground(assets, {
+          bytes,
+          mime,
+          name: baseName(file),
+          source: 'st-import:background',
+        });
+        backgroundHashes.set(hash, row.id);
+        backgroundIds.set(file, row.id);
+        return { id: row.id };
+      });
+      if (!ok) break;
+    }
+  }
+  /** 聊天的 custom_background → 库里的背景（没勾选背景时，只认库里已有同内容的那张） */
+  const backgroundIdOf = (file: string): string | undefined => {
+    const cached = backgroundIds.get(file);
+    if (cached) return cached;
+    if (!backgroundFiles.includes(file)) return undefined;
+    try {
+      const id = backgroundHashes.get(sha256(readChild('backgrounds', file)));
+      if (id) backgroundIds.set(file, id);
+      return id;
+    } catch {
+      return undefined;
+    }
   };
 
   // 1. 世界书（ST 里书名就是文件名）
@@ -670,6 +885,20 @@ export async function runStMigration(
       // ST 里允许过这张卡的自带正则 → 搬过来也保持启用（文件名就是 ST 的 avatar）
       if (allowedRegex.characters.has(file)) {
         setOwnerRegexEnabled(db, 'character', row.id, true);
+      }
+      // 立绘：characters/<角色名>/ 下的图片，文件名去扩展名作标签（M4（二）§B.1）
+      const spriteDir = spriteDirOf(root, settings, file, row.name);
+      if (spriteDir) {
+        const files = listImages(childPath(root, 'characters', spriteDir)).map(
+          (name): [string, Uint8Array] => [
+            name,
+            readChild('characters', path.join(spriteDir, name)),
+          ],
+        );
+        const sprites = importSpriteFiles(db, assets, row.id, files, `st-import:sprites`);
+        if (sprites.imported.length > 0) {
+          return { id: row.id, message: `立绘 ${sprites.imported.length} 张` };
+        }
       }
       return { id: row.id };
     });
@@ -756,6 +985,10 @@ export async function runStMigration(
       if (allowedRegex.presets.has(baseName(file))) {
         setOwnerRegexEnabled(db, 'preset', row.id, true);
       }
+      // 酒馆助手里允许过这个预设的脚本（`script.enabled.presets`）→ 自带脚本按原件开关启用
+      if (helperScripts.presets.has(baseName(file))) {
+        setOwnerScriptsEnabled(db, 'preset', row.id, true);
+      }
       return { id: row.id };
     });
     if (!ok) break;
@@ -774,6 +1007,33 @@ export async function runStMigration(
         );
         keys.add(key);
         return { id: script?.id };
+      });
+      if (!ok) break;
+    }
+  }
+
+  // 5b. 酒馆助手全局脚本：保持原启用状态（文件夹关着的算关）；ST 里脚本库总开关关着时全部导成关闭
+  if (select.scripts) {
+    const keys = globalScriptKeys(db);
+    if (!helperScripts.globalEnabled && helperScripts.scripts.length > 0) {
+      warnings.push('SillyTavern 里酒馆助手的全局脚本总开关是关的，导入的全局脚本都保持关闭');
+    }
+    for (const item of helperScripts.scripts) {
+      const name = String(item.script['name'] ?? '') || '(未命名脚本)';
+      const ok = await attempt('scripts', name, () => {
+        if (scriptKeysOf(item.script).some((key) => keys.has(key))) {
+          return { status: 'skipped', message: '库里已有同一个脚本' };
+        }
+        const tree = item.folder
+          ? { type: 'folder', name: item.folder, enabled: true, scripts: [item.script] }
+          : item.script;
+        const [row] = importScripts(db, tree, { scope: 'global', enabled: false });
+        if (!row) throw new MigrationError('脚本读不出来');
+        if (item.enabled && helperScripts.globalEnabled) {
+          setScriptEnabled(db, row.id);
+        }
+        for (const key of scriptKeysOf(item.script)) keys.add(key);
+        return { id: row.id };
       });
       if (!ok) break;
     }
@@ -851,6 +1111,7 @@ export async function runStMigration(
         characterId,
         mediaRoot: root,
       });
+      applyStCustomBackground(db, result.chat.id, backgroundIdOf);
       if (result.warnings.length > 0) {
         warnings.push(
           ...result.warnings.map((warning) => `${baseName(path.basename(file))}：${warning}`),
@@ -865,4 +1126,26 @@ export async function runStMigration(
   }
 
   return { counts, warnings };
+}
+
+/** ST 聊天 header 的 `chat_metadata.custom_background` → 会话 `metadata.background`（库里有这张才写） */
+function applyStCustomBackground(
+  db: Db,
+  chatId: string,
+  backgroundIdOf: (file: string) => string | undefined,
+): void {
+  const chat = db.select().from(schema.chats).where(eq(schema.chats.id, chatId)).get();
+  const st = chat?.metadata?.['st'];
+  const header = isRecord(st) && isRecord(st['header']) ? st['header'] : null;
+  // 导入时 header 已转成 compat 的 ImportedChatHeader（chatMetadata）；原样的 chat_metadata 兜底
+  const raw = header?.['chatMetadata'] ?? header?.['chat_metadata'];
+  const chatMetadata = isRecord(raw) ? raw : null;
+  const file = stCustomBackgroundFile(chatMetadata?.['custom_background']);
+  if (!chat || !file) return;
+  const assetId = backgroundIdOf(file);
+  if (!assetId) return;
+  db.update(schema.chats)
+    .set({ metadata: { ...(chat.metadata ?? {}), background: assetId } })
+    .where(eq(schema.chats.id, chatId))
+    .run();
 }

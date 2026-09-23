@@ -1,9 +1,9 @@
-import { parsePreset } from '@newtavern/compat';
 import { desc, eq } from 'drizzle-orm';
 import { Hono, type Context } from 'hono';
 
 import { schema, type Db } from '../db/client.js';
 import { ownerRegexRows } from '../services/embedded-regex.js';
+import { deleteOwnerScripts } from '../services/scripts.js';
 import { toRegexScript } from '../services/regex-map.js';
 import { DEFAULT_PRESET } from '../services/assemble.js';
 import type { Importer } from '../services/importer.js';
@@ -13,7 +13,11 @@ import {
   presetColumns,
   readBuiltinPresetId,
 } from '../services/presets.js';
+import { PresetInputError, syncDataName, updatePreset } from '../services/preset-edit.js';
+import { parseAuthor, recordCurrentVersion } from '../services/versions.js';
 import { sendDownload } from './download.js';
+
+export type { PresetLayoutPolicy } from '../services/preset-edit.js';
 
 type PresetRow = typeof schema.presets.$inferSelect;
 
@@ -39,11 +43,6 @@ async function readJsonObject(c: Context): Promise<Record<string, unknown> | und
   }
 }
 
-/** 预设 JSON 自带 name 时与列保持一致；ST 导出的预设大多没有这个字段，不凭空添加 */
-function syncDataName(data: Record<string, unknown>, name: string): void {
-  if ('name' in data) data.name = name;
-}
-
 const NEW_PRESET_NAME = '新预设';
 
 /**
@@ -51,7 +50,8 @@ const NEW_PRESET_NAME = '新预设';
  *
  * 修改（`PUT /:id`）整份替换 `data`：用 `parsePreset`（looseObject）校验，未知字段原样保留，
  * 导出因此仍然无损；`sampling` / `apiFamily` 从新 data 重算。
- * `layoutPolicy` 列组装不读（布局模式来自会话覆盖 / 请求参数），这里不开放写入。
+ * 可选 `layoutPolicy`（M6 §4.2 布局策略与保真锁，形状见 `services/preset-edit.ts`
+ * 的 `PresetLayoutPolicy`；null = 清空，缺省 = 不动）。组装暂不读这一列。
  * 默认预设（`defaultPresetId`）与种子预设（`builtinPresetId`）见 `services/presets.ts`。
  */
 export function createPresetsRoutes(db: Db, importer: Importer) {
@@ -80,6 +80,7 @@ export function createPresetsRoutes(db: Db, importer: Importer) {
           .values({ name, format: DEFAULT_PRESET.format, ...presetColumns(builtinPresetData()) })
           .returning()
           .get();
+        recordCurrentVersion(db, 'preset', row.id);
         return c.json(row, 201);
       })
       .get('/:id', (c) => {
@@ -103,31 +104,16 @@ export function createPresetsRoutes(db: Db, importer: Importer) {
         if (!current) return c.json({ error: 'not_found' }, 404);
         const body = await readJsonObject(c);
         if (!body) return c.json({ error: 'invalid', message: '请求体不是合法的 JSON 对象' }, 400);
-
-        let name = current.name;
-        if (body.name !== undefined) {
-          if (typeof body.name !== 'string' || body.name.trim() === '') {
-            return c.json({ error: 'invalid', message: 'name 不能为空' }, 400);
-          }
-          name = body.name.trim();
-        }
-        if (body.data === undefined) return c.json({ error: 'invalid', message: '缺少 data' }, 400);
-
-        let data: ReturnType<typeof parsePreset>;
+        // 校验与写库在 services/preset-edit.ts（版本恢复复用）；每次保存写一版（M6 §2.2）
         try {
-          data = parsePreset(body.data);
+          const input = { name: body.name, data: body.data, layoutPolicy: body.layoutPolicy };
+          return c.json(updatePreset(db, id, input, parseAuthor(body.author)));
         } catch (e) {
-          return c.json({ error: 'invalid', message: (e as Error).message }, 400);
+          if (e instanceof PresetInputError) {
+            return c.json({ error: 'invalid', message: e.message }, 400);
+          }
+          throw e;
         }
-        syncDataName(data, name);
-
-        const row = db
-          .update(schema.presets)
-          .set({ name, ...presetColumns(data), updatedAt: new Date() })
-          .where(eq(schema.presets.id, id))
-          .returning()
-          .get();
-        return c.json(row);
       })
       /** 复制：data / sampling / format / apiFamily 原样，名称「<原名> 副本」 */
       .post('/:id/duplicate', (c) => {
@@ -147,6 +133,7 @@ export function createPresetsRoutes(db: Db, importer: Importer) {
           })
           .returning()
           .get();
+        recordCurrentVersion(db, 'preset', row.id);
         return c.json(row, 201);
       })
       /** 只对种子写入的「默认预设」：data 重置为内置内容，名称不变 */
@@ -167,6 +154,7 @@ export function createPresetsRoutes(db: Db, importer: Importer) {
           .where(eq(schema.presets.id, id))
           .returning()
           .get();
+        recordCurrentVersion(db, 'preset', id);
         return c.json(row);
       })
       .get('/:id/export', (c) => sendDownload(c, importer.exportPreset(c.req.param('id'))))
@@ -178,6 +166,8 @@ export function createPresetsRoutes(db: Db, importer: Importer) {
           .get();
         if (!row) return c.json({ error: 'not_found' }, 404);
         clearPresetSettingsIf(db, row.id);
+        // 预设自带的脚本（M5（三）§2.1）跟着预设一起删
+        deleteOwnerScripts(db, 'preset', row.id);
         return c.body(null, 204);
       })
   );

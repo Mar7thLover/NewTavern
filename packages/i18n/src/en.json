@@ -97,7 +97,8 @@
       "worldInfo": "World info",
       "globalSystemPrompt": "Global system prompt",
       "regex": "Regex scripts",
-      "cards": "Frontend cards"
+      "cards": "Frontend cards",
+      "scripts": "Script library"
     },
     "developerMode": "Developer mode",
     "developerModeHint": "Show tools for development and debugging, such as the ST diff in the inspector.",
@@ -641,7 +642,11 @@
       "openai-chat": "OpenAI compatible",
       "openai-responses": "OpenAI Responses",
       "anthropic": "Anthropic",
-      "google": "Google Gemini"
+      "google": "Google Gemini",
+      "image-sd": "SD WebUI / Forge",
+      "image-comfy": "ComfyUI",
+      "image-novelai": "NovelAI",
+      "image-openai": "OpenAI Images"
     },
     "endpoints": "Common endpoints",
     "label": "Name",
@@ -865,7 +870,8 @@
     },
     "flags": {
       "volatile": "Volatile macros",
-      "locked": "Locked"
+      "locked": "Locked",
+      "templated": "EJS template"
     },
     "breakpoint": "Cache breakpoint · {{layer}} · ~{{tokens}} tok",
     "belowMin": "Below the minimum cacheable length",
@@ -1086,6 +1092,8 @@
     "mvuHint": "Parses <UpdateVariable> commands out of the model's output into this message's variable snapshot. Branches and rerolls each keep their own set.",
     "mvuSwitch": "Parse variable updates automatically",
     "mvuSwitchHint": "With this off, variable tables stay readable and writable — they just stop following the model's output.",
+    "ejsSwitch": "EJS prompt templates",
+    "ejsSwitchHint": "Runs <% … %> in lore books, presets and character cards before sending (ST-Prompt-Template compatible, sandboxed; a block running over 200ms is stopped and left as-is). Template blocks in chat messages are removed, not run.",
     "variables": {
       "title": "Variables",
       "empty": "No variable snapshot on this message yet.",
@@ -1113,8 +1121,142 @@
   "backgrounds": {},
   "sprites": {},
   "themeVariants": {},
-  "scripts": {},
+  "scripts": {
+    "migration": {
+      "label": "Tavern Helper global scripts",
+      "hint": "{{newCount}} new of {{count}}; on/off state is kept, ones already in your library are skipped.",
+      "globalOff": " The script switch was off in SillyTavern, so they arrive switched off."
+    },
+    "title": "Script library",
+    "global": "My scripts",
+    "globalHint": "Run in every chat, inside hidden sandboxed iframes, in this order — before preset and character scripts.",
+    "preset": "Bundled with presets",
+    "presetHint": "Run only in chats that use this preset. Collected when the preset is imported, off by default.",
+    "presetPick": "Preset to show",
+    "presetNone": "No presets yet",
+    "runnerOff": "The script library switch under Settings · Frontend cards is off, so none of these scripts run right now.",
+    "new": "New",
+    "import": "Import",
+    "edit": "Edit",
+    "export": "Export as Tavern Helper JSON",
+    "toggle": "Enable this script",
+    "toggleAll": "Enable the whole group",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "untitled": "(untitled)",
+    "buttonCount": "buttons: {{count}}",
+    "emptyGlobal": "No global scripts yet. Import a Tavern Helper JSON export, or write a new one.",
+    "emptyPreset": "This preset carries no scripts.",
+    "importAskTitle": "Imported scripts are still off",
+    "importAskBody": "{{count}} script(s) added. Scripts can read and write variables, send messages and call generation — enable them now?",
+    "enableNow": "Enable",
+    "later": "Not now",
+    "deleteTitle": "Delete script",
+    "deleteMessage": "“{{name}}” will be removed from the library, along with its own variable table.",
+    "embedded": {
+      "askTitle": "This preset carries scripts",
+      "askBody": "{{names}} bundles {{count}} Tavern Helper script(s). They are in the script library but still off. Enable them now? Scripts the author left off stay off."
+    },
+    "editor": {
+      "newTitle": "New script",
+      "editTitle": "Edit script",
+      "name": "Name",
+      "content": "Code",
+      "contentPlaceholder": "// Runs as an ES module in a hidden sandbox; Tavern Helper globals are available\nimport 'https://…';",
+      "keys": "Ctrl+F search · Tab indent · Ctrl+Z undo",
+      "loading": "Loading editor…",
+      "buttons": "Script buttons",
+      "buttonsEnabled": "Show buttons",
+      "buttonName": "Button name",
+      "buttonVisible": "Show above the input",
+      "addButton": "Add a button",
+      "removeButton": "Remove this button",
+      "info": "Author notes",
+      "infoPlaceholder": "Usage, dependencies, caveats…",
+      "saving": "Saving…"
+    }
+  },
   "variableEditor": {},
-  "imageGen": {},
+  "imageGen": {
+    "menu": {
+      "trigger": "Illustrate",
+      "lastMessage": "Draw the last message",
+      "character": "Draw the character",
+      "free": "Describe freely…"
+    },
+    "noBackend": "No image backend is selected yet.",
+    "goConnections": "Add one on the Connections page",
+    "free": {
+      "title": "Describe freely",
+      "prompt": "Scene",
+      "promptPlaceholder": "By a rainy window at night, she holds a black cat under a warm desk lamp",
+      "negative": "Negative prompt",
+      "width": "Width",
+      "height": "Height",
+      "submit": "Draw"
+    },
+    "progress": {
+      "writing": "Turning the message into an image prompt…",
+      "drawingStart": "Sent to the image backend, waiting to start…",
+      "drawing": "Drawing {{percent}}%",
+      "failed": "Drawing failed: {{message}}",
+      "cancel": "Cancel",
+      "retry": "Try again",
+      "dismiss": "Dismiss"
+    },
+    "backends": {
+      "title": "Image backends",
+      "hint": "Used to illustrate chats. They never show up in the chat model pickers.",
+      "create": "Add image backend",
+      "createTitle": "Add image backend",
+      "editTitle": "Edit image backend",
+      "empty": "No image backends yet. SD WebUI / Forge, ComfyUI, NovelAI and OpenAI-compatible images endpoints are supported.",
+      "kind": "Backend",
+      "labelPlaceholder": "e.g. \"Local Forge\"",
+      "inUse": "In use",
+      "use": "Use this",
+      "testOk": "Reachable in {{ms}} ms, {{total}} models found",
+      "keyPlaceholder": {
+        "image-sd": "Leave empty unless --api-auth is on; then user:pass",
+        "image-comfy": "Usually empty",
+        "image-novelai": "pst-…",
+        "image-openai": "sk-…"
+      },
+      "keyHint": {
+        "image-sd": "Start SD WebUI / Forge with --api. Keys are stored encrypted on the local server.",
+        "image-comfy": "A local ComfyUI needs no key; fill it in only behind an authenticating proxy.",
+        "image-novelai": "Your NovelAI persistent API token (from account settings). NovelAI has no model list, so testing does not verify the token.",
+        "image-openai": "API key for OpenAI or a compatible endpoint. The base URL works with or without /v1."
+      }
+    },
+    "settings": {
+      "title": "Image settings",
+      "backend": "Backend to use",
+      "none": "No image generation",
+      "model": "Model",
+      "modelDefault": "Whatever the backend has loaded",
+      "width": "Width",
+      "height": "Height",
+      "steps": "Steps",
+      "cfg": "CFG",
+      "sampler": "Sampler",
+      "samplerPlaceholder": "Empty = backend default",
+      "stylePrefix": "Style prefix",
+      "stylePrefixPlaceholder": "masterpiece, watercolor",
+      "negative": "Default negative prompt",
+      "writer": "Model that writes image prompts",
+      "writerDefault": "Same as the chat",
+      "writerModel": "Model name",
+      "writerHint": "\"Draw the last message\" and \"Draw the character\" first ask this model to rewrite the content as one line of English keywords.",
+      "comfyWorkflow": "ComfyUI workflow",
+      "comfyBuiltin": "Built-in txt2img workflow",
+      "comfyLoaded": "Imported, {{count}} nodes",
+      "comfyImport": "Import workflow JSON",
+      "comfyClear": "Back to built-in",
+      "comfyInvalid": "This is not an API-format workflow. Export it from ComfyUI with \"Export (API)\".",
+      "comfyHint": "Placeholders: %prompt% %negative% %seed% %width% %height% %steps% %cfg% %model% %sampler%.",
+      "saved": "Saved"
+    }
+  },
   "toast": {}
 }

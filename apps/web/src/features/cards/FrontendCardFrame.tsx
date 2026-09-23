@@ -16,6 +16,10 @@ import { useTranslation } from 'react-i18next';
 import { emitCompat, subscribeBus } from './bus';
 import { createCardHandlers, buildChatMirror, type CardHostContext } from './host-bridge';
 import { EXTERNAL_SCRIPTS, EXTERNAL_STYLES, selectSandboxLibs } from './libs';
+import { useCardMirrors } from './mirrors';
+import { createSlashHost } from './slash-host';
+import { useGeneration } from '../chat/useGeneration';
+import { toast, toneOfLevel } from '../../components/ui/toast';
 import { useCardSettings, useChatVariables, trustFor } from '../../lib/api-cards';
 import { queryKeys, useChat, useCharacter } from '../../lib/api';
 import { cn } from '../../lib/utils';
@@ -43,7 +47,7 @@ export interface FrontendCardFrameProps {
   /** 同一条消息里的第几张卡 */
   index: number;
   html: string;
-  /** 主题槽位变量（`--accent` 等）：卡可以贴合当前世界 */
+  /** 覆盖主题槽位声明串；缺省取当前世界（`useThemeCss`，M5（三）§3.4） */
   themeCss?: string;
   className?: string;
 }
@@ -64,13 +68,18 @@ export function FrontendCardFrame({
   const [height, setHeight] = useState(MIN_HEIGHT);
   const [errors, setErrors] = useState<string[]>([]);
   const [showErrors, setShowErrors] = useState(false);
-  const [generation, setGeneration] = useState(0);
+  const [reloadCount, setReloadCount] = useState(0);
 
   const chat = useChat(chatId);
   const characterId = chat.data?.characterIds[0] ?? null;
   const character = useCharacter(characterId);
   const variables = useChatVariables(chatId, nodeId);
   const settings = useCardSettings();
+  const mirrors = useCardMirrors(chat.data);
+  const theme = themeCss ?? mirrors.theme;
+  const generation = useGeneration(chatId);
+  const generateRef = useRef(generation.generate);
+  generateRef.current = generation.generate;
 
   const trust: FrontendCardTrustLevel = trustFor(settings.data, characterId);
   const frameId = `${nodeId}:${index}`;
@@ -106,6 +115,7 @@ export function FrontendCardFrame({
         character: table?.character ?? {},
         global: table?.global ?? {},
         script: {},
+        preset: table?.preset ?? {},
       },
       macros: {
         char: chat.data?.character?.name ?? '',
@@ -128,14 +138,19 @@ export function FrontendCardFrame({
   }, [queryClient, chatId]);
 
   const notify = useCallback(
-    (level: string, message: string) => {
-      // 卡的提示直接进控制台 + 错误面板：应用自己的提示条在 M5（三）统一做
+    (level: string, message: string, title?: string) => {
+      // 卡调到宿主的提示走应用提示条（M5（三）§3.3）；出错的同时记进卡的错误面板
       if (level === 'error' || level === 'warning') {
         setErrors((current) => [...current.slice(-9), `${level}: ${message}`]);
       }
-      console.info(`[前端卡 ${frameId}] ${level}: ${message}`);
+      const heading = title?.trim() ? title : message;
+      toast({
+        title: heading,
+        ...(title?.trim() && message ? { description: message } : {}),
+        tone: toneOfLevel(level),
+      });
     },
-    [frameId],
+    [],
   );
 
   const handlers = useMemo(
@@ -145,9 +160,21 @@ export function FrontendCardFrame({
         emit: (event, args) => emitCompat(event, ...args),
         invalidate,
         onGenerationEvent: (event, args) => channelRef.current?.emitEvent(event, args),
+        // triggerSlash：变量快照挂在帧所在节点；/trigger 等走正式生成
+        slashHost: () =>
+          createSlashHost({
+            chatId,
+            getDetail: () => contextRef.current.detail,
+            getNodeId: () => nodeId,
+            queryClient,
+            generate: (body) => generateRef.current(body),
+          }),
       }),
-    [notify, invalidate],
+    [notify, invalidate, chatId, nodeId, queryClient],
   );
+
+  const mirrorsRef = useRef(mirrors);
+  mirrorsRef.current = mirrors;
 
   /**
    * srcdoc 只依赖卡的 HTML 与信任级别：**不能**把镜像放进依赖，
@@ -168,20 +195,23 @@ export function FrontendCardFrame({
         appOrigin: window.location.origin,
         libs: selectSandboxLibs(html),
         ...(externals ? { externalScripts: EXTERNAL_SCRIPTS, externalStyles: EXTERNAL_STYLES } : {}),
-        ...(themeCss ? { themeCss } : {}),
+        themeCss: mirrorsRef.current.theme,
         bootstrap: guestBootstrapSource(),
         mirrors: {
           chatMessages: buildChatMirror(current),
           variables: current.variables,
           charData: current.charData,
           macroContext: current.macros,
+          presets: mirrorsRef.current.presets,
+          regex: mirrorsRef.current.regex,
         },
       }),
     };
-    // `generation` 变化 = 用户点了「重新加载」；镜像**故意**不在依赖里（见上）。
+    // `reloadCount` 变化 = 用户点了「重新加载」；镜像**故意**不在依赖里（见上）。
     // `variablesReady` 必须在依赖里：hooks 在占位分支之前就跑了，不带它的话
     // 首屏那次（变量还没到）算出来的空镜像会被缓存住，卡拿到的就是一屏「未知」。
-  }, [html, frameInfo, trust, themeCss, settings.data?.externalLibs, generation, variablesReady]);
+    // 主题同样不在依赖里：切世界走 `theme` 镜像（guest 改写 #nt-theme），不重建 iframe
+  }, [html, frameInfo, trust, settings.data?.externalLibs, reloadCount, variablesReady]);
 
   /** 帧通道：iframe 元素在，就建通道；卸载或重载时销毁 */
   useEffect(() => {
@@ -221,6 +251,17 @@ export function FrontendCardFrame({
     channel.pushMirror('charData', context.charData);
     channel.pushMirror('macroContext', context.macros);
   }, [context]);
+
+  /** 预设 / 正则 / 主题镜像：各自变了各自推 */
+  useEffect(() => {
+    channelRef.current?.pushMirror('presets', mirrors.presets);
+  }, [mirrors.presets]);
+  useEffect(() => {
+    channelRef.current?.pushMirror('regex', mirrors.regex);
+  }, [mirrors.regex]);
+  useEffect(() => {
+    channelRef.current?.pushMirror('theme', theme);
+  }, [theme]);
 
   /** 应用事件 → 帧内事件（卡的 `eventOn` 收得到） */
   useEffect(() =>
@@ -287,7 +328,7 @@ export function FrontendCardFrame({
         )}
         <button
           type="button"
-          onClick={() => setGeneration((value) => value + 1)}
+          onClick={() => setReloadCount((value) => value + 1)}
           title={t('cards.reload')}
           className="pointer-events-auto cursor-pointer rounded-full bg-surface-2 p-1 text-ink-3 hover:text-ink"
         >

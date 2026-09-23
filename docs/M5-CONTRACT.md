@@ -429,4 +429,18 @@ export function hasEjs(text: string): boolean;   // 快速判断，免得每段�
 
 ## 5. 待协调与修正（M5（三））
 
-（暂无）
+### 修正（2026-09-22，E）：EJS 与 ST-Prompt-Template 核对
+
+核对对象：GitHub `zonde306/ST-Prompt-Template` 主分支源码（`src/modules/handler.ts`、`src/function/{ejs,variables,worldinfo}.ts`、`src/3rdparty/ejs.js`、`src/modules/ui.ts` 默认设置、`docs/features_cn.md`）。以它的实际行为为准，§4 按下列各条修正：
+
+1. **`<%=` 不做 HTML 转义**（修正 §4.1）。ST-PT 给 ejs 的 `escape` 是恒等函数，只有「楼层渲染」才换成 `messageFormatting`；提示词里 `<%=` 与 `<%-` 等价。null / undefined 两者都不输出（改版 ejs 的 `__append` 丢弃它们）。
+2. **渲染在宏展开之后**（修正 §4.2「宏展开之前」）。ST-PT 挂在 `CHAT_COMPLETION_SETTINGS_READY`，处理的是 ST 已拼好、宏已替换的最终 messages；`getwi` 取到的条目也是先 `getRegexedString(…, WORLD_INFO)` 再 `substituteParams` 才渲染。所以：模板输出里的 `{{…}}` 不再展开；模板代码里的宏会先被替换。
+3. **按段渲染，而不是逐条目**（修正 §4.2「WI 激活之后、放置之前」）。ST-PT 一条消息一次 `evalTemplate`，同一消息里各世界书条目共享一个作用域（样本里 `if (typeof xilianAffection === 'undefined') var …` 就是冲着这个写的）。新酒馆在放置、`{{outlet}}` 二次替换之后、历史裁剪与布局之前，对每个非历史段（preset / injection / global_system / character / persona / worldinfo / authors_note）整段渲染一次；一段出错则整段保留原文（ST-PT 同样整条消息保留原文）。已知差异：ST 在 `squash_system_messages` 之后才交给 ST-PT，合并后的相邻 system 消息共享作用域，新酒馆仍按段（合并在渲染层做）。渲染成空的段被丢掉（与组装器不留空段一致）。
+4. **聊天消息里的模板块删除、不执行**（细化 §4.2「历史消息不渲染」）。ST-PT 默认 `filter_message_enabled: true`：生成前装一条仅提示词正则 `/<%(?![%])([\s\S]*?)(?<!%)%>/g → ''`（作用于用户 / AI 消息）。新酒馆在历史的提示词侧正则之后、宏之前做同样的删除（渲染器 `site: 'history'`）。ST-PT 的「楼层渲染 / 永久求值」（AI 回复里的模板在显示时执行并改写原文）属显示侧，本轮不做。
+5. **`getvar` 缺省作用域是 `cache`**（细化 §4.1）。`cache` = 全局 ∪ 聊天 ∪ 消息变量的浅合并；`setvar` 缺省写 `message`。新酒馆的聊天变量本就按消息节点存，`message` 与 `local` 都写本次组装的 chat 工作副本；`global` 写全局；`cache` 只写本次组装内可见的临时层。值原样返回：MVU `[值, 说明]` 二元组要自己取 `[0]`（样本就是 `getvar('stat_data.昔涟.好感度[0]')`）。支持字符串 / 布尔简写（`'nx'`、`'global'`、`'old'`…）、`defaults`、`flags`、`results`、`merge`、`inscope/outscope`、`min/max`；`index`、`withMsg` 未实现（调用报错）。
+6. **`getwi` 的查找**（细化 §4.1）。签名 `getwi(book?, title, data?)`，单参数 / 第二参是对象时按「只给标题」处理。book 为空时先找主书（角色卡的书，其次 persona / 聊天书），按 comment 全等、uid 全等、comment 正则匹配；找不到且标题不是数字时再模糊搜其余可见的书。**禁用条目也找**（ST-PT 直接读书文件；样本的阶段人设全是禁用条目）。与 ST-PT 的差异：ST-PT 按它的排序对每个条目依次判三个条件，名字「包含」标题的条目可能先于「全等」的条目命中，这里改为先全等再正则两轮；ST-PT 能按书名读任意一本书，这里只在本次组装可见的书里找。
+7. **改版 ejs 的额外语法**：标签内再出现 `<%…%>` 时按层数配对并入外层代码；代码行尾有 `//` 注释而没换行时补换行；`<%#` 注释、`<%%` / `%%>` 字面量、`-%>` / `_%>` 吃一个换行、`<%_` 吃前面同行空白、`_%>` 吃后面同行空白。`print` = 输出；`with (locals)` 包裹，模板里直接写 `variables.x`、`userName`、`charName`、`lastUserMessage` 等上下文值。
+8. **额外实现**：`evalTemplate(content, data)`（渲染后再过一遍宏，与 ST-PT 一致）、`delvar` 与 `get/set/inc/dec/del{Local,Global,Message}Var` 变体、`parseJSON`、`console.warn/error`（进组装告警）。`_` 是 lodash 常用子集（沙箱内纯 JS），缺的方法访问即报错并给出名字。未实现的 ST-PT 函数（`getchar` / `getpreset` / `define` / `execute` / `activewi` / `injectPrompt` / `getChatMessages` / `faker` / `$` 等，清单见 `packages/compat/src/ejs/prelude.ts`）调用即抛错，错误信息带函数名。
+9. **沙箱生命周期**（细化 §4.2「组装结束 dispose」）：一次组装共用一个 QuickJS runtime + context（前奏只求值一次），同步组装结束后由 microtask 自动释放，所以 generate / inspect / 前端卡 generate 各调用点不用改；任一段失败（超时 / 内存 / 栈）即作废重建。栈上限定为 256KB——512KB 时 QuickJS 还没报栈溢出，V8 的原生栈先爆了。每段 200ms 墙钟上限包含其中 `getwi` 的递归渲染。
+10. **开关**：settings KV `ejs: { enabled }`，缺省开；界面在 设置 → 前端卡 → 变量框架 一节。
+11. **ST-PT 的其余功能本轮不做**：世界书标题前缀注入（`[GENERATE:BEFORE/AFTER]`、`[GENERATE:n:…]`、`[RENDER:…]`、`[GENERATE:REGEX:…]`）、`@INJECT` 提示词注入、`[InitialVariables]`、`@@preprocessing` / `@@private` 等装饰器、楼层渲染与永久求值、`include`。带这些前缀 / 装饰器的条目按普通世界书条目处理。

@@ -4,6 +4,7 @@ import { schema, type Db } from '../db/client.js';
 import { loadChat, loadNodes, textOfParts, type ChatRow, type NodeRow } from '../services/chat-tree.js';
 import {
   ensureMvuInitialized,
+  isPrunedSnapshot,
   parseMvuMessage,
   replayMvuFrom,
   runMvuForNode,
@@ -14,6 +15,14 @@ import {
   replaceVariableTable,
   type VariableTableScope,
 } from '../services/variables.js';
+import {
+  isSchemaScope,
+  readChatInjects,
+  readVariableSchemas,
+  removeChatInjects,
+  upsertChatInjects,
+  writeVariableSchema,
+} from '../services/chat-injects.js';
 import type { Part } from '@newtavern/core';
 
 /**
@@ -30,7 +39,14 @@ import type { Part } from '@newtavern/core';
 /** 前端卡能写的五种作用域；`message` 与 `chat` 落到节点快照，其余落到 `variables` 表 */
 type Scope = 'message' | 'chat' | VariableTableScope;
 
-const SCOPES: readonly Scope[] = ['message', 'chat', 'character', 'global', 'script'];
+const SCOPES: readonly Scope[] = ['message', 'chat', 'character', 'global', 'script', 'preset'];
+
+/** 与会话无关的表（`/api/variables/:scope`） */
+const TABLE_SCOPES: readonly VariableTableScope[] = ['global', 'character', 'script', 'chat', 'preset'];
+
+function isTableScope(value: unknown): value is VariableTableScope {
+  return typeof value === 'string' && (TABLE_SCOPES as readonly string[]).includes(value);
+}
 
 function isScope(value: unknown): value is Scope {
   return typeof value === 'string' && (SCOPES as readonly string[]).includes(value);
@@ -58,12 +74,12 @@ function resolveNode(db: Db, chat: ChatRow, nodeId: string | undefined): NodeRow
  */
 function snapshotFor(db: Db, chat: ChatRow, node: NodeRow | undefined): Record<string, unknown> {
   if (node) {
-    if (node.variables) return node.variables;
+    if (node.variables && !isPrunedSnapshot(node.variables)) return node.variables;
     const nodes = loadNodes(db, chat.id);
     const byId = new Map(nodes.map((row) => [row.id, row]));
     let cursor: NodeRow | undefined = node.parentId ? byId.get(node.parentId) : undefined;
     while (cursor) {
-      if (cursor.variables) return cursor.variables;
+      if (cursor.variables && !isPrunedSnapshot(cursor.variables)) return cursor.variables;
       cursor = cursor.parentId ? byId.get(cursor.parentId) : undefined;
     }
   }
@@ -85,6 +101,11 @@ export function createChatVariablesRoutes(db: Db) {
         chat: message,
         global: readVariableTable(db, 'global'),
         character: characterId ? readVariableTable(db, 'character', characterId) : {},
+        // 当前会话预设的变量表（M5（三）§1）；没选预设时是空表
+        preset: chat.presetId ? readVariableTable(db, 'preset', chat.presetId) : {},
+        presetId: chat.presetId ?? null,
+        // registerVariableSchema 交上来的 JSON Schema（变量管理器据此标错）
+        schemas: readVariableSchemas(chat),
       });
     })
     .put('/:id/variables', async (c) => {
@@ -118,16 +139,86 @@ export function createChatVariablesRoutes(db: Db) {
       const ownerId =
         scope === 'character'
           ? (chat.characterIds[0] ?? '')
-          : typeof body.ownerId === 'string'
-            ? body.ownerId
-            : '';
+          : scope === 'preset'
+            ? typeof body.ownerId === 'string' && body.ownerId !== ''
+              ? body.ownerId
+              : (chat.presetId ?? '')
+            : typeof body.ownerId === 'string'
+              ? body.ownerId
+              : '';
       if (scope === 'character' && ownerId === '') {
         return c.json({ error: 'invalid', message: '这个会话没有绑定角色卡' }, 400);
+      }
+      if (scope === 'preset' && ownerId === '') {
+        return c.json({ error: 'invalid', message: '这个会话没有选预设' }, 400);
       }
       return c.json({
         scope,
         ownerId,
         variables: replaceVariableTable(db, scope, ownerId, variables, chat.headNodeId ?? null),
+      });
+    })
+    /**
+     * 会话级临时注入（酒馆助手 `injectPrompts` / `uninjectPrompts`、slash `/inject`，M5（三）§3.2）。
+     * 存 `chats.metadata.injects`，组装时并进 extraInjections。
+     */
+    .get('/:id/injects', (c) => {
+      const chat = loadChat(db, c.req.param('id'));
+      if (!chat) return c.json({ error: 'not_found' }, 404);
+      return c.json({ injects: readChatInjects(chat) });
+    })
+    .post('/:id/injects', async (c) => {
+      const chat = loadChat(db, c.req.param('id'));
+      if (!chat) return c.json({ error: 'not_found' }, 404);
+      let body: Record<string, unknown> = {};
+      try {
+        body = ((await c.req.json()) ?? {}) as Record<string, unknown>;
+      } catch {
+        return c.json({ error: 'invalid', message: '请求体不是合法 JSON' }, 400);
+      }
+      if (!Array.isArray(body.prompts)) {
+        return c.json({ error: 'invalid', message: 'prompts 必须是数组' }, 400);
+      }
+      return c.json({
+        injects: upsertChatInjects(db, chat.id, body.prompts, { once: body.once === true }),
+      });
+    })
+    /** body `{ ids?: string[] }`；不给 ids = 全部清空 */
+    .delete('/:id/injects', async (c) => {
+      const chat = loadChat(db, c.req.param('id'));
+      if (!chat) return c.json({ error: 'not_found' }, 404);
+      let body: Record<string, unknown> = {};
+      try {
+        body = ((await c.req.json()) ?? {}) as Record<string, unknown>;
+      } catch {
+        body = {};
+      }
+      const ids = Array.isArray(body.ids)
+        ? body.ids.filter((id): id is string => typeof id === 'string')
+        : undefined;
+      return c.json({ injects: removeChatInjects(db, chat.id, ids) });
+    })
+    /** registerVariableSchema：`{ type, schema }`（schema 为 null = 删除），按会话存 */
+    .put('/:id/variable-schemas', async (c) => {
+      const chat = loadChat(db, c.req.param('id'));
+      if (!chat) return c.json({ error: 'not_found' }, 404);
+      let body: Record<string, unknown> = {};
+      try {
+        body = ((await c.req.json()) ?? {}) as Record<string, unknown>;
+      } catch {
+        return c.json({ error: 'invalid', message: '请求体不是合法 JSON' }, 400);
+      }
+      if (!isSchemaScope(body.type)) return c.json({ error: 'invalid', message: 'type 非法' }, 400);
+      if (body.schema !== null && !isRecord(body.schema)) {
+        return c.json({ error: 'invalid', message: 'schema 必须是对象或 null' }, 400);
+      }
+      return c.json({
+        schemas: writeVariableSchema(
+          db,
+          chat.id,
+          body.type,
+          body.schema === null ? null : (body.schema as Record<string, unknown>),
+        ),
       });
     })
     /** MVU：重放（从某个节点起沿当前 head 路径重算），不传 nodeId = 整条路径 */
@@ -205,7 +296,7 @@ export function createVariablesRoutes(db: Db) {
   return new Hono()
     .get('/:scope', (c) => {
       const scope = c.req.param('scope');
-      if (scope !== 'global' && scope !== 'character' && scope !== 'script' && scope !== 'chat') {
+      if (!isTableScope(scope)) {
         return c.json({ error: 'invalid', message: 'scope 非法' }, 400);
       }
       const ownerId = c.req.query('ownerId') ?? '';
@@ -213,7 +304,7 @@ export function createVariablesRoutes(db: Db) {
     })
     .put('/:scope', async (c) => {
       const scope = c.req.param('scope');
-      if (scope !== 'global' && scope !== 'character' && scope !== 'script' && scope !== 'chat') {
+      if (!isTableScope(scope)) {
         return c.json({ error: 'invalid', message: 'scope 非法' }, 400);
       }
       let body: Record<string, unknown>;

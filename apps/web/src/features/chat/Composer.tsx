@@ -9,6 +9,9 @@ import { AttachmentTray } from '../../components/AttachmentTray';
 import { IconButton } from '../../components/ui/icon-button';
 import type { ModelCapabilities } from '../../lib/api';
 import { useSignature } from '../../themes/signature';
+import { ImagineMenu, ImagineProgress } from '../imagine/ImagineMenu';
+import { useComposerInputRequests } from '../cards/composer-bridge';
+import { useComposerSlash } from '../cards/useComposerSlash';
 
 const MAX_HEIGHT_PX = 260;
 
@@ -29,6 +32,8 @@ export interface ComposerProps {
   tray: TrayState;
   /** 当前模型的能力；拿不到时为 undefined，不做能力提示 */
   capabilities: ModelCapabilities | undefined;
+  /** 当前会话：有值时附件按钮旁出现「生图」菜单（M4（二）§D.3） */
+  chatId?: string;
 }
 
 export function Composer({
@@ -39,6 +44,7 @@ export function Composer({
   resetKey,
   tray,
   capabilities,
+  chatId,
 }: ComposerProps) {
   const { t } = useTranslation();
   const { SendButton } = useSignature();
@@ -49,6 +55,9 @@ export function Composer({
 
   useEffect(() => setTouch(isTouchPrimary()), []);
   useEffect(() => setValue(''), [resetKey]);
+  // slash（M5（三）§3.1）：`/` 开头的已知命令执行而不发送；`/setinput` 从别处写进输入框
+  const runSlash = useComposerSlash(chatId);
+  useComposerInputRequests(chatId, setValue);
 
   useLayoutEffect(() => {
     const element = ref.current;
@@ -65,6 +74,14 @@ export function Composer({
   const send = () => {
     if (!canSend || isGenerating) return;
     const text = value.trim();
+    if (!hasAttachments) {
+      const outcome = runSlash(text);
+      if (outcome === 'blocked') return;
+      if (outcome === 'run') {
+        setValue('');
+        return;
+      }
+    }
     const attachments = tray.attachments;
     setValue('');
     tray.clear();
@@ -110,6 +127,7 @@ export function Composer({
             ))}
           </div>
         )}
+        {chatId && <ImagineProgress chatId={chatId} />}
         <div data-part="composer" className="field rounded-panel flex min-w-0 items-end gap-1 p-2">
           <IconButton
             label={t('chat.attach.add')}
@@ -121,6 +139,7 @@ export function Composer({
           >
             <Paperclip aria-hidden />
           </IconButton>
+          {chatId && <ImagineMenu chatId={chatId} disabled={disabled || isGenerating} />}
           <input
             ref={fileRef}
             type="file"

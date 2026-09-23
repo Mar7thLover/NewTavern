@@ -315,6 +315,8 @@ export interface ConnectionInput {
 
 export interface ConnectionSummary extends Omit<ConnectionInput, 'apiKeys'> {
   id: string;
+  /** 对话连接 / 外接生图后端（M4（二）§D.2）；生图后端的 hooks 在 features/imagine/api.ts */
+  kind?: 'chat' | 'image';
   keyCount: number;
   /** 每个 Key 的末 4 位 */
   keyHints: string[];
@@ -948,10 +950,15 @@ export function useSetDefaultPersonaId() {
 /* 连接与模型 hooks                                                     */
 /* ------------------------------------------------------------------ */
 
+/** 对话相关的下拉只列对话连接；生图后端（kind='image'）由 `useImageConnections` 取 */
+const selectChatConnections = (rows: ConnectionSummary[]) =>
+  rows.filter((row) => row.kind !== 'image');
+
 export function useConnections() {
   return useQuery({
     queryKey: queryKeys.connections,
     queryFn: () => fetchJson<ConnectionSummary[]>('/api/connections'),
+    select: selectChatConnections,
   });
 }
 

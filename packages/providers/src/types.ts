@@ -65,6 +65,11 @@ export interface ProviderRequest {
   body: unknown;
   /** buildRequest 过程中被丢弃/降级的参数说明，供检查器展示 */
   warnings?: string[];
+  /**
+   * 结构化输出用「强制调用单个工具」模拟时（Anthropic）的工具名。
+   * `collectStream` 据此把该工具的调用参数还原为正文（M6 契约 §1.2）。
+   */
+  structuredOutputTool?: string;
 }
 
 /**

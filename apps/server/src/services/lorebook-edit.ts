@@ -21,7 +21,7 @@ import type { LorebookEntryExtra, LorebookRow, LorebookSettings } from './charac
 
 export const NEW_LOREBOOK_NAME = '新世界书';
 
-type EntryRow = typeof schema.lorebookEntries.$inferSelect;
+export type EntryRow = typeof schema.lorebookEntries.$inferSelect;
 type Json = Record<string, unknown>;
 
 /**
@@ -78,8 +78,8 @@ export function newStEntryTemplate(uid: number): StWorldbookEntry {
 /* 输入校验                                                             */
 /* ------------------------------------------------------------------ */
 
-type EditableColumn = Exclude<keyof WorldbookEntryColumns, 'uid' | 'displayIndex'>;
-type RawField = 'useProbability' | 'vectorized' | 'outletName';
+export type EditableColumn = Exclude<keyof WorldbookEntryColumns, 'uid' | 'displayIndex'>;
+export type RawField = 'useProbability' | 'vectorized' | 'outletName';
 
 const isInt = (v: unknown, min: number, max: number): boolean =>
   typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max;
@@ -141,6 +141,12 @@ export interface EntryInput {
   id?: string;
   columns: Partial<Record<EditableColumn, unknown>>;
   raw: Partial<Record<RawField, unknown>>;
+  /**
+   * 新条目的 uid / 原始条目（M6 §2.2 / §3）：版本恢复时，快照里存在、但当前已被删掉的条目
+   * 按快照里的 uid 与原始 ST 条目重建（未知字段不丢）；PUT 里无 id 的条目带了 uid 时沿用它
+   * （extra 为 null）。uid 已被占用时另分配。
+   */
+  restore?: { uid: number | null; extra: LorebookEntryExtra | null };
 }
 
 export interface SaveInput {
@@ -169,8 +175,16 @@ export function parseSaveInput(body: Json): SaveInput {
     const where = `entries[${index}]`;
     if (!isRecord(item)) throw new LorebookInputError(`${where} 必须是对象`);
     const entry: EntryInput = { columns: {}, raw: {} };
+    let uid: number | undefined;
     for (const [key, value] of Object.entries(item)) {
-      if (key === 'id') {
+      if (key === 'uid') {
+        // 只读字段：新条目（无 id）带了 uid 就尽量沿用（工作台 AI 协作者 add_entry 给出的 uid），
+        // 已有条目带 uid 在下面报错（uid 不可改）
+        if (value !== null && !(typeof value === 'number' && Number.isInteger(value) && value >= 0)) {
+          throw new LorebookInputError(`${where}.uid 应为非负整数`);
+        }
+        if (typeof value === 'number') uid = value;
+      } else if (key === 'id') {
         if (typeof value !== 'string' || value === '') {
           throw new LorebookInputError(`${where}.id 非法`);
         }
@@ -189,6 +203,11 @@ export function parseSaveInput(body: Json): SaveInput {
         throw new LorebookInputError(`${where}.${key} 不是可编辑字段`);
       }
     }
+    // 已有条目的 uid 不可改（改了会让导出的 ST 条目 key 与 uid 脱节），显式报错而不是静默忽略
+    if (entry.id !== undefined && uid !== undefined) {
+      throw new LorebookInputError(`${where}.uid 不可修改`);
+    }
+    if (entry.id === undefined && uid !== undefined) entry.restore = { uid, extra: null };
     out.entries.push(entry);
   });
   return out;
@@ -286,7 +305,7 @@ export function planDisplayIndexes(values: readonly (number | null)[]): (number 
 const sameJson = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
 /** 数字形态的 delayUntilRecursion（递归等级）进 raw，列置 null；布尔照常写列 */
-function splitDelayUntilRecursion(columns: EntryInput['columns'], raw: Json): void {
+export function splitDelayUntilRecursion(columns: EntryInput['columns'], raw: Json): void {
   const value = columns.delayUntilRecursion;
   if (typeof value === 'number') {
     raw.delayUntilRecursion = value;
@@ -295,7 +314,7 @@ function splitDelayUntilRecursion(columns: EntryInput['columns'], raw: Json): vo
 }
 
 /** ST 1.18 所有条目都按 selective 处理：填了次关键词就把 selective 打开，免得过滤不生效 */
-function ensureSelective(columns: EntryInput['columns'], current: boolean): void {
+export function ensureSelective(columns: EntryInput['columns'], current: boolean): void {
   const secondary = columns.secondaryKeys;
   if (Array.isArray(secondary) && secondary.length > 0 && !current && columns.selective !== false) {
     columns.selective = true;
@@ -358,6 +377,11 @@ export function saveLorebook(db: Db, bookId: string, input: SaveInput) {
       nextUid = Math.max(nextUid, (row.uid ?? -1) + 1, Number.isInteger(stKey) ? stKey + 1 : 0);
     }
 
+    // 版本恢复重建已删条目时，快照里的 uid 只在没被留下的条目占用时才复用
+    const usedUids = new Set(
+      rows.filter((row) => keepIds.has(row.id) && row.uid !== null).map((row) => row.uid as number),
+    );
+
     input.entries.forEach((entry, index) => {
       const columns = { ...entry.columns };
       const displayIndex = plan[index];
@@ -383,12 +407,21 @@ export function saveLorebook(db: Db, bookId: string, input: SaveInput) {
         return;
       }
 
-      const uid = nextUid++;
-      const raw = newStEntryTemplate(uid) as Json;
+      const restoreUid = entry.restore?.uid;
+      const reuse =
+        typeof restoreUid === 'number' && Number.isInteger(restoreUid) && !usedUids.has(restoreUid);
+      const uid = reuse ? restoreUid : nextUid++;
+      usedUids.add(uid);
+      nextUid = Math.max(nextUid, uid + 1);
+      const restoredRaw = entry.restore?.extra?.raw;
+      const raw = (
+        restoredRaw ? { ...structuredClone(restoredRaw), uid } : newStEntryTemplate(uid)
+      ) as Json;
       splitDelayUntilRecursion(columns, raw);
       ensureSelective(columns, true);
       for (const [key, value] of Object.entries(entry.raw)) raw[key] = value;
-      const extra: LorebookEntryExtra = { stKey: String(uid), raw: raw as StWorldbookEntry };
+      const stKey = (reuse ? entry.restore?.extra?.stKey : undefined) ?? String(uid);
+      const extra: LorebookEntryExtra = { stKey, raw: raw as StWorldbookEntry };
       tx.insert(schema.lorebookEntries)
         .values({
           ...toWorldbookEntryColumns(raw as StWorldbookEntry),
@@ -416,4 +449,88 @@ function syncMetaName(book: LorebookRow, name: string): LorebookSettings | undef
   const meta = settings.meta;
   if (!meta || !('name' in meta) || meta.name === name) return undefined;
   return { ...settings, meta: { ...meta, name } };
+}
+
+/* ------------------------------------------------------------------ */
+/* 版本快照（M6 §2.2）                                                   */
+/* ------------------------------------------------------------------ */
+
+/** 快照里的一条：PUT 的可编辑字段 + id / uid + 原始 ST 条目（恢复已删条目时用） */
+export type LorebookSnapshotEntry = {
+  id: string;
+  uid: number | null;
+  extra: LorebookEntryExtra;
+} & {
+  [K in EditableColumn | RawField]?: unknown;
+};
+
+export interface LorebookSnapshot {
+  name: string;
+  entries: LorebookSnapshotEntry[];
+}
+
+export const EDITABLE_COLUMNS = Object.keys(COLUMN_RULES) as EditableColumn[];
+export const RAW_FIELDS = Object.keys(RAW_RULES) as RawField[];
+
+/**
+ * 世界书的版本数据：`{ name, entries }`，条目取 PUT 的可编辑字段（与编辑器草稿同形），
+ * 另带 id / uid / extra。不含 createdAt / updatedAt，内容不变时两次快照 JSON 相同。
+ */
+export function lorebookSnapshot(db: Db, id: string): LorebookSnapshot | undefined {
+  const detail = loadLorebookDetail(db, id);
+  if (!detail) return undefined;
+  return {
+    name: detail.name,
+    entries: detail.entries.map((row) => {
+      const extra = (row.extra ?? {}) as LorebookEntryExtra;
+      const raw = (extra.raw ?? {}) as Json;
+      const entry: LorebookSnapshotEntry = { id: row.id, uid: row.uid, extra };
+      for (const key of EDITABLE_COLUMNS) entry[key] = row[key];
+      // 递归等级（数字）只在 raw 里，列为 null
+      if (row.delayUntilRecursion === null && typeof raw.delayUntilRecursion === 'number') {
+        entry.delayUntilRecursion = raw.delayUntilRecursion;
+      }
+      for (const key of RAW_FIELDS) {
+        if (raw[key] !== undefined && RAW_RULES[key].check(raw[key])) entry[key] = raw[key];
+      }
+      return entry;
+    }),
+  };
+}
+
+/**
+ * 快照 → `saveLorebook` 的输入。快照来自本库，不再逐字段校验；
+ * 当前书里已不存在的条目去掉 id、带上 `restore`，按原 uid / 原始条目重建。
+ */
+export function snapshotToSaveInput(db: Db, bookId: string, snapshot: unknown): SaveInput {
+  if (!isRecord(snapshot) || !Array.isArray(snapshot.entries)) {
+    throw new LorebookInputError('版本数据不是世界书快照');
+  }
+  const existing = new Set(
+    db
+      .select({ id: schema.lorebookEntries.id })
+      .from(schema.lorebookEntries)
+      .where(eq(schema.lorebookEntries.bookId, bookId))
+      .all()
+      .map((row) => row.id),
+  );
+  const entries = snapshot.entries.filter(isRecord).map((item): EntryInput => {
+    const columns: EntryInput['columns'] = {};
+    const raw: EntryInput['raw'] = {};
+    for (const key of EDITABLE_COLUMNS) if (key in item) columns[key] = item[key];
+    for (const key of RAW_FIELDS) if (key in item) raw[key] = item[key];
+    const id = typeof item.id === 'string' ? item.id : undefined;
+    if (id !== undefined && existing.has(id)) return { id, columns, raw };
+    return {
+      columns,
+      raw,
+      restore: {
+        uid: typeof item.uid === 'number' ? item.uid : null,
+        extra: isRecord(item.extra) ? (item.extra as LorebookEntryExtra) : null,
+      },
+    };
+  });
+  const name =
+    typeof snapshot.name === 'string' && snapshot.name.trim() ? snapshot.name.trim() : undefined;
+  return { ...(name ? { name } : {}), entries };
 }

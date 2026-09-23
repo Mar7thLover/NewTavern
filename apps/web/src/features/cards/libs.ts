@@ -18,7 +18,8 @@ interface OptionalLib {
   hint: RegExp;
 }
 
-const BASE_LIBS = [`${LIB_BASE}/jquery.js`, `${LIB_BASE}/lodash.js`];
+/** nt-regex：core 的正则引擎（`formatAsTavernRegexedString` 同步要用），几 KB，每帧都给 */
+const BASE_LIBS = [`${LIB_BASE}/jquery.js`, `${LIB_BASE}/lodash.js`, `${LIB_BASE}/nt-regex.js`];
 
 const OPTIONAL_LIBS: OptionalLib[] = [
   { file: 'vue.js', hint: /\bVue\b/ },

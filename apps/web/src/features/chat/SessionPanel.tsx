@@ -8,6 +8,7 @@ import {
   AuthorsNoteSection,
   ChatLorebooksSection,
   ChatSystemPromptSection,
+  PanelSection,
 } from './SessionSettings';
 import { formatTokens, isUsageEmpty, renderMacros, sumUsage, totalInput } from './shared';
 import { Badge } from '../../components/ui/badge';
@@ -35,7 +36,9 @@ import {
   type Usage,
 } from '../../lib/api';
 import { cn } from '../../lib/utils';
+import { ChatBackgroundSection } from '../backgrounds/BackgroundPicker';
 import { Avatar } from '../library/shared';
+import { SpriteManager } from '../sprites/SpriteManager';
 
 const LAYOUT_MODES: LayoutMode[] = ['strict', 'cache-aware'];
 
@@ -259,11 +262,17 @@ export function SessionPanel({ chat, path }: SessionPanelProps) {
         </div>
       </section>
 
-      {/* 作者注释 / 聊天世界书 / 全局系统提示词覆盖（M3 契约 §7.2） */}
+      {/* 作者注释 / 聊天世界书 / 全局系统提示词覆盖（M3 契约 §7.2）；背景与立绘（M4（二）§A.4 §B.3） */}
       <div className="edge-rule border-t">
         <AuthorsNoteSection chat={chat} />
         <ChatLorebooksSection chat={chat} />
         <ChatSystemPromptSection chat={chat} />
+        <ChatBackgroundSection chat={chat} />
+        {chat.character && (
+          <PanelSection title={t('sprites.title')}>
+            <SpriteManager characterId={chat.character.id} />
+          </PanelSection>
+        )}
       </div>
 
       {/* 布局模式 */}

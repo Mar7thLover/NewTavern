@@ -250,4 +250,36 @@ SSE 事件：`text {delta}`、`reasoning {delta}`、`tool {id, name, args, summa
 
 ## 6. 修正
 
-（暂无）
+### 修正（2026-09-22，F1）
+
+§1 的签名全部按原文实现，以下是**只增不改**的补充（调用方可以不用）：
+
+1. **`ProviderRequest.structuredOutputTool?: string`**（providers `types.ts`）：Anthropic 用强制单工具模拟结构化输出时，适配器在请求上标注该工具名；`collectStream` 据此把它的 `tool.call` 还原为正文（`result.text` = 参数 JSON，`onEvent` 收到的是 `text.delta` 而不是 `tool.call`），并把 `stop.reason` 从 `tool` 归一化回 `end`。
+2. **`LlmCallInput.lang?: 'zh-CN' | 'en'`**：§1.3 降级协议说明的语言。缺省按 IR 正文里有无中日韩字符推断。
+3. **结构化输出降级的两个函数**（§1.3 只说「同理」没给签名），同在 `tool-fallback.ts`、从入口导出：
+   - `applyTextResponseFormat(ir, lang): PromptIR` —— 去掉 `responseFormat`，在最后一个 system 段后附 schema 说明；
+   - `extractFirstJson(text): { json: string; value: unknown } | undefined` —— 优先 ```json 代码块，其次括号配对扫描。
+   另导出 `createToolCallTextFilter()`（流式滤掉 ```tool_call 代码块，`streamLlm` / `callLlm` 的 `onEvent` 在降级时用它，调用方看到的 `text.delta` 不含协议代码块）、`finalizeToolCall`、`irHasToolParts`、`syntheticCallId` / `isSyntheticCallId`。
+4. **`callLlm` / `streamLlm` 的错误语义**：连接不存在 / 适配器未注册 → 抛 `ProviderServiceError`（`streamLlm` 在迭代时抛）；上游错误不抛，放进 `result.error`（流里是 `error` 事件）。多 Key 连接首事件鉴权 / 限流错误换下一个 Key 重试一次（同 chats 生成路径）。降级时解析出的工具调用在流末以 `tool.call` 补发，`stop` 随后才发（`reason:'tool'`）。
+5. **细化的渲染约定**（契约表格没写到的）：
+   - `tool_result.isError`：OpenAI 两家没有对应字段，正文前加 `Error: `；Anthropic 发 `is_error:true`；Google 发 `response:{ error }`。Google 的 `functionResponse.response` 必须是对象：结果是 JSON 对象就原样用，否则包成 `{ result }`。
+   - Anthropic `toolChoice:'none'` → `{type:'none'}`；强制类 tool_choice（any / tool）与推理不兼容：模型可关推理就本轮发 `thinking:{type:'disabled'}`，不可关则退回 `auto`，均给 warning。结构化输出与其他 tools 同时给时 `tool_choice` 改为 `any`（最终答案须经输出工具给出）。
+   - Responses 的 function tool `strict` 缺省为 true（会要求 schema 全字段 required），适配器显式写 `strict: t.strict ?? false`。
+   - Google：函数调用与 JSON 输出同时用只有 `gemini-3*` 发两者，更早的模型丢掉 `responseFormat` 并告警；合成的 `call_<n>` id 不回传给 Gemini；functionCall 上的 `thoughtSignature` 以 `{ target:'tool', ordinal }` 记入 `reasoning.opaque`，回传时挂回同一个 functionCall（Gemini 3 要求）。
+   - 四家都把「有工具调用却以 end 结束」归一化为 `stop.reason='tool'`（兼容端点常把 finish_reason 写成 stop）。
+6. **目录**：openai-chat 的 `glm-*` 标 `structuredOutput:false`——Z.AI OpenAI 兼容端点收下 `response_format:{type:'json_schema'}` 但不遵守（2026-09-22 实测），走文本降级。
+7. **`routes/sandbox.ts`**：M5（三）的代理已先行把聚合改成 `collectStream`（并接上 tools / json_schema 降级），F1 未再改动该文件；`services/provider-request.ts` 也无需改动。
+
+### 修正（2026-09-22，ST）
+
+§2 按原文实现，以下是偏离与补充：
+
+1. **世界书版本数据的形状**：原文写「`GET /api/lorebooks/:id` 的 entries」，但那是数据库行（带 `bookId` / `createdAt` / `updatedAt` / `extra`），既不能直接回灌 PUT（`parseSaveInput` 拒收非编辑字段），时间戳也会让「与上一版相同不写」失效。实际存 `{ name, entries }`，每条 = PUT 的可编辑字段（与编辑器草稿同形，数字形态的 `delayUntilRecursion` 与 `useProbability` / `vectorized` / `outletName` 从 raw 取）+ `id` / `uid` / `extra`（`{ stKey, raw }`，只供恢复）。恢复时仍在书里的条目按 id 更新；已被删掉的条目按快照里的 uid（未被占用时）与原始 ST 条目重建，未知字段不丢（`lorebook-edit.ts` 的 `EntryInput.restore`，只有恢复路径会设）。
+2. **预设版本数据 = ST 预设 data**（与草稿同形）；预设名只在 data 自带 `name` 时随版本恢复。`layoutPolicy` 列仍不经 PUT 写入（§4.2 的「写进 layoutPolicy」需要另开口子，本阶段没做）。
+3. **版本写入时机的补充**：除 §2.2 列的 PUT 与导入外，`POST /api/characters`、`POST /api/presets`、`POST /api/presets/:id/duplicate`、`POST /api/presets/:id/reset-builtin`、`POST /api/lorebooks` 也各写一版；角色卡导入时抽出来的内嵌书同样写第 1 版。删角色卡时一并删它的版本（预设 / 世界书删除不清，`recent` 列表会跳过已删实体）。
+4. **新增 `GET /api/versions/recent?limit=&type=`**：各实体最新一版按时间倒序，给 §4.1 入口页「最近编辑」用（原文没给接口）。
+5. **草稿**：`draft.character` 只在与会话的卡 id 相同时替换；卡的正则仍读正则库里这张卡的脚本（导入时已抽表），内嵌书仍读 `bookId`——「正则仍按 data 读」按「照旧」理解，草稿里改 `extensions.regex_scripts` 不影响本轮。`draft.lorebook` 只替换本轮本来就会加载的同 id 书（测试会话已绑定），条目按 PUT 规则校验，无 id 的条目按 ST 模板补齐。`POST /api/chats/:id/inspect` 的其余参数仍在 query 里（与 GET 同）。
+6. **测试会话**：`GET /api/studio/test-chat/:kind/:id` 新建时回 201、复用时回 200，响应都是 ChatDetail。`POST /api/chats` 只收 `metadata.studio`，其余 metadata 键新建时忽略。新建对话的主体从 `routes/chats.ts` 抽到 `services/chat-create.ts`（`createChat`），行为不变。
+7. **触发模拟**：只扫这一本书；设置取全局 `worldInfo.settings`，预算按 32768 上下文换算，概率条目真实随机。返回在原文基础上多给 `id`（草稿里的新条目为 null）、`index`（在条目列表中的下标）、`recursionLevel`、`warnings`；`reason` 为 `secondary` 时 `matchedKeys` 是命中的主键后接命中的副键；`skipped.reason` 为引擎拒绝原因（`disabled` / `probability` / `budget` / `group-lost` …），另加 `no-match`（有关键词但没命中）。引擎侧新增可选 `WIScanInput.diagnostics` → `WIActivation.diagnostic { via: 'decorator'|'secondary', matchedSecondaryKeys }`，只多记信息、不改判定（黄金测试 62/62）。
+8. **导出**：编辑过的卡（`editedAt` 非空，头像换过也算）从 data 重写。PNG 以当前头像为底图，**只有 PNG 头像能当底图**（服务端没有图像解码），所以角色卡头像上传请前端输出 PNG（WebP / JPEG 也收，但导出 PNG 时退回 1×1 占位图；CHARX 不受影响）。重写时从原件带回：顶层未知字段（库里只存 data）、PNG 的 `chara-ext-asset_:` 资源 chunk、CHARX 包内的其余文件（图标换成当前头像）。
+9. **`PUT /api/characters/:id` 的 `character_book`**：卡已关联内嵌书（`bookId`）时忽略传入值、保留库里原值；还没有内嵌书时收下并抽进 lorebooks 表（支撑 §3.3 generate 模式直接 `set_field /character_book`）。结构校验除「对象 + name 非空」外还跑一遍 CCv3 解析（类型不对会让导出失败，提前 400）。

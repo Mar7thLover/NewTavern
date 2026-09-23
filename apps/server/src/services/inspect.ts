@@ -8,11 +8,12 @@ import {
   type PromptIR,
   type WIScanResult,
 } from './assemble.js';
-import { buildAssembleInput } from './assemble-input.js';
+import { buildAssembleInput, isImageGenNode } from './assemble-input.js';
 import type { AssetsService } from './assets.js';
 import { pathToNode, type Usage } from './chat-tree.js';
 import type { GenerationContext, LayoutMode } from './generation-context.js';
 import { buildProviderRequest, requestForInspect } from './provider-request.js';
+import type { AssembleDraft } from './studio-draft.js';
 
 /**
  * 提示词检查器与「与 ST 请求比对」的服务层（M3 契约 §6）。
@@ -47,6 +48,7 @@ function assembleFor(
   context: GenerationContext,
   layoutMode: LayoutMode,
   assets?: AssetsService,
+  draft?: AssembleDraft,
 ): AssembleResult {
   const { resolved, model } = context;
   return assemblePrompt(
@@ -62,8 +64,17 @@ function assembleFor(
       // 文档附件与真实请求一样先内联（M4 §3.3）；图片 / PDF 仍是 asset:<id> 占位（不传解析器）
       ...(assets ? { assets } : {}),
       dryRun: true,
+      // 工作台草稿（M6 §2.4，POST 变体）
+      ...(draft ? { draft } : {}),
     }),
   );
+}
+
+/** 路径上被跳过的生图节点（`extra.generatedBy==='image'`）数量提示 */
+function skippedImageNodesWarning(context: GenerationContext): string[] {
+  if (!context.parentId) return [];
+  const count = pathToNode(context.nodes, context.parentId).filter(isImageGenNode).length;
+  return count > 0 ? [`已跳过（生图）：${count} 条生图消息不进提示词`] : [];
 }
 
 /** 路径上最后一条 assistant 的 usage（前端展示「上一轮实际 cacheRead/cacheWrite」） */
@@ -83,8 +94,9 @@ export function buildInspect(
   db: Db,
   context: GenerationContext,
   assets?: AssetsService,
+  draft?: AssembleDraft,
 ): InspectData {
-  const result = assembleFor(db, context, context.layoutMode, assets);
+  const result = assembleFor(db, context, context.layoutMode, assets, draft);
   const request = buildProviderRequest(
     context.resolved.adapter,
     result.ir,
@@ -108,7 +120,8 @@ export function buildInspect(
       budgetUsed: result.wi.budgetUsed,
       overflowed: result.wi.overflowed,
     },
-    warnings: result.ir.meta.warnings,
+    // 生图节点不进提示词（M4（二）§D.2）：检查器里标一句「已跳过（生图）」
+    warnings: [...result.ir.meta.warnings, ...skippedImageNodesWarning(context)],
     tokenEstimate: result.ir.meta.tokenEstimate,
     lastUsage: readLastUsage(context),
   };

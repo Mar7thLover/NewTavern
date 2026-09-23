@@ -1,5 +1,8 @@
 import {
   canDisableThinking,
+  IMAGE_DEFAULT_BASE_URLS,
+  isImageBackendId,
+  type ImageBackendId,
   type ModelInfo,
   type ProviderErrorKind,
   type ProviderId,
@@ -8,6 +11,7 @@ import { desc, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 
 import { schema, type Db } from '../db/client.js';
+import { resolveImageConnection } from '../services/image-gen.js';
 import {
   DEFAULT_BASE_URLS,
   isProviderId,
@@ -23,8 +27,14 @@ import { keyHint, type Secrets } from '../services/secrets.js';
 
 type ConnectionRow = typeof schema.connections.$inferSelect;
 
+/** 对话提供商或外接生图后端（M4（二）§D.2：共用 connections 表） */
+type ConnectionProvider = ProviderId | ImageBackendId;
+
+const defaultBaseUrl = (provider: ConnectionProvider): string =>
+  isImageBackendId(provider) ? IMAGE_DEFAULT_BASE_URLS[provider] : DEFAULT_BASE_URLS[provider];
+
 interface ConnectionInput {
-  provider: ProviderId;
+  provider: ConnectionProvider;
   label: string;
   baseUrl?: string;
   apiKeys?: string[];
@@ -37,7 +47,9 @@ interface ConnectionInput {
 function parseBody(body: Record<string, unknown>, partial: boolean): Partial<ConnectionInput> {
   const patch: Partial<ConnectionInput> = {};
   if (body.provider !== undefined) {
-    if (!isProviderId(body.provider)) throw new Error(`provider 非法：${String(body.provider)}`);
+    if (!isProviderId(body.provider) && !isImageBackendId(body.provider)) {
+      throw new Error(`provider 非法：${String(body.provider)}`);
+    }
     patch.provider = body.provider;
   } else if (!partial) {
     throw new Error('缺少 provider');
@@ -82,6 +94,8 @@ function toSummary(row: ConnectionRow, keys: string[]) {
   return {
     id: row.id,
     provider: row.provider,
+    /** 对话下拉只列 chat；生图后端单独分组 */
+    kind: isImageBackendId(row.provider) ? ('image' as const) : ('chat' as const),
     label: row.label,
     baseUrl: row.baseUrl,
     headers: row.headers ?? {},
@@ -100,6 +114,15 @@ export function createConnectionsRoutes(db: Db, secrets: Secrets, providers: Pro
 
   const getRow = (id: string) =>
     db.select().from(schema.connections).where(eq(schema.connections.id, id)).get();
+
+  /** 对话连接走适配器（带 Key 轮换重试）；生图后端走 providers/image */
+  const listModelsOf = async (id: string, provider: string): Promise<ModelInfo[]> => {
+    if (isImageBackendId(provider)) {
+      const resolved = resolveImageConnection(db, providers, id);
+      return resolved.backend.listModels(resolved.conn);
+    }
+    return providers.withKeyRotation(id, (resolved) => resolved.adapter.listModels(resolved.conn));
+  };
 
   /** 把 ProviderServiceError / 适配器抛出的 ProviderError 统一成契约的错误响应体 */
   const errorBody = (e: unknown) => {
@@ -121,7 +144,14 @@ export function createConnectionsRoutes(db: Db, secrets: Secrets, providers: Pro
         .from(schema.connections)
         .orderBy(desc(schema.connections.updatedAt))
         .all();
-      return c.json(rows.map(summaryOf));
+      // ?kind=chat / ?kind=image 只要一类；缺省全给（每条带 kind）
+      const kind = c.req.query('kind');
+      const summaries = rows.map(summaryOf);
+      return c.json(
+        kind === 'chat' || kind === 'image'
+          ? summaries.filter((summary) => summary.kind === kind)
+          : summaries,
+      );
     })
     .post('/', async (c) => {
       let patch: Partial<ConnectionInput>;
@@ -130,13 +160,13 @@ export function createConnectionsRoutes(db: Db, secrets: Secrets, providers: Pro
       } catch (e) {
         return c.json({ error: 'invalid', message: (e as Error).message }, 400);
       }
-      const provider = patch.provider as ProviderId;
+      const provider = patch.provider as ConnectionProvider;
       const row = db
         .insert(schema.connections)
         .values({
           provider,
           label: patch.label ?? '',
-          baseUrl: patch.baseUrl || DEFAULT_BASE_URLS[provider],
+          baseUrl: patch.baseUrl || defaultBaseUrl(provider),
           keysEnc: secrets.encryptJson(patch.apiKeys ?? []),
           headers: patch.headers ?? null,
           proxy: patch.proxy ?? null,
@@ -161,12 +191,11 @@ export function createConnectionsRoutes(db: Db, secrets: Secrets, providers: Pro
       } catch (e) {
         return c.json({ error: 'invalid', message: (e as Error).message }, 400);
       }
-      const provider = patch.provider ?? (row.provider as ProviderId);
+      const provider = patch.provider ?? (row.provider as ConnectionProvider);
       const values: Partial<typeof schema.connections.$inferInsert> = { updatedAt: new Date() };
       if (patch.provider !== undefined) values.provider = provider;
       if (patch.label !== undefined) values.label = patch.label;
-      if (patch.baseUrl !== undefined)
-        values.baseUrl = patch.baseUrl || DEFAULT_BASE_URLS[provider];
+      if (patch.baseUrl !== undefined) values.baseUrl = patch.baseUrl || defaultBaseUrl(provider);
       // apiKeys 缺省 = 不变；[] = 清空
       if (patch.apiKeys !== undefined) values.keysEnc = secrets.encryptJson(patch.apiKeys);
       if (patch.headers !== undefined) values.headers = patch.headers;
@@ -209,9 +238,7 @@ export function createConnectionsRoutes(db: Db, secrets: Secrets, providers: Pro
       }
       let models: ModelInfo[];
       try {
-        models = await providers.withKeyRotation(id, (resolved) =>
-          resolved.adapter.listModels(resolved.conn),
-        );
+        models = await listModelsOf(id, row.provider);
       } catch (e) {
         return c.json(errorBody(e), 502);
       }
@@ -232,9 +259,8 @@ export function createConnectionsRoutes(db: Db, secrets: Secrets, providers: Pro
       const startedAt = Date.now();
       try {
         // M2 只用 listModels 探测；M3 再补「给了 model 时发一次极小的非流式请求」
-        const models = await providers.withKeyRotation(id, (resolved) =>
-          resolved.adapter.listModels(resolved.conn),
-        );
+        // 生图后端同样调 listModels（NovelAI 没有列表接口，返回内置清单，不验证 Key）
+        const models = await listModelsOf(id, getRow(id)?.provider ?? '');
         return c.json({
           ok: true as const,
           latencyMs: Date.now() - startedAt,
@@ -252,6 +278,9 @@ export function createConnectionsRoutes(db: Db, secrets: Secrets, providers: Pro
     .get('/:id/capabilities', async (c) => {
       const model = c.req.query('model');
       if (!model) return c.json({ error: 'invalid', message: '缺少 model 查询参数' }, 400);
+      if (isImageBackendId(getRow(c.req.param('id'))?.provider)) {
+        return c.json({ error: 'invalid', message: '生图后端没有模型能力信息' }, 400);
+      }
       try {
         const resolved = await providers.resolveConnection(c.req.param('id'));
         const caps = resolved.adapter.capabilities(model, resolved.conn);

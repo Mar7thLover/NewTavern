@@ -4,10 +4,14 @@ import { NavLink, Outlet, useLocation, useMatch } from 'react-router';
 
 import { useUiStore } from './store/ui';
 import { Button } from '../components/ui/button';
+import { Toaster } from '../components/ui/toast';
+import { backgroundUrl, useBackdropStore } from '../features/backgrounds/api';
 import { CommandPalette, CommandPaletteTrigger } from '../features/palette/CommandPalette';
 import { useServerHealth } from '../lib/api';
 import { cn } from '../lib/utils';
 import { applyTheme, watchSystemMode } from '../themes/apply';
+import { useRegisterThemeVariants } from '../themes/editor/variants-api';
+import { getTheme } from '../themes/registry';
 import { BackdropLayer } from '../themes/signature';
 
 const NAV_ITEMS = [
@@ -28,6 +32,11 @@ export function AppLayout() {
   const themeId = useUiStore((s) => s.themeId);
   const mode = useUiStore((s) => s.mode);
   const themeOptions = useUiStore((s) => s.themeOptions);
+  const variantId = useUiStore((s) => s.variantId);
+  const backdropInMinimalWorlds = useUiStore((s) => s.backdropInMinimalWorlds);
+  const backdropAssetId = useBackdropStore((s) => s.assetId);
+  // 变体注册要排在 applyTheme 之前（同一组件里 effect 按声明顺序执行）
+  const variants = useRegisterThemeVariants();
   const language = useUiStore((s) => s.language);
   const setLanguage = useUiStore((s) => s.setLanguage);
   const health = useServerHealth();
@@ -35,11 +44,15 @@ export function AppLayout() {
   const fullBleed = useLocation().pathname === '/';
 
   useEffect(() => {
-    applyTheme(themeId, mode, themeOptions);
+    applyTheme(themeId, mode, themeOptions, variantId);
     if (mode === 'system') {
-      return watchSystemMode(() => applyTheme(themeId, mode, themeOptions));
+      return watchSystemMode(() => applyTheme(themeId, mode, themeOptions, variantId));
     }
-  }, [themeId, mode, themeOptions]);
+  }, [themeId, mode, themeOptions, variantId, variants]);
+
+  // 用户背景（M4（二）§A.3）：素 / 书斋这类 `backdrop: 'veil'` 的世界默认不显示
+  const showBackdrop =
+    backdropAssetId !== null && (getTheme(themeId).backdrop !== 'veil' || backdropInMinimalWorlds);
 
   return (
     <div
@@ -50,7 +63,10 @@ export function AppLayout() {
         fullBleed ? 'h-dvh overflow-hidden' : 'min-h-dvh',
       )}
     >
-      <BackdropLayer scope="app" />
+      <BackdropLayer
+        scope="app"
+        imageUrl={showBackdrop && backdropAssetId ? backgroundUrl(backdropAssetId) : null}
+      />
 
       <aside
         data-part="sidebar"
@@ -131,6 +147,8 @@ export function AppLayout() {
       </div>
 
       <CommandPalette navItems={NAV_ITEMS} />
+      {/* 应用级提示条（M5（三）§3.3）：右下，窄屏顶部 */}
+      <Toaster />
     </div>
   );
 }

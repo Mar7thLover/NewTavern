@@ -1,4 +1,4 @@
-import { childrenOf } from '@newtavern/core';
+import { childrenOf, type SlashHost } from '@newtavern/core';
 import {
   RPC_METHODS,
   type RpcHandler,
@@ -7,10 +7,14 @@ import {
   type SandboxVariables,
 } from '@newtavern/sandbox-sdk';
 
-import { runSlashCommand, type SlashContext } from './slash';
+import { runSlashCommand } from './slash';
 import {
+  deleteChatInjects,
   fetchChatVariables,
   mvuParse,
+  postChatInjects,
+  putVariableSchema,
+  putVariableTable,
   replaceChatVariables,
   sandboxGenerate,
   type VariableScopeName,
@@ -25,8 +29,10 @@ import {
   type LorebookEntryInput,
   type LorebookSummary,
   type MessageNode,
+  type PresetSummary,
 } from '../../lib/api';
 import { pathToHead } from '../chat/shared';
+import { cardGenerateImage } from '../imagine/api';
 
 /**
  * 宿主侧的兼容层：把新酒馆的消息树 / 变量映射成酒馆助手那套形状，
@@ -55,6 +61,8 @@ export interface CardHostContext {
   macros: SandboxMacroContext;
   /** 脚本帧的按钮 */
   scriptButtons?: { name: string; visible: boolean }[];
+  /** 脚本帧的脚本 id（`script` 作用域变量的 ownerId） */
+  scriptId?: string | null;
 }
 
 export interface CardHostActions {
@@ -68,6 +76,8 @@ export interface CardHostActions {
   onGenerationEvent: (event: string, args: unknown[]) => void;
   /** 脚本按钮变更 */
   setScriptButtons?: (buttons: { name: string; visible: boolean }[]) => void;
+  /** `triggerSlash` 的宿主（`slash-host.ts` 的 createSlashHost） */
+  slashHost?: () => SlashHost;
 }
 
 /* ------------------------------------------------------------------ */
@@ -313,13 +323,21 @@ export function createCardHandlers(
     },
 
     [RPC_METHODS.variablesReplace]: async (params) => {
-      const { scope, variables, messageId } = (params ?? {}) as {
-        scope: VariableScopeName | 'preset';
+      const { scope, variables, messageId, scriptId } = (params ?? {}) as {
+        scope: VariableScopeName;
         variables: Record<string, unknown>;
         messageId?: number;
+        scriptId?: string;
       };
       const context = getContext();
-      if (scope === 'preset') throw new Error('preset 作用域的变量还不支持写入');
+      if (scope === 'script') {
+        // 脚本变量按脚本 id 存（`variables` 表 scope='script'）；卡帧里要显式给 script_id
+        const owner = scriptId ?? context.scriptId;
+        if (!owner) throw new Error('script 作用域的变量只能在脚本里用（或传 script_id）');
+        await putVariableTable('script', owner, variables);
+        actions.invalidate();
+        return null;
+      }
       const nodeId =
         messageId === undefined
           ? context.nodeId
@@ -367,6 +385,12 @@ export function createCardHandlers(
         maxChatHistory?: number | 'all';
         orderedPrompts?: unknown;
         unsupported?: string[];
+        injects?: unknown;
+        overrides?: unknown;
+        tools?: unknown;
+        toolChoice?: unknown;
+        jsonSchema?: unknown;
+        presetName?: string;
       };
       const context = getContext();
       const controller = new AbortController();
@@ -374,7 +398,7 @@ export function createCardHandlers(
       actions.onGenerationEvent('js_generation_started', [body.generationId]);
       let full = '';
       try {
-        const text = await sandboxGenerate(
+        const result = await sandboxGenerate(
           context.chatId,
           {
             mode: body.mode,
@@ -383,6 +407,12 @@ export function createCardHandlers(
             ...(body.orderedPrompts === undefined ? {} : { orderedPrompts: body.orderedPrompts }),
             shouldStream: body.shouldStream !== false,
             ...(body.unsupported?.length ? { unsupported: body.unsupported } : {}),
+            ...(body.injects === undefined ? {} : { injects: body.injects }),
+            ...(body.overrides === undefined ? {} : { overrides: body.overrides }),
+            ...(body.tools === undefined ? {} : { tools: body.tools }),
+            ...(body.toolChoice === undefined ? {} : { toolChoice: body.toolChoice }),
+            ...(body.jsonSchema === undefined ? {} : { jsonSchema: body.jsonSchema }),
+            ...(body.presetName === undefined ? {} : { presetName: body.presetName }),
           },
           {
             signal: controller.signal,
@@ -399,8 +429,8 @@ export function createCardHandlers(
             },
           },
         );
-        actions.onGenerationEvent('js_generation_ended', [text, body.generationId]);
-        return { text };
+        actions.onGenerationEvent('js_generation_ended', [result.text, body.generationId]);
+        return result;
       } finally {
         generations.delete(body.generationId);
       }
@@ -421,16 +451,10 @@ export function createCardHandlers(
 
     [RPC_METHODS.slash]: async (params) => {
       const { command } = (params ?? {}) as { command: string };
-      const context = getContext();
-      const slashContext: SlashContext = {
-        chatId: context.chatId,
-        nodeId: context.nodeId,
-        variables: context.variables,
-        notify: actions.notify,
-        invalidate: actions.invalidate,
-        substitute: (text) => text,
-      };
-      return runSlashCommand(command, slashContext);
+      if (!actions.slashHost) throw new Error('这个界面不能执行 slash 命令');
+      const result = await runSlashCommand(String(command ?? ''), actions.slashHost());
+      actions.invalidate();
+      return result;
     },
 
     [RPC_METHODS.bookEntries]: async (params) => {
@@ -516,6 +540,47 @@ export function createCardHandlers(
       const { event, args } = (params ?? {}) as { event: string; args: unknown[] };
       if (typeof event === 'string') actions.emit(event, args ?? []);
       return null;
+    },
+
+    // 外接生图（M4（二）§D.3）：只存资产，返回 { assetUrl }
+    [RPC_METHODS.imageGenerate]: (params) => cardGenerateImage(getContext().chatId, params),
+
+    [RPC_METHODS.variablesRegisterSchema]: async (params) => {
+      const { type, schema } = (params ?? {}) as { type?: string; schema?: unknown };
+      const context = getContext();
+      const scope = (
+        ['message', 'chat', 'character', 'global', 'script', 'preset'].includes(String(type))
+          ? type
+          : 'message'
+      ) as VariableScopeName;
+      if (typeof schema !== 'object' || schema === null) throw new Error('schema 不是对象');
+      await putVariableSchema(context.chatId, scope, schema as Record<string, unknown>);
+      actions.invalidate();
+      return null;
+    },
+
+    [RPC_METHODS.promptsInject]: async (params) => {
+      const { prompts, once } = (params ?? {}) as { prompts?: unknown[]; once?: boolean };
+      await postChatInjects(getContext().chatId, Array.isArray(prompts) ? prompts : [], once === true);
+      return null;
+    },
+
+    [RPC_METHODS.promptsUninject]: async (params) => {
+      const { ids } = (params ?? {}) as { ids?: string[] };
+      await deleteChatInjects(getContext().chatId, Array.isArray(ids) ? ids : []);
+      return null;
+    },
+
+    [RPC_METHODS.presetLoad]: async (params) => {
+      const { name } = (params ?? {}) as { name?: string };
+      const presets = await fetchJson<PresetSummary[]>('/api/presets');
+      const found = presets.find((preset) => preset.name === name);
+      if (!found) throw new Error(`预设不存在：${String(name)}`);
+      await mutate(`/api/chats/${encodeURIComponent(getContext().chatId)}`, 'PATCH', {
+        presetId: found.id,
+      });
+      actions.invalidate();
+      return true;
     },
 
     [RPC_METHODS.mirrorRefresh]: async () => {

@@ -14,6 +14,7 @@ import { schema, type Db } from '../db/client.js';
  * | `character`   | `variables` 表 scope='character'、ownerId=characterId |
  * | `global`      | `variables` 表 scope='global'、ownerId=''            |
  * | `script`      | `variables` 表 scope='script'、ownerId=scriptId       |
+ * | `preset`      | `variables` 表 scope='preset'、ownerId=presetId（M5（三）§1） |
  *
  * `message` 之所以按节点存：分支与 swipe 要能各自带一套变量（重生时从父快照重新起算），
  * 这是 ST 按聊天存 `chat_metadata` 做不到的事（PLAN §七-7）。
@@ -22,7 +23,7 @@ import { schema, type Db } from '../db/client.js';
 
 const GLOBAL_OWNER = '';
 
-export type VariableTableScope = 'global' | 'character' | 'chat' | 'script';
+export type VariableTableScope = 'global' | 'character' | 'chat' | 'script' | 'preset';
 
 /** 一张变量表：键 → 任意 JSON 值 */
 export type VariableTable = Record<string, unknown>;

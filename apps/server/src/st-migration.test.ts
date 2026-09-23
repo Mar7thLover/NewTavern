@@ -162,8 +162,11 @@ const selectAll = (inventory: StInventory): MigrationSelect => ({
   lorebooks: inventory.lorebooks.filter((item) => !item.error).map((item) => item.file),
   personas: inventory.personas.map((item) => item.avatar),
   regex: true,
+  scripts: true,
   worldInfo: true,
   defaultPersona: true,
+  // 背景库另有 st-migration-media.test.ts 覆盖
+  backgrounds: false,
 });
 
 describe('ST 目录识别', () => {
@@ -267,8 +270,9 @@ describe('扫描与迁移', () => {
     ]);
     expect(inventory.defaultPersona).toBe('me.png');
     expect(inventory.worldInfo).toEqual({ globalBooks: ['城市', '不存在的书'], hasSettings: true });
+    // 背景从 M4（二）起迁移（§A.5）：两个假文件都算进清单，内容不是图片，迁移时会 failed
+    expect(inventory.backgrounds).toEqual({ count: 2, newCount: 2 });
     expect(inventory.skipped).toEqual({
-      backgrounds: 2,
       instruct: 0,
       context: 1,
       themes: 1,
@@ -446,5 +450,137 @@ describe.skipIf(!realDir || !fs.existsSync(realDir))('本机真实 ST 数据', (
     }
     console.log(`[real-migration] 聊天导入→导出 deep-equal：${compared} 份`);
     expect(compared).toBe(select.chats.length);
+  });
+});
+
+/** 酒馆助手的全局脚本（M5（三）§2.1）：新格式脚本树与旧格式 scriptsRepository 都认 */
+describe('酒馆助手脚本迁移', () => {
+  const helperTree = (root: string, extension: Record<string, unknown>) => {
+    const user = path.join(root, 'data', 'default-user');
+    write(path.join(user, 'characters', '.keep'), '');
+    write(
+      path.join(user, 'OpenAI Settings', '带脚本.json'),
+      JSON.stringify({
+        temperature: 1,
+        prompts: [],
+        extensions: {
+          tavern_helper: {
+            scripts: [
+              { type: 'script', id: 'p1', name: '悬浮球', enabled: true, content: 'console.log(1)' },
+              { type: 'script', id: 'p2', name: '关着的', enabled: false, content: 'x' },
+            ],
+            variables: {},
+          },
+        },
+      }),
+    );
+    write(path.join(user, 'settings.json'), JSON.stringify({ extension_settings: extension }));
+    return user;
+  };
+
+  it('新格式：保持启用状态、文件夹展平、预设允许名单照搬、重跑跳过', async () => {
+    const { db } = makeTestApp(dataDir);
+    const assets = createAssetsService(db, dataDir);
+    const importer = createImporter(db, assets, dataDir);
+    const user = helperTree(fs.mkdtempSync(path.join(dataDir, 'st-helper-')), {
+      tavern_helper: {
+        script: {
+          enabled: { global: true, presets: ['带脚本'], characters: [] },
+          scripts: [
+            { type: 'script', id: 's1', name: '开着的', enabled: true, content: 'a()' },
+            {
+              type: 'folder',
+              id: 'f1',
+              name: '工具',
+              enabled: false,
+              scripts: [{ type: 'script', id: 's2', name: '夹里的', enabled: true, content: 'b()' }],
+            },
+          ],
+        },
+      },
+    });
+    const inventory = scanStDirectory(db, user);
+    expect(inventory.scripts).toEqual({ count: 2, newCount: 2, globalEnabled: true });
+
+    const select: MigrationSelect = {
+      ...selectAll(inventory),
+      chats: [],
+      presets: ['带脚本.json'],
+      regex: false,
+      worldInfo: false,
+      defaultPersona: false,
+    };
+    const items: MigrationItem[] = [];
+    const done = await runStMigration({ db, assets, importer }, user, select, (item) => {
+      items.push(item);
+    });
+    expect(items.filter((item) => item.category === 'scripts').map((item) => item.status)).toEqual([
+      'imported',
+      'imported',
+    ]);
+    expect(done.counts.scripts).toEqual({ imported: 2, skipped: 0, failed: 0 });
+
+    const globals = db.select().from(schema.scripts).where(eq(schema.scripts.scope, 'global')).all();
+    const byName = new Map(globals.map((row) => [row.name, row]));
+    expect(byName.get('开着的')?.enabled).toBe(true);
+    // 文件夹关着 → 里面的脚本也关着；文件夹名进 data.folder
+    expect(byName.get('夹里的')?.enabled).toBe(false);
+    expect((byName.get('夹里的')?.data as { folder?: string }).folder).toBe('工具');
+
+    // 预设在 script.enabled.presets 里：自带脚本按原件开关启用
+    const presetRows = db.select().from(schema.scripts).where(eq(schema.scripts.scope, 'preset')).all();
+    expect(Object.fromEntries(presetRows.map((row) => [row.name, row.enabled]))).toEqual({
+      悬浮球: true,
+      关着的: false,
+    });
+
+    expect(scanStDirectory(db, user).scripts.newCount).toBe(0);
+    const again: MigrationItem[] = [];
+    await runStMigration(
+      { db, assets, importer },
+      user,
+      { ...select, presets: [] },
+      (item) => {
+        again.push(item);
+      },
+    );
+    expect(again.map((item) => item.status)).toEqual(['skipped', 'skipped']);
+  });
+
+  it('旧格式 TavernHelper_settings；总开关关着时全部导成关闭并给告警', async () => {
+    const { db } = makeTestApp(dataDir);
+    const assets = createAssetsService(db, dataDir);
+    const importer = createImporter(db, assets, dataDir);
+    const user = helperTree(fs.mkdtempSync(path.join(dataDir, 'st-helper-old-')), {
+      TavernHelper_settings: {
+        script: {
+          global_script_enabled: false,
+          scriptsRepository: [
+            {
+              type: 'script',
+              value: {
+                id: 'old1',
+                name: '旧脚本',
+                enabled: true,
+                content: 'c()',
+                buttons: [{ name: '按钮', visible: true }],
+              },
+            },
+          ],
+        },
+      },
+    });
+    const inventory = scanStDirectory(db, user);
+    expect(inventory.scripts).toEqual({ count: 1, newCount: 1, globalEnabled: false });
+    const done = await runStMigration(
+      { db, assets, importer },
+      user,
+      { ...selectAll(inventory), chats: [], presets: [], regex: false, worldInfo: false, defaultPersona: false },
+      () => undefined,
+    );
+    expect(done.warnings.join('\n')).toContain('总开关');
+    const row = db.select().from(schema.scripts).get();
+    expect(row).toMatchObject({ name: '旧脚本', enabled: false, scope: 'global' });
+    expect(row?.buttons).toEqual([{ name: '按钮', visible: true }]);
   });
 });

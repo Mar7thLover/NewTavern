@@ -5,12 +5,15 @@ import { schema, type Db } from '../db/client.js';
 import { NO_PRESET } from './assemble.js';
 import type {
   AssembleCharacter,
+  AssembleExtraInjection,
   AssembleHistoryNode,
   AssembleInputV2,
+  AssemblePromptOverrides,
   RegexScript,
   WITimedState,
 } from './assemble.js';
 import { readAuthorsNote } from './authors-note.js';
+import { collectExtraInjections } from './chat-injects.js';
 import {
   nextSiblingSeq,
   pathToNode,
@@ -21,9 +24,16 @@ import {
 } from './chat-tree.js';
 import type { AssetsService } from './assets.js';
 import type { LayoutMode } from './generation-context.js';
+import { withTemplateRenderer } from './ejs.js';
 import { resolveGlobalSystemPrompt } from './global-system-prompt.js';
 import { inlineDocumentParts } from './media-inline.js';
 import { toRegexScript } from './regex-map.js';
+import {
+  withCharacterDraft,
+  withLorebookDraft,
+  withPresetDraft,
+  type AssembleDraft,
+} from './studio-draft.js';
 import { readGlobalVariables, readVariableTable } from './variables.js';
 import { loadWIBooks, mapCharacterDepthPrompt } from './wi-map.js';
 import { readGlobalBookIds, readWISettings } from './wi-settings.js';
@@ -75,6 +85,20 @@ export interface BuildAssembleInputContext {
   /** 本轮新节点的兄弟序号；缺省按父节点下一个 */
   siblingSeq?: number;
   now?: Date;
+  /** 工作台草稿（M6 §2.4）：代替同 id 的卡 / 预设 / 世界书，只影响本次组装，不落库 */
+  draft?: AssembleDraft;
+  /**
+   * 本次请求临时带的注入（前端卡 `generate({injects})`，M5（三）§3.2）。
+   * 会话级的 `injectPrompts` / `/inject`（`chats.metadata.injects`）总是会并进来，不用传。
+   */
+  extraInjections?: AssembleExtraInjection[];
+  /** 前端卡 `generate({overrides})` */
+  promptOverrides?: AssemblePromptOverrides;
+}
+
+/** 外接生图产生的节点（`routes/imagine.ts` 写入 `extra.generatedBy: 'image'`） */
+export function isImageGenNode(node: Pick<NodeRow, 'extra'>): boolean {
+  return (node.extra as { generatedBy?: unknown } | null)?.generatedBy === 'image';
 }
 
 function numberOf(
@@ -114,7 +138,10 @@ export function readNearestSnapshots(path: readonly NodeRow[]): {
     const node = path[i];
     if (!node) continue;
     if (wiState === null && node.wiState) wiState = node.wiState as unknown as WITimedState;
-    if (variables === null && node.variables) variables = node.variables;
+    // `{ $pruned: true }` 是 MVU 旧快照清理留下的占位（M5（三）§3.5），跳过它继续往上找
+    if (variables === null && node.variables && node.variables.$pruned !== true) {
+      variables = node.variables;
+    }
     if (wiState !== null && variables !== null) break;
   }
   return { wiState, variables: variables ?? {} };
@@ -156,15 +183,21 @@ export function readRegexScripts(
 export function buildAssembleInput(db: Db, ctx: BuildAssembleInputContext): AssembleInputV2 {
   const { chat, nodes, parentId } = ctx;
   const characterId = chat.characterIds[0];
-  const characterRow = characterId
-    ? db.select().from(schema.characters).where(eq(schema.characters.id, characterId)).get()
-    : undefined;
+  const characterRow = withCharacterDraft(
+    characterId
+      ? db.select().from(schema.characters).where(eq(schema.characters.id, characterId)).get()
+      : undefined,
+    ctx.draft,
+  );
   const personaRow = chat.personaId
     ? db.select().from(schema.personas).where(eq(schema.personas.id, chat.personaId)).get()
     : undefined;
-  const presetRow = chat.presetId
-    ? db.select().from(schema.presets).where(eq(schema.presets.id, chat.presetId)).get()
-    : undefined;
+  const presetRow = withPresetDraft(
+    chat.presetId
+      ? db.select().from(schema.presets).where(eq(schema.presets.id, chat.presetId)).get()
+      : undefined,
+    ctx.draft,
+  );
 
   // 组装器以 options.maxContextTokens 优先（不会再去看预设），
   // 所以这里先取「模型能力 maxContext」与「预设 openai_max_context」的较小值。
@@ -183,7 +216,9 @@ export function buildAssembleInput(db: Db, ctx: BuildAssembleInputContext): Asse
     0;
 
   const path = parentId ? pathToNode(nodes, parentId) : [];
-  const history: AssembleHistoryNode[] = path.map((node) => ({
+  // 生图节点（extra.generatedBy==='image'）默认不进提示词，它的子节点照常（M4（二）§D.2）
+  const promptPath = path.filter((node) => !isImageGenNode(node));
+  const history: AssembleHistoryNode[] = promptPath.map((node) => ({
     id: node.id,
     role: node.role,
     name: node.name,
@@ -210,8 +245,9 @@ export function buildAssembleInput(db: Db, ctx: BuildAssembleInputContext): Asse
   const characterData = (characterRow?.data ?? null) as AssembleCharacter['data'] | null;
   const siblingSeq = ctx.siblingSeq ?? nextSiblingSeq(nodes, parentId);
   const frozenVolatile = readFrozenVolatile(chat);
+  const extraInjections = collectExtraInjections(chat, ctx.extraInjections);
 
-  return {
+  const input: AssembleInputV2 = {
     chatId: chat.id,
     model: ctx.model,
     provider: ctx.provider,
@@ -242,12 +278,16 @@ export function buildAssembleInput(db: Db, ctx: BuildAssembleInputContext): Asse
     history,
     layoutMode: ctx.layoutMode,
     options: { maxContextTokens },
-    lorebooks: loadWIBooks(db, {
-      globalBookIds: readGlobalBookIds(db),
-      chatBookIds: readChatLorebookIds(db, chat.id),
-      characterBookId: characterRow?.bookId ?? null,
-      personaBookId: personaRow?.lorebookId ?? null,
-    }),
+    lorebooks: withLorebookDraft(
+      db,
+      loadWIBooks(db, {
+        globalBookIds: readGlobalBookIds(db),
+        chatBookIds: readChatLorebookIds(db, chat.id),
+        characterBookId: characterRow?.bookId ?? null,
+        personaBookId: personaRow?.lorebookId ?? null,
+      }),
+      ctx.draft,
+    ),
     wiSettings: readWISettings(db, { maxContext: maxContextTokens, maxResponse }),
     wiState,
     authorsNote: readAuthorsNote(chat),
@@ -264,7 +304,12 @@ export function buildAssembleInput(db: Db, ctx: BuildAssembleInputContext): Asse
       global: readGlobalVariables(db),
       // 角色卡变量表（酒馆助手 `{{get_character_variable::}}` 与脚本共用）
       ...(characterId ? { character: readVariableTable(db, 'character', characterId) } : {}),
+      // 预设变量表（`{{get_preset_variable::}}`、前端卡 `getVariables({type:'preset'})`，M5（三）§1）
+      ...(presetRow ? { preset: readVariableTable(db, 'preset', presetRow.id) } : {}),
     },
+    // 会话级注入（injectPrompts / `/inject`）+ 本次请求临时带的（M5（三）§3.2）
+    ...(extraInjections.length > 0 ? { extraInjections } : {}),
+    ...(ctx.promptOverrides ? { promptOverrides: ctx.promptOverrides } : {}),
     messageCount: visibleCount,
     providerCaps: {
       caching: ctx.caps.caching,
@@ -282,4 +327,6 @@ export function buildAssembleInput(db: Db, ctx: BuildAssembleInputContext): Asse
     now: ctx.now ?? new Date(),
     ...(ctx.dryRun ? { dryRun: true } : {}),
   };
+  // EJS 提示词模板（M5（三）§4）：设置里开着就挂渲染器
+  return withTemplateRenderer(db, input);
 }

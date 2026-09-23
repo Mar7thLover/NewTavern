@@ -97,7 +97,8 @@
       "worldInfo": "世界书",
       "globalSystemPrompt": "全局系统提示词",
       "regex": "正则脚本",
-      "cards": "前端卡"
+      "cards": "前端卡",
+      "scripts": "脚本库"
     },
     "developerMode": "开发者模式",
     "developerModeHint": "显示面向开发与排错的工具，比如检查器里的 ST 对照。",
@@ -641,7 +642,11 @@
       "openai-chat": "OpenAI 兼容",
       "openai-responses": "OpenAI Responses",
       "anthropic": "Anthropic",
-      "google": "Google Gemini"
+      "google": "Google Gemini",
+      "image-sd": "SD WebUI / Forge",
+      "image-comfy": "ComfyUI",
+      "image-novelai": "NovelAI",
+      "image-openai": "OpenAI Images"
     },
     "endpoints": "常见端点",
     "label": "名称",
@@ -865,7 +870,8 @@
     },
     "flags": {
       "volatile": "含易变宏",
-      "locked": "保真锁定"
+      "locked": "保真锁定",
+      "templated": "EJS 模板"
     },
     "breakpoint": "缓存断点 · {{layer}} · ~{{tokens}} tok",
     "belowMin": "低于最小缓存长度",
@@ -1086,6 +1092,8 @@
     "mvuHint": "解析模型输出里的 <UpdateVariable> 指令，把结果写进这条消息的变量快照。分支与重生各自带一套变量。",
     "mvuSwitch": "自动解析变量更新",
     "mvuSwitchHint": "关掉之后变量表照旧可读可写，只是不再自动跟着模型的输出变。",
+    "ejsSwitch": "EJS 提示词模板",
+    "ejsSwitchHint": "世界书、预设、角色卡里的 <% … %> 在发送前执行（ST-Prompt-Template 兼容，沙箱里跑，单段超过 200ms 自动中断并保留原文）。聊天消息里的模板块不执行，会被删掉。",
     "variables": {
       "title": "变量",
       "empty": "这条消息还没有变量快照。",
@@ -1113,8 +1121,142 @@
   "backgrounds": {},
   "sprites": {},
   "themeVariants": {},
-  "scripts": {},
+  "scripts": {
+    "migration": {
+      "label": "酒馆助手全局脚本",
+      "hint": "新增 {{newCount}} 个，共 {{count}} 个；保持原来的开关，库里已有的会跳过。",
+      "globalOff": "SillyTavern 里脚本库总开关是关的，导入后都先关着。"
+    },
+    "title": "脚本库",
+    "global": "我的脚本",
+    "globalHint": "每个会话都会跑，在隐藏的沙箱 iframe 里运行，按这里的顺序先于预设与角色卡的脚本。",
+    "preset": "预设自带",
+    "presetHint": "只在用这份预设的会话里跑。导入预设时一并收进来，默认关着。",
+    "presetPick": "看哪份预设",
+    "presetNone": "还没有预设",
+    "runnerOff": "「设置 · 前端卡」里的脚本库总开关关着，下面的脚本现在都不会运行。",
+    "new": "新建",
+    "import": "导入",
+    "edit": "编辑",
+    "export": "导出为酒馆助手格式",
+    "toggle": "启用这个脚本",
+    "toggleAll": "整组启用",
+    "moveUp": "上移",
+    "moveDown": "下移",
+    "untitled": "（未命名）",
+    "buttonCount": "{{count}} 个按钮",
+    "emptyGlobal": "还没有全局脚本。可以导入酒馆助手导出的 JSON，或者新建一个。",
+    "emptyPreset": "这份预设没有自带脚本。",
+    "importAskTitle": "导入的脚本还关着",
+    "importAskBody": "收进了 {{count}} 个脚本。脚本能读写变量、发消息、调用生成，现在就启用吗？",
+    "enableNow": "启用",
+    "later": "先不启用",
+    "deleteTitle": "删除脚本",
+    "deleteMessage": "「{{name}}」会从脚本库里删掉，它自己的变量表也一起清掉。",
+    "embedded": {
+      "askTitle": "这份预设带了脚本",
+      "askBody": "{{names}} 自带 {{count}} 个酒馆助手脚本，已经收进脚本库但还没启用。现在启用吗？作者本来就关着的不会被打开。"
+    },
+    "editor": {
+      "newTitle": "新建脚本",
+      "editTitle": "编辑脚本",
+      "name": "名称",
+      "content": "代码",
+      "contentPlaceholder": "// 在隐藏的沙箱里以 ES 模块运行，酒馆助手的全局函数都在\nimport 'https://…';",
+      "keys": "Ctrl+F 搜索 · Tab 缩进 · Ctrl+Z 撤销",
+      "loading": "编辑器加载中…",
+      "buttons": "脚本按钮",
+      "buttonsEnabled": "显示按钮",
+      "buttonName": "按钮名称",
+      "buttonVisible": "显示在输入框上方",
+      "addButton": "加一个按钮",
+      "removeButton": "删掉这个按钮",
+      "info": "作者说明",
+      "infoPlaceholder": "用法、依赖、注意事项…",
+      "saving": "保存中…"
+    }
+  },
   "variableEditor": {},
-  "imageGen": {},
+  "imageGen": {
+    "menu": {
+      "trigger": "生图",
+      "lastMessage": "画最后一条消息",
+      "character": "画角色",
+      "free": "自由描述…"
+    },
+    "noBackend": "还没有选生图后端。",
+    "goConnections": "去连接页添加",
+    "free": {
+      "title": "自由描述",
+      "prompt": "画面",
+      "promptPlaceholder": "雨夜的窗边，她抱着一只黑猫，暖黄的台灯",
+      "negative": "负面词",
+      "width": "宽",
+      "height": "高",
+      "submit": "开始画"
+    },
+    "progress": {
+      "writing": "正在把消息改写成生图提示词…",
+      "drawingStart": "已交给生图后端，等待开画…",
+      "drawing": "作画中 {{percent}}%",
+      "failed": "没画成：{{message}}",
+      "cancel": "取消",
+      "retry": "再试一次",
+      "dismiss": "关闭"
+    },
+    "backends": {
+      "title": "生图后端",
+      "hint": "在对话里画插图用。它们不会出现在对话模型的下拉里。",
+      "create": "添加生图后端",
+      "createTitle": "添加生图后端",
+      "editTitle": "编辑生图后端",
+      "empty": "还没有生图后端。支持 SD WebUI / Forge、ComfyUI、NovelAI 与 OpenAI 兼容的 images 接口。",
+      "kind": "后端",
+      "labelPlaceholder": "例如「本机 Forge」",
+      "inUse": "使用中",
+      "use": "改用它",
+      "testOk": "连得上，耗时 {{ms}} ms，找到 {{total}} 个模型",
+      "keyPlaceholder": {
+        "image-sd": "没开 --api-auth 就留空；开了写 user:pass",
+        "image-comfy": "一般留空",
+        "image-novelai": "pst-…",
+        "image-openai": "sk-…"
+      },
+      "keyHint": {
+        "image-sd": "SD WebUI / Forge 启动时要带 --api。Key 加密存在本地服务端。",
+        "image-comfy": "本机 ComfyUI 不需要 Key；经反代加了鉴权时再填。",
+        "image-novelai": "NovelAI 的持久 API Token（账户设置里生成）。NovelAI 没有模型列表接口，测试不会校验 Token。",
+        "image-openai": "OpenAI 或兼容端点的 API Key。Base URL 带不带 /v1 都可以。"
+      }
+    },
+    "settings": {
+      "title": "生图设置",
+      "backend": "用哪个后端",
+      "none": "不生图",
+      "model": "模型",
+      "modelDefault": "后端当前的模型",
+      "width": "宽",
+      "height": "高",
+      "steps": "步数",
+      "cfg": "CFG",
+      "sampler": "采样器",
+      "samplerPlaceholder": "留空用后端默认",
+      "stylePrefix": "画风前缀",
+      "stylePrefixPlaceholder": "masterpiece, watercolor",
+      "negative": "默认负面词",
+      "writer": "写生图提示词的模型",
+      "writerDefault": "跟随会话的连接",
+      "writerModel": "模型名",
+      "writerHint": "「画最后一条消息」「画角色」会先让这个模型把内容改写成一行英文关键词。",
+      "comfyWorkflow": "ComfyUI 工作流",
+      "comfyBuiltin": "内置 txt2img 工作流",
+      "comfyLoaded": "已导入，{{count}} 个节点",
+      "comfyImport": "导入工作流 JSON",
+      "comfyClear": "改回内置",
+      "comfyInvalid": "这不是 API 格式的工作流。在 ComfyUI 里用「Export (API)」导出。",
+      "comfyHint": "占位符：%prompt% %negative% %seed% %width% %height% %steps% %cfg% %model% %sampler%。",
+      "saved": "已保存"
+    }
+  },
   "toast": {}
 }

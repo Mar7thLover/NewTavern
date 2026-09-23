@@ -5,7 +5,7 @@ import { SettingsSection } from './shared';
 import { useUiStore } from '../../app/store/ui';
 import { Segmented } from '../../components/ui/segmented';
 import { SwitchRow } from '../../components/ui/switch';
-import { useCharacters } from '../../lib/api';
+import { useCharacters, useSetSetting, useSetting } from '../../lib/api';
 import {
   DEFAULT_CARD_SETTINGS,
   useCardSettings,
@@ -14,6 +14,7 @@ import {
   useSetMvuSettings,
   type CardSettings,
 } from '../../lib/api-cards';
+import { MvuExtraSettings } from '../cards/MvuExtraSettings';
 import { Avatar } from '../library/shared';
 
 /**
@@ -22,10 +23,19 @@ import { Avatar } from '../library/shared';
  * 分三层：
  * - **跑不跑**（`cardRuntime`，存本机）：关掉 = 带脚本的卡退回代码块；
  * - **给多少权限**（信任级别，存服务端，可按角色卡单独调）；
- * - **变量框架**（MVU 自动解析开关，存服务端）。
+ * - **变量框架**（MVU 自动解析开关、EJS 提示词模板开关，存服务端）。
  *
  * 信任级别是安全边界，写得比一般设置详细：用户改它之前要知道自己在放开什么。
  */
+
+/** 设置 KV `ejs`：EJS 提示词模板开关（服务端组装时读，缺省开；M5（三）契约 §4.2） */
+const normalizeEjsSettings = (value: unknown): { enabled: boolean } => {
+  const source = (typeof value === 'object' && value !== null ? value : {}) as Record<
+    string,
+    unknown
+  >;
+  return { enabled: typeof source.enabled === 'boolean' ? source.enabled : true };
+};
 
 const TRUST_ICON: Record<FrontendCardTrustLevel, string> = {
   strict: '🔒',
@@ -42,6 +52,8 @@ export function CardsSettings() {
   const saveSettings = useSetCardSettings();
   const mvu = useMvuSettings();
   const saveMvu = useSetMvuSettings();
+  const ejs = useSetting('ejs', normalizeEjsSettings);
+  const saveEjs = useSetSetting('ejs', normalizeEjsSettings);
   const characters = useCharacters();
 
   const current: CardSettings = settings.data ?? DEFAULT_CARD_SETTINGS;
@@ -141,12 +153,24 @@ export function CardsSettings() {
       </SettingsSection>
 
       <SettingsSection title={t('cards.mvuTitle')} hint={t('cards.mvuHint')}>
-        <SwitchRow
-          title={t('cards.mvuSwitch')}
-          hint={t('cards.mvuSwitchHint')}
-          checked={mvu.data?.enabled !== false}
-          onChange={(value) => saveMvu.mutate({ enabled: value })}
-        />
+        <div className="divide-y divide-edge">
+          <SwitchRow
+            title={t('cards.mvuSwitch')}
+            hint={t('cards.mvuSwitchHint')}
+            checked={mvu.data?.enabled !== false}
+            onChange={(value) =>
+              saveMvu.mutate({ ...(mvu.data ?? { keepSnapshots: 0 }), enabled: value })
+            }
+          />
+          {/* 额外模型解析与旧快照清理（M5（三）§3.5） */}
+          <MvuExtraSettings />
+          <SwitchRow
+            title={t('cards.ejsSwitch')}
+            hint={t('cards.ejsSwitchHint')}
+            checked={ejs.data?.enabled !== false}
+            onChange={(value) => saveEjs.mutate({ enabled: value })}
+          />
+        </div>
       </SettingsSection>
     </div>
   );

@@ -1,4 +1,4 @@
-import { substituteMacros, type Part } from '@newtavern/core';
+import type { Part } from '@newtavern/core';
 import {
   canDisableThinking,
   type ModelCapabilities,
@@ -6,7 +6,7 @@ import {
   type ProviderRequest,
 } from '@newtavern/providers';
 import { desc, eq } from 'drizzle-orm';
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { streamSSE } from 'hono/streaming';
 
 import { schema, type Db } from '../db/client.js';
@@ -17,6 +17,7 @@ import {
   readNearestSnapshots,
 } from '../services/assemble-input.js';
 import type { AssetsService } from '../services/assets.js';
+import { ChatCreateError, createChat, isStudioChat } from '../services/chat-create.js';
 import { parseAuthorsNote } from '../services/authors-note.js';
 import {
   clearOpaqueSubtree,
@@ -44,8 +45,15 @@ import {
   type GenerationContext,
 } from '../services/generation-context.js';
 import { isGlobalSystemPromptOverride } from '../services/global-system-prompt.js';
-import { ensureMvuInitialized, runMvuForNode } from '../services/mvu.js';
+import { consumeOnceInjects } from '../services/chat-injects.js';
+import { ensureMvuInitialized, runMvuAfterGeneration } from '../services/mvu.js';
 import { buildInspect } from '../services/inspect.js';
+import {
+  DraftInputError,
+  parseDraft,
+  type AssembleDraft,
+  type AssembleDraftBody,
+} from '../services/studio-draft.js';
 import {
   AttachmentError,
   compactMediaParts,
@@ -55,9 +63,6 @@ import {
   messageParts,
   parseAttachments,
 } from '../services/media.js';
-import { loadBookOpeners } from '../services/openers.js';
-import { readDefaultPersonaId } from '../services/personas.js';
-import { readDefaultPresetId } from '../services/presets.js';
 import type { ProviderService } from '../services/providers.js';
 import { buildProviderRequest, requestForStorage } from '../services/provider-request.js';
 import { applyGlobalChanges } from '../services/variables.js';
@@ -77,6 +82,21 @@ interface GenerateBody {
   connectionId?: string;
   model?: string;
   layoutMode?: 'strict' | 'cache-aware';
+  /** 工作台草稿（M6 §2.4）：只影响本轮组装，不落库 */
+  draft?: AssembleDraftBody | null;
+}
+
+/** 检查器的前置解析（GET 与 POST 变体共用）：参数都在 query 里 */
+function inspectContextInput(c: Context, chatId: string) {
+  const rawParentId = c.req.query('parentId');
+  return {
+    chatId,
+    // 不传 = 取 head；parentId= （空串）= 从根开始
+    parentId: rawParentId === undefined ? undefined : rawParentId || null,
+    connectionId: c.req.query('connectionId'),
+    model: c.req.query('model'),
+    layoutMode: c.req.query('layoutMode'),
+  };
 }
 
 /**
@@ -132,10 +152,17 @@ function hasAttachments(raw: unknown): boolean {
 export function createChatsRoutes(db: Db, providers: ProviderService, assets: AssetsService) {
   return (
     new Hono()
+      /** 默认排除工作台测试会话（metadata.studio 非空，M6 §2.4）；?includeStudio=1 才返回 */
       .get('/', (c) => {
+        const includeStudio = c.req.query('includeStudio') === '1';
         const rows = db.select().from(schema.chats).orderBy(desc(schema.chats.updatedAt)).all();
-        return c.json(rows.map((row) => toChatSummary(db, row)));
+        return c.json(
+          rows
+            .filter((row) => includeStudio || !isStudioChat(row))
+            .map((row) => toChatSummary(db, row)),
+        );
       })
+      /** 新建对话：主体在 services/chat-create.ts（工作台测试会话复用） */
       .post('/', async (c) => {
         let body: Record<string, unknown>;
         try {
@@ -143,130 +170,14 @@ export function createChatsRoutes(db: Db, providers: ProviderService, assets: As
         } catch {
           body = {};
         }
-        const characterIds = Array.isArray(body.characterIds)
-          ? body.characterIds.filter((id): id is string => typeof id === 'string')
-          : [];
-        // 没带 personaId 字段 → 用默认档案；显式 null → 不用档案
-        const personaId =
-          'personaId' in body
-            ? typeof body.personaId === 'string'
-              ? body.personaId
-              : null
-            : readDefaultPersonaId(db);
-        // 同上：没带 presetId 字段 → 用默认预设；显式 null → 不用预设（「无」）
-        const presetId =
-          'presetId' in body
-            ? typeof body.presetId === 'string'
-              ? body.presetId
-              : null
-            : readDefaultPresetId(db);
-        const mode = body.mode === 'writing' || body.mode === 'crpg' ? body.mode : 'roleplay';
-
-        const characterRow = characterIds[0]
-          ? db
-              .select()
-              .from(schema.characters)
-              .where(eq(schema.characters.id, characterIds[0]))
-              .get()
-          : undefined;
-        if (characterIds[0] && !characterRow) {
-          return c.json({ error: 'not_found', message: `角色不存在：${characterIds[0]}` }, 404);
+        try {
+          return c.json(toChatDetail(db, createChat(db, body)), 201);
+        } catch (e) {
+          if (e instanceof ChatCreateError) {
+            return c.json({ error: 'not_found', message: e.message }, 404);
+          }
+          throw e;
         }
-        const personaRow = personaId
-          ? db.select().from(schema.personas).where(eq(schema.personas.id, personaId)).get()
-          : undefined;
-
-        // 新建对话页可以只挑一本世界书开场（不带角色卡），这些书同时落成聊天书
-        const lorebookIds = Array.isArray(body.lorebookIds)
-          ? [
-              ...new Set(
-                body.lorebookIds.filter((id): id is string => typeof id === 'string' && id !== ''),
-              ),
-            ]
-          : [];
-        const bookRows = lorebookIds.map((id) =>
-          db.select().from(schema.lorebooks).where(eq(schema.lorebooks.id, id)).get(),
-        );
-        const missingIndex = bookRows.findIndex((row) => row === undefined);
-        if (missingIndex >= 0) {
-          return c.json(
-            { error: 'not_found', message: `世界书不存在：${lorebookIds[missingIndex]}` },
-            404,
-          );
-        }
-        const openers = loadBookOpeners(db, lorebookIds);
-
-        // 标题：显式给的 > 角色名 > 第一本世界书的名字（没有开场白的书同样能开场）
-        const title =
-          typeof body.title === 'string' && body.title.trim()
-            ? body.title.trim()
-            : (characterRow?.name ?? bookRows[0]?.name ?? '');
-
-        let chat = db
-          .insert(schema.chats)
-          .values({ title, mode, characterIds, personaId, presetId })
-          .returning()
-          .get();
-        if (lorebookIds.length > 0) setChatLorebooks(db, chat.id, lorebookIds);
-
-        /**
-         * 开场白 → 根节点与它的 swipe 兄弟。来源按顺序拼：角色卡的
-         * `first_mes` + `alternate_greetings`，再接世界书自带的开场白
-         * （`@@is_greeting` 在前、role=assistant 的 prefill 在后，见 services/openers.ts）。
-         */
-        const card = (characterRow?.data ?? {}) as Record<string, unknown>;
-        const charName = characterRow?.name ?? '';
-        const firstMes = typeof card.first_mes === 'string' ? card.first_mes : '';
-        const cardGreetings = characterRow
-          ? [
-              firstMes,
-              ...(Array.isArray(card.alternate_greetings)
-                ? card.alternate_greetings.filter(
-                    (g): g is string => typeof g === 'string' && !!g.trim(),
-                  )
-                : []),
-            ].filter((greeting) => greeting.trim() !== '')
-          : [];
-        const openings = [
-          ...cardGreetings.map((text) => ({ text, name: charName })),
-          // 无角色卡时用书名当说话人，与用书名当标题保持一致
-          ...openers.map((opener) => ({ text: opener.content, name: charName || opener.bookName })),
-        ];
-
-        if (openings.length > 0) {
-          const userName = personaRow?.name ?? 'User';
-          let rootId: string | null = null;
-          openings.forEach((opening, index) => {
-            // ST 1.18：开场白里的 {{persona}} {{description}} … 取各字段 baseChatReplace 后的值
-            // （字段先 trim、再只展开 {{user}} {{char}} 等，字段里的卡类宏为空），见 M4 契约 §9 MSS 修正
-            const seed = { char: opening.name, user: userName };
-            const base = (value: unknown) =>
-              typeof value === 'string' ? substituteMacros(value.trim(), seed) : undefined;
-            const row = insertNode(db, {
-              chatId: chat.id,
-              parentId: null,
-              siblingSeq: index,
-              role: 'assistant',
-              name: opening.name,
-              parts: [
-                {
-                  type: 'text',
-                  text: substituteMacros(opening.text, {
-                    ...seed,
-                    persona: base(personaRow?.description),
-                    description: base(card.description),
-                    personality: base(card.personality),
-                    scenario: base(card.scenario),
-                    mesExamples: base(card.mes_example),
-                  }),
-                },
-              ],
-            });
-            if (index === 0) rootId = row.id;
-          });
-          chat = patchChat(db, chat.id, { rootNodeId: rootId, headNodeId: rootId });
-        }
-        return c.json(toChatDetail(db, chat), 201);
       })
       .get('/:id', (c) => {
         const chat = loadChat(db, c.req.param('id'));
@@ -517,23 +428,48 @@ export function createChatsRoutes(db: Db, providers: ProviderService, assets: As
        * `tokenEstimate` / `lastUsage`。不写库、不推进 WI 时间态、不落变量副作用。
        */
       .get('/:id/inspect', async (c) => {
-        const rawParentId = c.req.query('parentId');
         let context: GenerationContext;
         try {
-          context = await resolveGenerationContext(db, providers, {
-            chatId: c.req.param('id'),
-            // 不传 = 取 head；parentId= （空串）= 从根开始
-            parentId: rawParentId === undefined ? undefined : rawParentId || null,
-            connectionId: c.req.query('connectionId'),
-            model: c.req.query('model'),
-            layoutMode: c.req.query('layoutMode'),
-          });
+          context = await resolveGenerationContext(
+            db,
+            providers,
+            inspectContextInput(c, c.req.param('id')),
+          );
         } catch (e) {
           if (e instanceof GenerationContextError) return c.json(e.body, e.status);
           throw e;
         }
         try {
           return c.json(buildInspect(db, context, assets));
+        } catch (e) {
+          return c.json({ error: 'invalid', message: (e as Error).message }, 400);
+        }
+      })
+      /** 同 GET（参数仍在 query），另收 body `{ draft }`：用工作台草稿组装（M6 §2.4） */
+      .post('/:id/inspect', async (c) => {
+        let draft: AssembleDraft | undefined;
+        try {
+          const body = ((await c.req.json().catch(() => ({}))) ?? {}) as { draft?: unknown };
+          draft = parseDraft(body.draft);
+        } catch (e) {
+          if (e instanceof DraftInputError) {
+            return c.json({ error: 'invalid', message: e.message }, 400);
+          }
+          throw e;
+        }
+        let context: GenerationContext;
+        try {
+          context = await resolveGenerationContext(
+            db,
+            providers,
+            inspectContextInput(c, c.req.param('id')),
+          );
+        } catch (e) {
+          if (e instanceof GenerationContextError) return c.json(e.body, e.status);
+          throw e;
+        }
+        try {
+          return c.json(buildInspect(db, context, assets, draft));
         } catch (e) {
           return c.json({ error: 'invalid', message: (e as Error).message }, 400);
         }
@@ -546,6 +482,15 @@ export function createChatsRoutes(db: Db, providers: ProviderService, assets: As
           body = ((await c.req.json()) ?? {}) as GenerateBody;
         } catch {
           body = {};
+        }
+        let draft: AssembleDraft | undefined;
+        try {
+          draft = parseDraft(body.draft);
+        } catch (e) {
+          if (e instanceof DraftInputError) {
+            return c.json({ error: 'invalid', message: e.message }, 400);
+          }
+          throw e;
         }
 
         let context: GenerationContext;
@@ -654,6 +599,7 @@ export function createChatsRoutes(db: Db, providers: ProviderService, assets: As
                 caps,
                 // 文档附件在组装前内联（M4 §3.3）
                 assets,
+                ...(draft ? { draft } : {}),
                 ...(mvuInit.initialized.length > 0 ? { variablesOverride: mvuInit.variables } : {}),
               }),
             );
@@ -839,7 +785,8 @@ export function createChatsRoutes(db: Db, providers: ProviderService, assets: As
               applyGlobalChanges(db, assembled.variables.globalChanges, assistantId);
               // MVU：从本节点的快照（= 生成前状态）出发应用 `<UpdateVariable>`，写回同一节点。
               // 父快照不动，所以 swipe / 重生天然从同一起点重新算（M5 §2.3）。
-              const mvuResult = runMvuForNode(db, chatNow(), finalRow, text);
+              // M5（三）§3.5：正文里没有更新命令时可以交给额外模型；写入后清理旧快照、按 schema 校验
+              const mvuResult = await runMvuAfterGeneration(db, chatNow(), finalRow, text);
               if (mvuResult) {
                 await send('variables', {
                   nodeId: mvuResult.nodeId,
@@ -847,8 +794,12 @@ export function createChatsRoutes(db: Db, providers: ProviderService, assets: As
                   updates: mvuResult.updates,
                   errors: mvuResult.errors,
                   initialized: [],
+                  ...(mvuResult.source ? { source: mvuResult.source } : {}),
+                  ...(mvuResult.warnings ? { warnings: mvuResult.warnings } : {}),
                 });
               }
+              // 一次生成成功后，`injectPrompts(…, { once:true })` 的注入失效（M5（三）§3.2）
+              if (!genError) consumeOnceInjects(db, chatId);
               // 本轮新冻结的易变段并入 chat.metadata.frozenVolatile，下一轮复用
               const newFrozen = assembled.layout.newFrozenVolatile;
               if (Object.keys(newFrozen).length > 0) {

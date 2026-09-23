@@ -162,6 +162,11 @@ export interface WIScanInput {
   characterTags?: string[];
   /** 提示词注入（ST extensionPrompts 里 scan=true 的注入）也进扫描缓冲 */
   injects?: string[];
+  /**
+   * 诊断输出（工作台触发模拟用，M6 §2.5）：激活记录附带 `diagnostic`。
+   * 只多记信息，不改变任何激活 / 拒绝判定。
+   */
+  diagnostics?: boolean;
 }
 
 export type WIActivationReason = 'constant' | 'key' | 'sticky' | 'recursion' | 'minActivations';
@@ -175,6 +180,15 @@ export interface WIActivation {
   /** 展开后的内容（宏已替换） */
   content: string;
   tokens: number;
+  /** 仅 `WIScanInput.diagnostics` 时给出 */
+  diagnostic?: WIActivationDiagnostic;
+}
+
+/** 激活的细分原因：`@@activate` 装饰器强制激活 / 主键命中且过了副键过滤 */
+export interface WIActivationDiagnostic {
+  via?: 'decorator' | 'secondary';
+  /** 命中的副键（NOT_ANY / NOT_ALL 逻辑下可能为空） */
+  matchedSecondaryKeys?: string[];
 }
 
 export interface WIDepthBucket {

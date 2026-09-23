@@ -8,6 +8,7 @@ import { GlobalSystemPromptSettings } from './GlobalSystemPromptSettings';
 import { RegexSettings } from './RegexSettings';
 import { WorldInfoSettings } from './WorldInfoSettings';
 import { SettingsSection } from './shared';
+import { ScriptsSettings } from '../scripts/ScriptsSettings';
 import { useUiStore } from '../../app/store/ui';
 import { formatBytes } from '../../components/AttachmentFiles';
 import { Button } from '../../components/ui/button';
@@ -22,6 +23,7 @@ const SECTIONS = [
   'globalSystemPrompt',
   'regex',
   'cards',
+  'scripts',
   'storage',
 ] as const;
 type SectionKey = (typeof SECTIONS)[number];
@@ -74,6 +76,7 @@ export function SettingsPage() {
         {section === 'globalSystemPrompt' && <GlobalSystemPromptSettings />}
         {section === 'regex' && <RegexSettings />}
         {section === 'cards' && <CardsSettings />}
+        {section === 'scripts' && <ScriptsSettings />}
         {section === 'storage' && <StorageSettings />}
       </div>
     </div>

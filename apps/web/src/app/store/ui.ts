@@ -2,7 +2,12 @@ import { DEFAULT_LANGUAGE, type Language } from '@newtavern/i18n';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-import { DEFAULT_THEME_ID, type ModeSetting, type ThemeOptionValue } from '../../themes/registry';
+import {
+  DEFAULT_THEME_ID,
+  findVariant,
+  type ModeSetting,
+  type ThemeOptionValue,
+} from '../../themes/registry';
 
 export type { ModeSetting };
 
@@ -37,6 +42,10 @@ interface UiState {
    * 不带脚本的 HTML 仍由 `cardHtml` 那条路内联渲染。
    */
   cardRuntime: boolean;
+  /** 素 / 书斋默认不显示背景；打开后两者用一层淡化遮罩显示（M4（二）§A.1） */
+  backdropInMinimalWorlds: boolean;
+  /** 当前世界选用的变体（M4（二）§C.2）；切换世界时 base 不符自动置空 */
+  variantId: string | null;
   setLanguage: (language: Language) => void;
   setThemeId: (themeId: string) => void;
   setMode: (mode: ModeSetting) => void;
@@ -45,6 +54,8 @@ interface UiState {
   setRichBlocks: (richBlocks: boolean) => void;
   setCardHtml: (cardHtml: boolean) => void;
   setCardRuntime: (cardRuntime: boolean) => void;
+  setBackdropInMinimalWorlds: (value: boolean) => void;
+  setVariantId: (variantId: string | null) => void;
   /** 命令面板是否打开（不持久化） */
   paletteOpen: boolean;
   setPaletteOpen: (open: boolean) => void;
@@ -78,8 +89,14 @@ export const useUiStore = create<UiState>()(
       richBlocks: true,
       cardHtml: true,
       cardRuntime: true,
+      backdropInMinimalWorlds: false,
+      variantId: null,
       setLanguage: (language) => set({ language }),
-      setThemeId: (themeId) => set({ themeId }),
+      setThemeId: (themeId) =>
+        set((state) => ({
+          themeId,
+          variantId: findVariant(state.variantId)?.base === themeId ? state.variantId : null,
+        })),
       setMode: (mode) => set({ mode }),
       setThemeOption: (themeId, key, value) =>
         set((state) => ({
@@ -92,6 +109,8 @@ export const useUiStore = create<UiState>()(
       setRichBlocks: (richBlocks) => set({ richBlocks }),
       setCardHtml: (cardHtml) => set({ cardHtml }),
       setCardRuntime: (cardRuntime) => set({ cardRuntime }),
+      setBackdropInMinimalWorlds: (backdropInMinimalWorlds) => set({ backdropInMinimalWorlds }),
+      setVariantId: (variantId) => set({ variantId }),
       paletteOpen: false,
       setPaletteOpen: (paletteOpen) => set({ paletteOpen }),
       chatPanelRequest: null,
@@ -118,6 +137,8 @@ export const useUiStore = create<UiState>()(
         developerMode: state.developerMode,
         richBlocks: state.richBlocks,
         cardHtml: state.cardHtml,
+        backdropInMinimalWorlds: state.backdropInMinimalWorlds,
+        variantId: state.variantId,
       }),
       migrate: (persisted, version) => {
         if (version >= 3) return persisted as unknown as UiState;

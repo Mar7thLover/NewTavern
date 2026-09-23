@@ -43,7 +43,10 @@ export interface BuildSrcdocOptions {
    */
   externalScripts?: readonly string[];
   externalStyles?: readonly string[];
-  /** 主题槽位变量：`--accent` 这些，卡可以拿来贴合当前世界 */
+  /**
+   * 主题槽位变量的**声明串**（不带选择器）：`--canvas:…;--SmartThemeBodyColor:…`，
+   * 卡可以拿来贴合当前世界（M5（三）§3.4）。之后的切换经 `theme` 镜像推，guest 改写 `#nt-theme`。
+   */
   themeCss?: string;
   /** guest 引导脚本源码（`guestBootstrapSource()`） */
   bootstrap: string;
@@ -201,7 +204,8 @@ export function buildSrcdoc(options: BuildSrcdocOptions): string {
 <meta http-equiv="Content-Security-Policy" content="${attr(buildCsp(trust, appOrigin))}">
 <base href="${attr(appOrigin)}/">
 <style>${RESET_CSS}</style>
-<style>:root{${themeCss}}${avatarCss}</style>
+<style id="nt-theme">:root{${themeCss}}</style>
+<style>${avatarCss}</style>
 ${styleTags}
 ${libTags}
 <script>window.__NT_SANDBOX_CONFIG__=${config};</script>

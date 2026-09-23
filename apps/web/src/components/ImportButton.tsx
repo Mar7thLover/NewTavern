@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 
 import { ConfirmDialog } from './ConfirmDialog';
 import { Button, type ButtonProps } from './ui/button';
+import { useSetScriptOwnerEnabled } from '../features/scripts/api';
 import { uploadFile, useSetRegexOwnerEnabled, type RegexOwnerInput } from '../lib/api';
 import { cn } from '../lib/utils';
 
@@ -33,6 +34,26 @@ function readEmbeddedRegex(result: unknown): EmbeddedRegex | null {
   }
   return {
     scope: record.scope,
+    ownerId: record.ownerId,
+    ownerName: typeof record.ownerName === 'string' ? record.ownerName : '',
+    count: record.count,
+  };
+}
+
+/** 预设自带的酒馆助手脚本（M5（三）§2.1）：同样已收进脚本库但没启用 */
+interface EmbeddedScripts {
+  ownerId: string;
+  ownerName: string;
+  count: number;
+}
+
+function readEmbeddedScripts(result: unknown): EmbeddedScripts | null {
+  const value = (result as { embeddedScripts?: unknown } | null)?.embeddedScripts;
+  if (typeof value !== 'object' || value === null) return null;
+  const record = value as Record<string, unknown>;
+  if (record.scope !== 'preset' || typeof record.ownerId !== 'string') return null;
+  if (typeof record.count !== 'number') return null;
+  return {
     ownerId: record.ownerId,
     ownerName: typeof record.ownerName === 'string' ? record.ownerName : '',
     count: record.count,
@@ -75,6 +96,9 @@ export function ImportButton({
   /** 这批文件自带的正则：导入完统一问一次「要不要现在启用」 */
   const [pendingRegex, setPendingRegex] = useState<EmbeddedRegex[]>([]);
   const setOwnerEnabled = useSetRegexOwnerEnabled();
+  /** 这批预设自带的脚本：正则那一问之后再问一次 */
+  const [pendingScripts, setPendingScripts] = useState<EmbeddedScripts[]>([]);
+  const setScriptsEnabled = useSetScriptOwnerEnabled();
 
   const handleFiles = async (fileList: FileList | null) => {
     const files = Array.from(fileList ?? []);
@@ -83,8 +107,10 @@ export function ImportButton({
 
     setFailures([]);
     setPendingRegex([]);
+    setPendingScripts([]);
     const nextFailures: FileFailure[] = [];
     const embedded: EmbeddedRegex[] = [];
+    const embeddedScripts: EmbeddedScripts[] = [];
     try {
       for (const [index, file] of files.entries()) {
         setProgress({ current: index + 1, total: files.length });
@@ -92,6 +118,8 @@ export function ImportButton({
           const result = await uploadFile(endpoint, file);
           const regex = readEmbeddedRegex(result);
           if (regex) embedded.push(regex);
+          const scripts = readEmbeddedScripts(result);
+          if (scripts) embeddedScripts.push(scripts);
         } catch (error) {
           nextFailures.push({
             file: file.name,
@@ -103,6 +131,7 @@ export function ImportButton({
       setProgress(null);
       setFailures(nextFailures);
       setPendingRegex(embedded);
+      setPendingScripts(embeddedScripts);
       if (nextFailures.length < files.length) {
         await queryClient.invalidateQueries({ queryKey: invalidateKey });
       }
@@ -159,6 +188,25 @@ export function ImportButton({
           setPendingRegex([]);
           for (const item of targets) {
             setOwnerEnabled.mutate({ scope: item.scope, ownerId: item.ownerId, enabled: true });
+          }
+        }}
+      />
+      <ConfirmDialog
+        open={pendingRegex.length === 0 && pendingScripts.length > 0}
+        title={t('scripts.embedded.askTitle')}
+        description={t('scripts.embedded.askBody', {
+          count: pendingScripts.reduce((total, item) => total + item.count, 0),
+          names: pendingScripts.map((item) => item.ownerName).join('、'),
+        })}
+        confirmLabel={t('scripts.enableNow')}
+        cancelLabel={t('scripts.later')}
+        pending={setScriptsEnabled.isPending}
+        onCancel={() => setPendingScripts([])}
+        onConfirm={() => {
+          const targets = pendingScripts;
+          setPendingScripts([]);
+          for (const item of targets) {
+            setScriptsEnabled.mutate({ scope: 'preset', ownerId: item.ownerId, enabled: true });
           }
         }}
       />

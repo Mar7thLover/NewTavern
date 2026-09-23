@@ -1,4 +1,4 @@
-import { substituteMacros } from '@newtavern/core';
+import { substituteMacros, validateJsonSchema } from '@newtavern/core';
 import {
   applyMessage,
   emptyMvuData,
@@ -24,6 +24,12 @@ import {
   type NodeRow,
 } from './chat-tree.js';
 import { readGlobalBookIds } from './wi-settings.js';
+import { readVariableSchemas } from './chat-injects.js';
+import {
+  hasMvuCommands,
+  requestExtraModelUpdate,
+  type MvuExtraModelSettings,
+} from './mvu-extra.js';
 import type { Part } from '@newtavern/core';
 
 /**
@@ -48,14 +54,48 @@ const MVU_SETTINGS_KEY = 'mvu';
 export interface MvuSettings {
   /** 自动解析模型输出里的 `<UpdateVariable>`（默认开） */
   enabled: boolean;
+  /** 额外模型解析（M5（三）§3.5）；缺省 = 不用 */
+  extraModel?: MvuExtraModelSettings;
+  /**
+   * 旧楼层快照清理：>0 时每次写入后把当前路径上距 head 超过 N 层的节点快照换成
+   * `{ $pruned: true }`。缺省 0 = 不清理。
+   */
+  keepSnapshots: number;
 }
 
-export const DEFAULT_MVU_SETTINGS: MvuSettings = { enabled: true };
+export const DEFAULT_MVU_SETTINGS: MvuSettings = { enabled: true, keepSnapshots: 0 };
+
+/** 被清理掉的快照（占位，读快照时一律跳过它往上找） */
+export const PRUNED_SNAPSHOT = { $pruned: true } as const;
+
+export function isPrunedSnapshot(value: unknown): boolean {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    (value as Record<string, unknown>).$pruned === true
+  );
+}
+
+function readExtraModel(value: unknown): MvuExtraModelSettings | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
+  const record = value as Record<string, unknown>;
+  if (typeof record.connectionId !== 'string' || record.connectionId === '') return undefined;
+  if (typeof record.model !== 'string' || record.model === '') return undefined;
+  return {
+    connectionId: record.connectionId,
+    model: record.model,
+    when: record.when === 'always' ? 'always' : 'missing',
+  };
+}
 
 export function mergeMvuSettings(value: unknown): MvuSettings {
   const record = (typeof value === 'object' && value !== null ? value : {}) as Record<string, unknown>;
+  const extraModel = readExtraModel(record.extraModel);
+  const keep = Number(record.keepSnapshots);
   return {
     enabled: typeof record.enabled === 'boolean' ? record.enabled : DEFAULT_MVU_SETTINGS.enabled,
+    ...(extraModel ? { extraModel } : {}),
+    keepSnapshots: Number.isFinite(keep) && keep > 0 ? Math.floor(keep) : 0,
   };
 }
 
@@ -74,6 +114,13 @@ export function readMvuSettings(db: Db): MvuSettings {
  * 但 MVU 仍然要读它。
  */
 export function loadInitVarBooks(db: Db, chat: ChatRow): InitVarBook[] {
+  const ids = visibleBookIds(db, chat);
+  if (ids.length === 0) return [];
+  return loadBooksByIds(db, ids);
+}
+
+/** 会话能看到的世界书 id（全局 → 聊天 → 角色 → persona，去重保序） */
+export function visibleBookIds(db: Db, chat: ChatRow): string[] {
   const ids: string[] = [];
   const push = (id: string | null | undefined) => {
     if (id && !ids.includes(id)) ids.push(id);
@@ -93,8 +140,10 @@ export function loadInitVarBooks(db: Db, chat: ChatRow): InitVarBook[] {
     const persona = db.select().from(schema.personas).where(eq(schema.personas.id, chat.personaId)).get();
     push(persona?.lorebookId ?? null);
   }
-  if (ids.length === 0) return [];
+  return ids;
+}
 
+function loadBooksByIds(db: Db, ids: string[]): InitVarBook[] {
   const books = db.select().from(schema.lorebooks).where(inArray(schema.lorebooks.id, ids)).all();
   const entries = db
     .select({
@@ -182,6 +231,10 @@ export interface MvuNodeResult {
   errors: MvuError[];
   /** 本次是由哪些世界书初始化来的（只有第一轮非空） */
   initialized?: string[];
+  /** 更新从哪来：模型正文 / 额外模型（M5（三）§3.5） */
+  source?: 'message' | 'extra-model';
+  /** registerVariableSchema 的校验问题（不回滚，只提示） */
+  warnings?: string[];
 }
 
 function toRecord(data: MvuData): Record<string, unknown> {
@@ -202,12 +255,13 @@ export function parseMvuMessage(
 
 /** 该节点自己的快照；没有就沿路径往上找最近的一份（user 节点没有快照） */
 function baseSnapshotFor(db: Db, chat: ChatRow, node: NodeRow): Record<string, unknown> {
-  if (node.variables) return node.variables;
+  if (node.variables && !isPrunedSnapshot(node.variables)) return node.variables;
   const nodes = loadNodes(db, chat.id);
   const byId = new Map(nodes.map((row) => [row.id, row]));
   let cursor = node.parentId ? byId.get(node.parentId) : undefined;
   while (cursor) {
-    if (cursor.variables) return cursor.variables;
+    // 清理掉的旧快照不能当起点：继续往上找最近的一份完整快照
+    if (cursor.variables && !isPrunedSnapshot(cursor.variables)) return cursor.variables;
     cursor = cursor.parentId ? byId.get(cursor.parentId) : undefined;
   }
   return {};
@@ -277,8 +331,14 @@ export function replayMvuFrom(db: Db, chat: ChatRow, fromNodeId: string | null):
 
   // 基准：起点之前最近的一份快照
   let current: Record<string, unknown> = {};
+  /** 起点之前遇到过被清理的快照：重算的起点比用户以为的更早，要提示 */
+  let skippedPruned = false;
   for (let i = startIndex - 1; i >= 0; i -= 1) {
     const snapshot = path[i]?.variables;
+    if (snapshot && isPrunedSnapshot(snapshot)) {
+      skippedPruned = true;
+      continue;
+    }
     if (snapshot) {
       current = snapshot;
       break;
@@ -310,9 +370,127 @@ export function replayMvuFrom(db: Db, chat: ChatRow, fromNodeId: string | null):
       updates: result.updates,
       errors: result.errors,
       ...(i === startIndex && init.initialized.length > 0 ? { initialized: init.initialized } : {}),
+      ...(out.length === 0 && skippedPruned
+        ? { warnings: ['起点之前的旧快照已被清理，从更早的完整快照（或 [InitVar] 初始值）起算'] }
+        : {}),
     });
   }
   return out;
+}
+
+/* ------------------------------------------------------------------ */
+/* M5（三）§3.5：额外模型解析、旧快照清理、schema 校验                   */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 一轮生成结束后的 MVU 总入口（chats 路由调它）：
+ *
+ * 1. 设置了额外模型且（`when='always'`，或 `when='missing'` 且正文里没有更新命令）→
+ *    请求额外模型写一段 `<UpdateVariable>`，用它代替正文去跑引擎，节点 `extra.mvuSource='extra-model'`；
+ *    额外模型失败时退回正文（`missing` 下正文里本来就没有命令，等于没更新），错误记进 errors；
+ * 2. 否则照旧解析正文；
+ * 3. 写入后按 `keepSnapshots` 清理旧快照；
+ * 4. 会话注册过 message 作用域的 schema 时校验结果，问题写进节点 `extra.mvuWarnings`（不回滚）。
+ */
+export async function runMvuAfterGeneration(
+  db: Db,
+  chat: ChatRow,
+  node: NodeRow,
+  text: string,
+): Promise<MvuNodeResult | null> {
+  const settings = readMvuSettings(db);
+  if (!settings.enabled) return null;
+  const extra = settings.extraModel;
+  const useExtra = extra !== undefined && (extra.when === 'always' || !hasMvuCommands(text));
+
+  let result: MvuNodeResult | null;
+  if (useExtra) {
+    const init = ensureMvuInitialized(db, chat, baseSnapshotFor(db, chat, node));
+    const reply = await requestExtraModelUpdate(db, chat, extra, {
+      variables: init.variables,
+      text,
+      bookIds: visibleBookIds(db, chat),
+    });
+    if ('error' in reply) {
+      result = runMvuForNode(db, chat, node, extra.when === 'always' ? '' : text);
+      const error = { command: '[额外模型]', message: reply.error };
+      result = result
+        ? { ...result, errors: [...result.errors, error] }
+        : {
+            nodeId: node.id,
+            changed: false,
+            variables: node.variables ?? init.variables,
+            updates: [],
+            errors: [error],
+          };
+    } else {
+      result = runMvuForNode(db, chat, node, reply.text);
+      if (result) result = { ...result, source: 'extra-model' };
+      markNodeExtra(db, node.id, { mvuSource: 'extra-model' });
+    }
+  } else {
+    result = runMvuForNode(db, chat, node, text);
+    if (result) result = { ...result, source: 'message' };
+  }
+
+  if (result) {
+    const warnings = validateAgainstSchema(chat, result.variables);
+    if (warnings.length > 0) {
+      markNodeExtra(db, node.id, { mvuWarnings: warnings });
+      result = { ...result, warnings };
+    }
+  }
+  pruneSnapshots(db, chat.id, settings.keepSnapshots);
+  return result;
+}
+
+/** 合并写节点 `extra`（不覆盖别的字段） */
+function markNodeExtra(db: Db, nodeId: string, patch: Record<string, unknown>): void {
+  const row = db
+    .select({ extra: schema.messageNodes.extra })
+    .from(schema.messageNodes)
+    .where(eq(schema.messageNodes.id, nodeId))
+    .get();
+  db.update(schema.messageNodes)
+    .set({ extra: { ...(row?.extra ?? {}), ...patch } })
+    .where(eq(schema.messageNodes.id, nodeId))
+    .run();
+}
+
+/** message 作用域 schema 校验（registerVariableSchema，M5（三）§1） */
+export function validateAgainstSchema(
+  chat: Pick<ChatRow, 'metadata'>,
+  variables: Record<string, unknown>,
+): string[] {
+  const messageSchema = readVariableSchemas(chat).message;
+  if (!messageSchema) return [];
+  return validateJsonSchema(variables, messageSchema).map(
+    (issue) => `${issue.path === '' ? '(根)' : issue.path}：${issue.message}`,
+  );
+}
+
+/**
+ * 旧楼层快照清理（`mvu.keepSnapshots`）：当前 head 路径上距 head 超过 N 层的节点，
+ * 快照换成 `{ $pruned: true }`。只动当前路径（别的分支上的快照留着，切回去还能用）。
+ * 返回清理了几个节点。
+ */
+export function pruneSnapshots(db: Db, chatId: string, keep: number): number {
+  if (!(keep > 0)) return 0;
+  const chat = db.select().from(schema.chats).where(eq(schema.chats.id, chatId)).get();
+  if (!chat?.headNodeId) return 0;
+  const path = pathToNode(loadNodes(db, chatId), chat.headNodeId);
+  const cutoff = path.length - 1 - keep;
+  let pruned = 0;
+  for (let i = 0; i < cutoff; i += 1) {
+    const node = path[i];
+    if (!node?.variables || isPrunedSnapshot(node.variables)) continue;
+    db.update(schema.messageNodes)
+      .set({ variables: { ...PRUNED_SNAPSHOT } })
+      .where(eq(schema.messageNodes.id, node.id))
+      .run();
+    pruned += 1;
+  }
+  return pruned;
 }
 
 export { MVU_EVENTS };

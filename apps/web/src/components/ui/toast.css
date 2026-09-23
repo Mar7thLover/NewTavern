@@ -1,0 +1,37 @@
+/* 提示条的入场：从下方（窄屏从上方）轻移入；减少动效时只做透明度。 */
+@keyframes nt-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--nt-toast-shift, 6px));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes nt-toast-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.nt-toast-enter {
+  --nt-toast-shift: -6px;
+  animation: nt-toast-in var(--dur-panel, 160ms) var(--ease, ease-out) both;
+}
+
+@media (min-width: 768px) {
+  .nt-toast-enter {
+    --nt-toast-shift: 6px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nt-toast-enter {
+    animation-name: nt-toast-fade;
+  }
+}

@@ -3,6 +3,7 @@ import { isNull } from 'drizzle-orm';
 import { schema, type Db } from '../db/client.js';
 import { extractCharacterBook } from './character-book.js';
 import { extractEmbeddedRegex } from './embedded-regex.js';
+import { backfillPresetScripts } from './scripts.js';
 
 /**
  * 启动时的一次性回填（幂等）。见 docs/M3-CONTRACT.md §3.1 / §3.2。
@@ -68,4 +69,14 @@ export function backfillEmbeddedRegex(db: Db): { character: number; preset: numb
     );
   }
   return counts;
+}
+
+/**
+ * 回填「预设自带的酒馆助手脚本」（M5（三）§2.1）：老库里导入过的预设补抽进脚本库。
+ * 幂等（已抽过的预设跳过）；一律回填成关闭——以前从没跑过，开不开由用户在「设置 · 脚本库」里定。
+ */
+export function backfillPresetScriptRows(db: Db): { preset: number } {
+  const preset = backfillPresetScripts(db);
+  if (preset > 0) console.log(`[newtavern] 回填预设自带脚本：${preset} 个（默认关闭，在设置 · 脚本库里开）`);
+  return { preset };
 }

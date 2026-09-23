@@ -4,7 +4,11 @@ import { createApp } from './app.js';
 import { createDatabase } from './db/client.js';
 import { runMigrations } from './db/migrate.js';
 import { dataDir, dbPath, host, port, webDist } from './env.js';
-import { backfillCharacterBooks, backfillEmbeddedRegex } from './services/backfill.js';
+import {
+  backfillCharacterBooks,
+  backfillEmbeddedRegex,
+  backfillPresetScriptRows,
+} from './services/backfill.js';
 import { seedBuiltinPreset } from './services/presets.js';
 
 const db = createDatabase(dbPath);
@@ -13,6 +17,8 @@ runMigrations(db);
 backfillCharacterBooks(db);
 // 老库里的卡 / 预设自带的正则补抽进正则库（§3.2 修正）
 backfillEmbeddedRegex(db);
+// 老库里的预设自带的酒馆助手脚本补抽进脚本库（M5（三）§2.1，回填成关闭）
+backfillPresetScriptRows(db);
 // 内置默认预设写进预设库（幂等；用户删掉后不再种回），并把没选预设的旧会话改绑过去
 seedBuiltinPreset(db);
 

@@ -68,6 +68,13 @@ export function MigrationRun({ state, onAgain }: { state: RunState; onAgain: () 
               skipped: sum('skipped'),
               failed: sum('failed'),
             })}
+            {/* 背景单列（M4（二）§A.5） */}
+            {state.items.some((item) => item.category === 'backgrounds') &&
+              ` · ${t('backgrounds.migration.summary', {
+                count: state.items.filter(
+                  (item) => item.category === 'backgrounds' && item.status === 'imported',
+                ).length,
+              })}`}
           </p>
         </div>
         <div
@@ -98,7 +105,9 @@ export function MigrationRun({ state, onAgain }: { state: RunState; onAgain: () 
                   {t(`migration.run.status.${item.status}`)}
                 </span>
                 <span className="w-16 shrink-0 text-xs text-ink-3">
-                  {t(`migration.review.categories.${item.category}`)}
+                  {item.category === 'backgrounds'
+                    ? t('backgrounds.migration.category')
+                    : t(`migration.review.categories.${item.category}`)}
                 </span>
                 <span className="min-w-0 flex-1 text-sm break-all">{itemLabel(item, t)}</span>
               </span>

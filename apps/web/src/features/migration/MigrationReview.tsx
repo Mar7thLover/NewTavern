@@ -43,6 +43,10 @@ export function MigrationReview({
   const { t } = useTranslation();
   const [selection, setSelection] = useState(() => initialSelection(inventory));
   const [regex, setRegex] = useState(inventory.regex.newCount > 0);
+  const helperScripts = inventory.scripts ?? { count: 0, newCount: 0, globalEnabled: true };
+  const [scripts, setScripts] = useState(helperScripts.newCount > 0);
+  const backgroundInventory = inventory.backgrounds ?? { count: 0, newCount: 0 };
+  const [backgrounds, setBackgrounds] = useState(backgroundInventory.newCount > 0);
   const [worldInfo, setWorldInfo] = useState(inventory.worldInfo.hasSettings);
   const [defaultPersona, setDefaultPersona] = useState(inventory.defaultPersona !== null);
 
@@ -115,8 +119,10 @@ export function MigrationReview({
     selection.lorebooks.size +
     selection.personas.size +
     (regex ? inventory.regex.newCount : 0) +
+    (scripts ? helperScripts.newCount : 0) +
     (worldInfo ? 1 : 0) +
-    (defaultPersona ? 1 : 0);
+    (defaultPersona ? 1 : 0) +
+    (backgrounds ? backgroundInventory.count : 0);
 
   const submit = () =>
     onStart({
@@ -126,15 +132,20 @@ export function MigrationReview({
       lorebooks: [...selection.lorebooks],
       personas: [...selection.personas],
       regex,
+      scripts,
       worldInfo,
       defaultPersona,
+      backgrounds,
     });
 
   const settingsTotal =
     (inventory.regex.count > 0 ? 1 : 0) +
+    (helperScripts.count > 0 ? 1 : 0) +
     (inventory.worldInfo.hasSettings ? 1 : 0) +
-    (inventory.defaultPersona !== null ? 1 : 0);
-  const settingsSelected = (regex ? 1 : 0) + (worldInfo ? 1 : 0) + (defaultPersona ? 1 : 0);
+    (inventory.defaultPersona !== null ? 1 : 0) +
+    (backgroundInventory.count > 0 ? 1 : 0);
+  const settingsSelected =
+    (regex ? 1 : 0) + (scripts ? 1 : 0) + (worldInfo ? 1 : 0) + (defaultPersona ? 1 : 0) + (backgrounds ? 1 : 0);
 
   return (
     <div data-part="migration-review" className="space-y-10">
@@ -172,6 +183,29 @@ export function MigrationReview({
             }
           />
           <CheckRow
+            checked={scripts && helperScripts.newCount > 0}
+            disabled={helperScripts.newCount === 0}
+            onChange={setScripts}
+            label={t('scripts.migration.label')}
+            meta={
+              helperScripts.count > 0
+                ? t('scripts.migration.hint', helperScripts) +
+                  (helperScripts.globalEnabled ? '' : t('scripts.migration.globalOff'))
+                : t('migration.review.none')
+            }
+          />
+          <CheckRow
+            checked={backgrounds && backgroundInventory.newCount > 0}
+            disabled={backgroundInventory.newCount === 0}
+            onChange={setBackgrounds}
+            label={t('backgrounds.migration.label')}
+            meta={
+              backgroundInventory.count > 0
+                ? t('backgrounds.migration.hint', backgroundInventory)
+                : t('migration.review.none')
+            }
+          />
+          <CheckRow
             checked={worldInfo && inventory.worldInfo.hasSettings}
             disabled={!inventory.worldInfo.hasSettings}
             onChange={setWorldInfo}
@@ -202,7 +236,6 @@ export function MigrationReview({
 
       <p data-part="migration-skipped" className="text-xs leading-relaxed text-ink-3">
         {t('migration.review.skipped', {
-          backgrounds: inventory.skipped.backgrounds,
           instruct: inventory.skipped.instruct,
           contextTemplates: inventory.skipped.context,
           themes: inventory.skipped.themes,

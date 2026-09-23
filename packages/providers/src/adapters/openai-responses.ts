@@ -12,6 +12,7 @@ import {
 import { irToChatMessages, partsToText, type ChatMessage } from '../messages.js';
 import { parseSseStream } from '../sse.js';
 import { canDisableThinking, resolveThinking, stEffortToOpenAI } from '../thinking.js';
+import { checkForcedTool, syntheticCallId, toolResultText } from '../tools.js';
 import type {
   BuildOptions,
   Connection,
@@ -74,18 +75,21 @@ function mapRole(role: ChatMessage['role']): ResponsesRole {
 
 /**
  * 渲染一条消息：
- * 返回 `leading` 是必须排在该消息**之前**的独立 input 项（历史加密推理项），
- * `content` 是消息自身的内容块。
+ * 返回 `leading` 是必须排在该消息**之前**的独立 input 项（历史加密推理项、`function_call_output`），
+ * `content` 是消息自身的内容块，`trailing` 是排在消息**之后**的 `function_call` 项
+ * （同一轮里的顺序：reasoning → message → function_call）。
  */
 function renderMessage(
   msg: ChatMessage,
   model: string,
   media: MediaRenderer,
   warnings: string[],
-): { leading: ResponsesInputItem[]; content: ResponsesContent[] } {
+): { leading: ResponsesInputItem[]; content: ResponsesContent[]; trailing: ResponsesInputItem[] } {
   const role = mapRole(msg.role);
   const leading: ResponsesInputItem[] = [];
+  const results: ResponsesInputItem[] = [];
   const content: ResponsesContent[] = [];
+  const trailing: ResponsesInputItem[] = [];
   // 图片 / PDF 只放进 user 消息：assistant 只能是 output_text，developer 按保守处理
   const roleCtx = { accepts: role === 'user', role };
   // assistant 的文本是模型的历史输出，必须用 output_text；user/developer 用 input_text
@@ -130,10 +134,77 @@ function renderMessage(
         });
         break;
       }
+      case 'tool_call':
+        if (msg.role !== 'assistant') {
+          warnings.push(`工具调用只能出现在 assistant 消息里，已丢弃 ${part.name}`);
+          break;
+        }
+        trailing.push({
+          type: 'function_call',
+          call_id: part.id,
+          name: part.name,
+          arguments: part.args,
+        });
+        break;
+      case 'tool_result':
+        if (msg.role !== 'user') {
+          warnings.push(`工具结果只能出现在 user 段里，已丢弃 ${part.name}`);
+          break;
+        }
+        results.push({
+          type: 'function_call_output',
+          call_id: part.callId,
+          output: toolResultText(part),
+        });
+        break;
     }
   }
 
-  return { leading, content };
+  return { leading: [...leading, ...results], content, trailing };
+}
+
+/** ir.tools / toolChoice / responseFormat → 请求体字段（image_generation 工具之后再并入） */
+function applyTools(
+  body: ResponsesBody,
+  ir: PromptIR,
+  caps: ModelCapabilities,
+  model: string,
+  warnings: string[],
+): void {
+  const tools = ir.tools ?? [];
+  if (tools.length > 0) {
+    if (!caps.tools) warnings.push(`模型 ${model} 未标注支持工具调用，仍按原样发送 tools`);
+    body.tools = tools.map((t) => ({
+      type: 'function',
+      name: t.name,
+      description: t.description,
+      parameters: t.parameters,
+      // Responses 的 strict 缺省为 true（要求全字段 required + additionalProperties:false），显式写出
+      strict: t.strict ?? false,
+    }));
+    checkForcedTool(ir, warnings);
+    const choice = ir.toolChoice;
+    if (choice !== undefined) {
+      body.tool_choice =
+        typeof choice === 'object' ? { type: 'function', name: choice.name } : choice;
+    }
+  } else if (ir.toolChoice !== undefined) {
+    warnings.push('没有 tools，已忽略 toolChoice');
+  }
+  const rf = ir.responseFormat;
+  if (rf) {
+    if (!caps.structuredOutput) {
+      warnings.push(`模型 ${model} 未标注支持结构化输出，仍按原样发送 text.format`);
+    }
+    body.text = {
+      format: {
+        type: 'json_schema',
+        name: rf.name,
+        schema: rf.schema,
+        ...(rf.strict === undefined ? {} : { strict: rf.strict }),
+      },
+    };
+  }
 }
 
 function asRecord(v: unknown): Record<string, unknown> | undefined {
@@ -198,9 +269,10 @@ function buildRequest(
   });
   const input: ResponsesInputItem[] = [];
   for (const msg of working) {
-    const { leading, content } = renderMessage(msg, model, media, warnings);
+    const { leading, content, trailing } = renderMessage(msg, model, media, warnings);
     input.push(...leading);
     if (content.length > 0) input.push({ role: mapRole(msg.role), content });
+    input.push(...trailing);
   }
   media.flush();
 
@@ -254,6 +326,9 @@ function buildRequest(
   } else if (thinkingOpt.effort !== undefined || thinkingOpt.budgetTokens !== undefined) {
     warnings.push(`模型 ${model} 不支持推理参数，thinking 配置已丢弃`);
   }
+
+  // 工具调用与结构化输出（M6 契约 §1.2）
+  applyTools(body, ir, caps, model, warnings);
 
   // 生图：image_generation 工具单独计费，缺省关，只在显式开启时追加（与已有 tools 合并）
   if (resolveImageOutput(opts, caps, false, model, warnings)) {
@@ -413,6 +488,22 @@ function refusalOf(item: Record<string, unknown>): string {
   return out;
 }
 
+interface ResponsesCallState {
+  id: string;
+  name: string;
+  /** 已发出过参数片段（done 事件据此决定是否兜底补发完整参数） */
+  sentArgs: boolean;
+}
+
+/** 函数调用状态的查找键：item id 优先，其次 output_index */
+function callKeys(c: Record<string, unknown>, item: Record<string, unknown> | undefined): string[] {
+  const keys: string[] = [];
+  const itemId = typeof c.item_id === 'string' ? c.item_id : item?.id;
+  if (typeof itemId === 'string' && itemId !== '') keys.push(`id:${itemId}`);
+  if (typeof c.output_index === 'number') keys.push(`idx:${c.output_index}`);
+  return keys;
+}
+
 function errorEvent(
   code: unknown,
   message: unknown,
@@ -439,6 +530,39 @@ async function* stream(
   let usage: Extract<GenEvent, { type: 'usage' }> | undefined;
   let stopEvent: Extract<GenEvent, { type: 'stop' }> | undefined;
   let refusal = '';
+  /**
+   * 函数调用：`output_item.added` 给出 call_id / name，之后的 `function_call_arguments.delta`
+   * 只带 item_id / output_index，按两者回填 id 与 name。
+   */
+  const calls = new Map<string, ResponsesCallState>();
+  let callCount = 0;
+  const lookupCall = (c: Record<string, unknown>): ResponsesCallState | undefined => {
+    for (const key of callKeys(c, undefined)) {
+      const state = calls.get(key);
+      if (state) return state;
+    }
+    return undefined;
+  };
+  /** 登记一个 function_call 项（已登记过则返回原状态） */
+  const registerCall = (
+    c: Record<string, unknown>,
+    item: Record<string, unknown>,
+  ): ResponsesCallState => {
+    const keys = callKeys(c, item);
+    for (const key of keys) {
+      const existing = calls.get(key);
+      if (existing) return existing;
+    }
+    const callId = typeof item.call_id === 'string' ? item.call_id : '';
+    const state: ResponsesCallState = {
+      id: callId !== '' ? callId : syntheticCallId(callCount),
+      name: typeof item.name === 'string' ? item.name : '',
+      sentArgs: false,
+    };
+    callCount += 1;
+    for (const key of keys) calls.set(key, state);
+    return state;
+  };
 
   try {
     const res = await providerFetch(conn, req, signal);
@@ -474,6 +598,33 @@ async function* stream(
             yield { type: 'reasoning.delta', text: delta };
           break;
         }
+        case 'response.output_item.added': {
+          const item = asRecord(chunk.item);
+          if (item?.type !== 'function_call') break;
+          const state = registerCall(chunk, item);
+          const args = typeof item.arguments === 'string' ? item.arguments : '';
+          if (args !== '') state.sentArgs = true;
+          // 先报一次（参数可能为空），界面可以立刻显示「正在调用 xxx」
+          yield { type: 'tool.call', id: state.id, name: state.name, argsDelta: args };
+          break;
+        }
+        case 'response.function_call_arguments.delta': {
+          const state = lookupCall(chunk);
+          const delta = chunk.delta;
+          if (!state || typeof delta !== 'string' || delta === '') break;
+          state.sentArgs = true;
+          yield { type: 'tool.call', id: state.id, name: state.name, argsDelta: delta };
+          break;
+        }
+        case 'response.function_call_arguments.done': {
+          // 没发增量的中转站：用完整参数兜底
+          const state = lookupCall(chunk);
+          const args = chunk.arguments;
+          if (!state || state.sentArgs || typeof args !== 'string' || args === '') break;
+          state.sentArgs = true;
+          yield { type: 'tool.call', id: state.id, name: state.name, argsDelta: args };
+          break;
+        }
         case 'response.refusal.delta': {
           const delta = chunk.delta;
           if (typeof delta === 'string') refusal += delta;
@@ -496,6 +647,14 @@ async function* stream(
           } else if (item.type === 'message') {
             const text = refusalOf(item);
             if (text !== '') refusal += text;
+          } else if (item.type === 'function_call') {
+            // 既没有 added 也没有增量（非流式转流式的中转）：整项兜底
+            const state = registerCall(chunk, item);
+            const args = typeof item.arguments === 'string' ? item.arguments : '';
+            if (!state.sentArgs && args !== '') {
+              state.sentArgs = true;
+              yield { type: 'tool.call', id: state.id, name: state.name, argsDelta: args };
+            }
           }
           break;
         }
@@ -540,6 +699,11 @@ async function* stream(
   if (usage) yield usage;
   if (refusal !== '') {
     yield { type: 'stop', reason: 'refusal', detail: refusal };
+    return;
+  }
+  // Responses 的 completed 不区分是否停在函数调用上：有调用就是 tool
+  if (callCount > 0 && (stopEvent === undefined || stopEvent.reason === 'end')) {
+    yield { type: 'stop', reason: 'tool' };
     return;
   }
   yield stopEvent ?? { type: 'stop', reason: 'end' };

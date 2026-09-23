@@ -1,4 +1,4 @@
-import { createContext, useContext, type ComponentType, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, type ComponentType, type ReactNode } from 'react';
 
 import { getTheme } from './registry';
 import * as su from './su/signature';
@@ -78,6 +78,20 @@ export interface BackdropProps {
   scope: BackdropScope;
 }
 
+/** 立绘区的两种摆法：`stage` = 宽的对话列右侧、底部对齐；`strip` = 窄屏输入框上方的小窗 */
+export type SpriteLayout = 'stage' | 'strip';
+
+export interface SpriteFrameProps {
+  layout: SpriteLayout;
+  /** `strip` 折叠成头像大小时为 true（`stage` 恒为 false） */
+  collapsed: boolean;
+  /**
+   * 引擎给的立绘图层：`[data-part='sprite-image']`（内含叠放的 img，淡入淡出由引擎做，
+   * 时长读 `--sprite-fade`）。框只管画框，不要改里面 img 的尺寸规则。
+   */
+  children: ReactNode;
+}
+
 export interface ThemeSignature {
   SendButton: ComponentType<SendButtonProps>;
   SwipeIndicator: ComponentType<SwipeIndicatorProps>;
@@ -97,6 +111,11 @@ export interface ThemeSignature {
    * 雨夜的雨与颗粒、琉璃的折射光。默认什么也不画。
    */
   Backdrop: ComponentType<BackdropProps>;
+  /**
+   * 立绘框（M4（二）§B.3）：包住立绘图层的记忆物件——冰板相框、裱画轴、铜框……
+   * 根元素须是 `[data-part='sprite-frame'][data-layout]`；缺省 = 素的无框实现。
+   */
+  SpriteFrame: ComponentType<SpriteFrameProps>;
 }
 
 /* ------------------------------------------------------------------ */
@@ -105,6 +124,20 @@ export interface ThemeSignature {
 
 function Nothing(): null {
   return null;
+}
+
+/** 素的立绘框：没有框，只有图（引擎的最小形态） */
+function BareSpriteFrame({ layout, collapsed, children }: SpriteFrameProps) {
+  return (
+    <div
+      data-part="sprite-frame"
+      data-layout={layout}
+      data-collapsed={collapsed}
+      className="relative size-full"
+    >
+      {children}
+    </div>
+  );
 }
 
 /**
@@ -120,6 +153,7 @@ export const _default: ThemeSignature = {
   StreamingCursor: su.StreamingCursor,
   MessageOrnament: Nothing,
   Backdrop: Nothing,
+  SpriteFrame: BareSpriteFrame,
 };
 
 const cache = new Map<string, ThemeSignature>();
@@ -158,9 +192,45 @@ export function useSignature(): ThemeSignature {
 /* 引擎负责定位的两层（主题组件只管画）                                  */
 /* ------------------------------------------------------------------ */
 
-/** 背景层：`[data-part='backdrop'][data-scope]`，定位与层级由引擎保证 */
-export function BackdropLayer({ scope }: BackdropProps) {
+/** 用户背景的 CSS 值：`url("…")`；引号、反斜杠、换行按 URL 编码，只由应用自己写（变体 JSON 不能写 url） */
+function cssUrl(url: string): string {
+  const safe = url.replace(/["\\\r\n]/g, (char) => encodeURIComponent(char));
+  return `url("${safe}")`;
+}
+
+/**
+ * 背景层：`[data-part='backdrop'][data-scope]`，定位与层级由引擎保证。
+ *
+ * `imageUrl`（只在 app 作用域有意义，M4（二）§A.3）：有图时在 `<html>` 上写 `data-has-backdrop`
+ * 并把图挂在 `--user-backdrop` 上，层里多一个 `[data-part='user-backdrop']`（排在世界自己的
+ * Backdrop 之后）。它怎么出现——隔冰、隔湿玻璃、窗外景——由各世界的 `media.css` 决定，
+ * 它们可以用 z-index 把自己的雨、颗粒压回到图上面。
+ */
+export function BackdropLayer({ scope, imageUrl = null }: BackdropProps & { imageUrl?: string | null }) {
   const { Backdrop } = useSignature();
+  const url = scope === 'app' ? imageUrl : null;
+
+  useEffect(() => {
+    if (scope !== 'app') return;
+    const root = document.documentElement;
+    if (url) {
+      root.setAttribute('data-has-backdrop', '');
+      root.style.setProperty('--user-backdrop', cssUrl(url));
+    } else {
+      root.removeAttribute('data-has-backdrop');
+      root.style.removeProperty('--user-backdrop');
+    }
+  }, [scope, url]);
+
+  useEffect(
+    () => () => {
+      if (scope !== 'app') return;
+      document.documentElement.removeAttribute('data-has-backdrop');
+      document.documentElement.style.removeProperty('--user-backdrop');
+    },
+    [scope],
+  );
+
   return (
     <div
       data-part="backdrop"
@@ -172,6 +242,13 @@ export function BackdropLayer({ scope }: BackdropProps) {
       )}
     >
       <Backdrop scope={scope} />
+      {url && (
+        <div
+          data-part="user-backdrop"
+          className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+          style={{ backgroundImage: 'var(--user-backdrop)' }}
+        />
+      )}
     </div>
   );
 }

@@ -282,11 +282,18 @@ describe('openai-chat buildRequest', () => {
       apiKey: 'k',
     };
     const ir = makeIr([text('h1', 'user', 'hi')]);
-    const off = openaiChatAdapter.buildRequest(ir, zai, 'glm-5.3-flash', {
+    const off = openaiChatAdapter.buildRequest(ir, zai, 'glm-4.5-flash', {
       thinking: { enabled: false },
     }).body as Record<string, unknown>;
     expect(off.thinking).toEqual({ type: 'disabled' });
     expect(off.reasoning_effort).toBeUndefined();
+
+    // glm-5.3*：上游 2026-09-22 起拒绝关闭推理（1210），目录标 canDisableThinking=false，不再发 disabled
+    const off53 = openaiChatAdapter.buildRequest(ir, zai, 'glm-5.3-flash', {
+      thinking: { enabled: false },
+    });
+    expect((off53.body as Record<string, unknown>).thinking).toBeUndefined();
+    expect(off53.warnings?.length ?? 0).toBeGreaterThan(0);
 
     const high = openaiChatAdapter.buildRequest(ir, zai, 'glm-5.3-flash', {
       thinking: { effort: 'high' },

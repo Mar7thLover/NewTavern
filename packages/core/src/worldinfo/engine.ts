@@ -24,6 +24,7 @@ import { filterByInclusionGroups } from './groups.js';
 import { TimedEffects } from './timed.js';
 import {
   type WIActivation,
+  type WIActivationDiagnostic,
   type WIActivationReason,
   type WIBook,
   type WIEntry,
@@ -126,6 +127,7 @@ interface ActivationDraft {
   matchedKeys: string[];
   recursionLevel: number;
   groupWinner: boolean;
+  diagnostic?: WIActivationDiagnostic;
 }
 
 function emptyBuckets(): WIScanBuckets {
@@ -233,7 +235,10 @@ export function scanWorldInfo(input: WIScanInput): WIScanResult {
     let nextScanState: ScanState = SCAN_STATE.NONE;
     let nextRecursionLevel = recursionLevel;
     const activatedNow: WIEntry[] = [];
-    const reasons = new Map<string, { reason: WIActivationReason; matchedKeys: string[] }>();
+    const reasons = new Map<
+      string,
+      { reason: WIActivationReason; matchedKeys: string[]; diagnostic?: WIActivationDiagnostic }
+    >();
 
     const keyReason: WIActivationReason =
       scanState === SCAN_STATE.RECURSION
@@ -317,7 +322,11 @@ export function scanWorldInfo(input: WIScanInput): WIScanResult {
 
       if (entry.decorators?.['activate'] === true) {
         activatedNow.push(entry);
-        reasons.set(entry.id, { reason: 'constant', matchedKeys: [] });
+        reasons.set(entry.id, {
+          reason: 'constant',
+          matchedKeys: [],
+          ...(input.diagnostics ? { diagnostic: { via: 'decorator' } } : {}),
+        });
         continue;
       }
       if (entry.decorators?.['dont_activate'] === true) {
@@ -356,7 +365,22 @@ export function scanWorldInfo(input: WIScanInput): WIScanResult {
 
       if (!matchSecondaryKeys(entry, textToScan, buffer, substitute)) continue;
       activatedNow.push(entry);
-      reasons.set(entry.id, { reason: keyReason, matchedKeys });
+      reasons.set(entry.id, {
+        reason: keyReason,
+        matchedKeys,
+        ...(input.diagnostics
+          ? {
+              diagnostic: {
+                via: 'secondary',
+                // 与主键同样收集全部命中的副键（matchKeys 是纯函数，不影响判定）
+                matchedSecondaryKeys: entry.secondaryKeys.filter((key) => {
+                  const value = substitute(key);
+                  return !!value && buffer.matchKeys(textToScan, value.trim(), entry);
+                }),
+              },
+            }
+          : {}),
+      });
     }
 
     // sticky 优先，其次按 sortedEntries 的顺序（ST 用于概率与预算检查的顺序）
@@ -423,6 +447,9 @@ export function scanWorldInfo(input: WIScanInput): WIScanResult {
         matchedKeys: reasons.get(entry.id)?.matchedKeys ?? [],
         recursionLevel,
         groupWinner: groupedIds.has(entry.id),
+        ...(reasons.get(entry.id)?.diagnostic
+          ? { diagnostic: reasons.get(entry.id)?.diagnostic }
+          : {}),
       });
     }
 
@@ -496,6 +523,7 @@ export function scanWorldInfo(input: WIScanInput): WIScanResult {
         groupWinner: draft.groupWinner,
         content,
         tokens: countTokens(content),
+        ...(draft.diagnostic ? { diagnostic: draft.diagnostic } : {}),
       };
     }),
   );

@@ -1,4 +1,5 @@
 import type { ThemeSignature } from './signature';
+import type { ThemeVariant } from './variants';
 
 /** 一个主题支持的模式 */
 export type ThemeMode = 'light' | 'dark';
@@ -44,6 +45,12 @@ export interface ThemeMeta {
   loadFonts?: () => Promise<void>;
   /** 主题选项（外观页在模式切换下方渲染成开关） */
   options?: ThemeOption[];
+  /**
+   * 用户背景（M4（二）§A）在这个世界里怎么出现：
+   * - `world`（缺省）：由世界自己的 `media.css` 按它的材质处理（隔冰、隔湿玻璃、窗外景……）；
+   * - `veil`：默认不显示；外观设置里打开「在素 / 书斋里也显示背景」后，只盖一层按模式调色的淡化遮罩。
+   */
+  backdrop?: 'world' | 'veil';
 }
 
 /**
@@ -98,4 +105,23 @@ export function optionAttributes(
   const attributes: Record<string, ThemeOptionValue> = {};
   for (const [key, value] of Object.entries(values)) attributes[`data-opt-${key}`] = value;
   return attributes;
+}
+
+/* ------------------------------------------------------------------ */
+/* 主题变体（M4（二）§C）：只覆盖槽位值与主题选项，世界的形态不变          */
+/* ------------------------------------------------------------------ */
+
+let variants: readonly ThemeVariant[] = [];
+
+/** 注册（整体替换）当前可用的变体列表：来自 settings KV `themeVariants`，已校验 */
+export function registerVariants(list: readonly ThemeVariant[]): void {
+  variants = list;
+}
+
+export function listVariants(): readonly ThemeVariant[] {
+  return variants;
+}
+
+export function findVariant(id: string | null | undefined): ThemeVariant | undefined {
+  return id ? variants.find((variant) => variant.id === id) : undefined;
 }

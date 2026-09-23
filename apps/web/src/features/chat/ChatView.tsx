@@ -11,6 +11,14 @@ import { useAttachmentTray } from './useAttachmentTray';
 import { useGeneration } from './useGeneration';
 import { LightboxHost } from '../../components/Lightbox';
 import { ScriptRunner } from '../cards/ScriptRunner';
+import { useChatBackdrop } from '../backgrounds/BackgroundPicker';
+import {
+  SPRITE_STAGE_MIN_WIDTH,
+  SpriteStage,
+  useElementWidth,
+  useSpriteState,
+} from '../sprites/SpriteStage';
+import { isImageGenNode, useImagineActions } from '../imagine/ImagineMenu';
 import { IconButton } from '../../components/ui/icon-button';
 import {
   useGenerationDefault,
@@ -93,15 +101,27 @@ export function ChatView({
     patchChat.mutate({ id: chat.id, headNodeId: deepestLeaf(chat.nodes, siblingId) });
   };
 
-  /** 重生成 / 新 swipe：在目标助手节点的父节点下再生成一条 */
+  /** 重生成 / 新 swipe：在目标助手节点的父节点下再生成一条；生图消息改为「重画」（M4（二）§D.3） */
+  const imagine = useImagineActions(chat.id);
   const regenerate = (node: MessageNode) => {
-    generation.generate({ parentId: node.parentId });
+    if (isImageGenNode(node)) imagine.redraw(node);
+    else generation.generate({ parentId: node.parentId });
   };
 
   const title = chat.title?.trim() || chat.character?.name || t('chat.list.untitled');
 
+  // 背景（M4（二）§A）：会话 > 角色 > 全局，交给应用外壳的背景层
+  useChatBackdrop(chat);
+  // 立绘（M4（二）§B.3）：对话列够宽放在消息区右侧，否则收成输入框上方的小窗
+  const viewRef = useRef<HTMLDivElement>(null);
+  const viewWidth = useElementWidth(viewRef);
+  const sprite = useSpriteState(chat, path, generation.isGenerating);
+  const spriteLayout = viewWidth >= SPRITE_STAGE_MIN_WIDTH ? 'stage' : 'strip';
+  const spriteName = chat.character?.name ?? title;
+
   return (
     <div
+      ref={viewRef}
       data-part="chat-view"
       className="relative flex h-full min-h-0 min-w-0 flex-col overflow-x-hidden"
       onDragEnter={onDragEnter}
@@ -130,19 +150,25 @@ export function ChatView({
         </IconButton>
       </header>
 
-      <MessageList
-        chat={chat}
-        path={path}
-        generation={generation}
-        onSwitchSibling={switchSibling}
-        onRegenerate={regenerate}
-      />
+      {/* 消息区 + （宽时）右侧立绘；结构恒定，切换摆法时消息列表不重建 */}
+      <div data-part="chat-stage" className="flex min-h-0 min-w-0 flex-1">
+        <MessageList
+          chat={chat}
+          path={path}
+          generation={generation}
+          onSwitchSibling={switchSibling}
+          onRegenerate={regenerate}
+        />
+        {spriteLayout === 'stage' && <SpriteStage state={sprite} layout="stage" name={spriteName} />}
+      </div>
+      {spriteLayout === 'strip' && <SpriteStage state={sprite} layout="strip" name={spriteName} />}
 
       {/* 脚本库：隐藏的脚本帧 + 脚本按钮条（M5 §4.7），紧贴输入框上方 */}
       <ScriptRunner chatId={chat.id} />
 
       <Composer
         resetKey={chat.id}
+        chatId={chat.id}
         isGenerating={generation.isGenerating}
         onStop={generation.stop}
         tray={tray}

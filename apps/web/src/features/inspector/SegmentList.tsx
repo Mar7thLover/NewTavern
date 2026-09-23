@@ -43,6 +43,7 @@ export function SegmentList({ ir, breakpoints, moves, focusId, onJump }: Segment
           <li key={segment.id}>
             <SegmentCard
               segment={segment}
+              templated={ir.meta.templated?.includes(segment.id) ?? false}
               moves={(moves ?? []).filter((move) => move.segmentId === segment.id)}
               focused={focusId === segment.id}
               {...(onJump ? { onJump } : {})}
@@ -58,11 +59,14 @@ export function SegmentList({ ir, breakpoints, moves, focusId, onJump }: Segment
 /** 单个段：左侧 2px 明度色条 + 元信息 + 可折叠正文；不填底、下方一根发丝线 */
 function SegmentCard({
   segment,
+  templated,
   moves,
   focused,
   onJump,
 }: {
   segment: Segment;
+  /** 内容经过 EJS 模板渲染（`ir.meta.templated`） */
+  templated: boolean;
   moves: LayoutMove[];
   focused: boolean;
   onJump?: (segmentId: string) => void;
@@ -91,6 +95,7 @@ function SegmentCard({
         <span className="text-xs font-medium">{t(`inspector.origins.${segment.origin.kind}`)}</span>
         <Badge variant="muted">{segment.role}</Badge>
         <Badge variant="outline">{t(`inspector.stability.${segment.stability}`)}</Badge>
+        {templated && <Badge variant="outline">{t('inspector.flags.templated')}</Badge>}
         {segment.anchor.slot === 'history' && segment.anchor.depth !== undefined && (
           <Badge variant="outline">
             {t('inspector.segments.depth', { depth: segment.anchor.depth })}

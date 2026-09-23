@@ -8,10 +8,12 @@ import { logger } from 'hono/logger';
 
 import type { Db } from './db/client.js';
 import { createAssetsRoutes } from './routes/assets.js';
+import { createBackgroundsRoutes } from './routes/backgrounds.js';
 import { createCharactersRoutes } from './routes/characters.js';
 import { createChatTransferRoutes } from './routes/chat-transfer.js';
 import { createChatsRoutes } from './routes/chats.js';
 import { createConnectionsRoutes } from './routes/connections.js';
+import { createImagineRoutes, createJobsRoutes } from './routes/imagine.js';
 import { createImportRoutes } from './routes/import.js';
 import { createInspectRoutes } from './routes/inspect.js';
 import { createLorebooksRoutes } from './routes/lorebooks.js';
@@ -19,12 +21,19 @@ import { createMigrationRoutes } from './routes/migration.js';
 import { createModelsRoutes } from './routes/models.js';
 import { createPersonasRoutes } from './routes/personas.js';
 import { createPresetsRoutes } from './routes/presets.js';
+import { createPromptLibraryRoutes } from './routes/prompt-library.js';
 import { createRegexRoutes } from './routes/regex.js';
 import { createSandboxRoutes } from './routes/sandbox.js';
+import { createScriptsRoutes } from './routes/scripts.js';
 import { createSettingsRoutes } from './routes/settings.js';
+import { createExpressionRoutes, createSpritesRoutes } from './routes/sprites.js';
+import { createStudioRoutes } from './routes/studio.js';
 import { createChatVariablesRoutes, createVariablesRoutes } from './routes/variables.js';
+import { createVersionsRoutes } from './routes/versions.js';
+import { createWritingRoutes } from './routes/writing.js';
 import { createAssetsService } from './services/assets.js';
 import { createImporter } from './services/importer.js';
+import { configureMvuExtra } from './services/mvu-extra.js';
 import { createProviderService, ensureBuiltinAdapters } from './services/providers.js';
 import { createSecrets } from './services/secrets.js';
 
@@ -44,6 +53,8 @@ export function createApp({ db, dataDir, webDist }: AppOptions) {
   const providers = createProviderService(db, secrets);
   // 内置适配器由 packages/providers 注册；未就绪时静默跳过（契约 §5 [S→P]）
   void ensureBuiltinAdapters();
+  // MVU 额外模型解析在 chats 路由里触发，那里拿不到 dataDir（M5（三）§3.5）
+  configureMvuExtra({ dataDir, providers });
 
   app.use('/api/*', logger());
   app.use('/api/*', cors());
@@ -52,10 +63,15 @@ export function createApp({ db, dataDir, webDist }: AppOptions) {
     .get('/health', (c) => c.json({ ok: true, name: 'newtavern', time: new Date().toISOString() }))
     .route('/settings', createSettingsRoutes(db))
     .route('/personas', createPersonasRoutes(db, assets))
-    .route('/characters', createCharactersRoutes(db, importer))
+    .route('/characters', createCharactersRoutes(db, importer, assets))
+    // 立绘（M4（二）§B）：独立文件，第二次挂到 /characters
+    .route('/characters', createSpritesRoutes(db, assets))
+    .route('/backgrounds', createBackgroundsRoutes(db, assets))
     .route('/presets', createPresetsRoutes(db, importer))
     .route('/lorebooks', createLorebooksRoutes(db, importer))
     .route('/regex', createRegexRoutes(db))
+    // 酒馆助手脚本库（M5（三）§2）
+    .route('/scripts', createScriptsRoutes(db))
     .route('/import', createImportRoutes(importer))
     .route('/assets', createAssetsRoutes(db, assets))
     .route('/connections', createConnectionsRoutes(db, secrets, providers))
@@ -65,9 +81,20 @@ export function createApp({ db, dataDir, webDist }: AppOptions) {
     // 变量与 MVU（M5 §3.4）、前端卡的 generate（M5 §4.6）：同样挂在 /chats 下
     .route('/chats', createChatVariablesRoutes(db))
     .route('/chats', createSandboxRoutes(db, providers, assets))
+    // 立绘表情选择（M4（二）§B.2）
+    .route('/chats', createExpressionRoutes(db, dataDir, providers))
+    // 外接生图（M4（二）§D）：`POST /chats/:id/imagine` 与 `GET /jobs/:id`
+    .route('/chats', createImagineRoutes(db, dataDir, providers, assets))
+    .route('/jobs', createJobsRoutes(db))
     .route('/variables', createVariablesRoutes(db))
     .route('/migration', createMigrationRoutes(db, assets, importer))
     .route('/inspect', createInspectRoutes(db, providers))
+    // 长篇写作（M7 §3）
+    .route('/writing', createWritingRoutes(db, dataDir))
+    // 创作工作台（M6 §2）：版本历史、提示库、测试会话
+    .route('/versions', createVersionsRoutes(db))
+    .route('/prompt-library', createPromptLibraryRoutes(db))
+    .route('/studio', createStudioRoutes(db))
     .route('/models', createModelsRoutes());
 
   app.route('/api', api);

@@ -36,7 +36,21 @@ export type Part =
   /** name：原始文件名（上传/导入时记录，渲染 PDF 的 filename 与界面展示用） */
   | { type: 'image'; assetId: string; mime: string; name?: string }
   | { type: 'document'; assetId: string; mime: string; name?: string }
-  | { type: 'reasoning_opaque'; provider: string; model: string; payload: unknown };
+  | { type: 'reasoning_opaque'; provider: string; model: string; payload: unknown }
+  /** assistant 段里模型发起的工具调用；args 为 JSON 字符串（原样回传，不重新序列化） */
+  | { type: 'tool_call'; id: string; name: string; args: string }
+  /** 工具结果；放在 role='user' 的段里（Anthropic 语义），适配器负责转成各家形态 */
+  | { type: 'tool_result'; callId: string; name: string; content: string; isError?: boolean };
+
+/** 工具选择：缺省 'auto'；`{ name }` = 强制调用该工具（M6 契约 §1.1） */
+export type ToolChoice = 'auto' | 'none' | 'required' | { name: string };
+
+/** 结构化输出：JSON Schema（M6 契约 §1.1） */
+export interface ResponseFormat {
+  name: string;
+  schema: Record<string, unknown>;
+  strict?: boolean;
+}
 
 export type SegmentOriginKind =
   | 'preset'
@@ -80,7 +94,15 @@ export interface WIActivationSummary {
 export interface PromptIR {
   model: string;
   sampling: SamplingParams;
+  /**
+   * 工具定义。组装流水线（assemble.ts）不产生工具相关字段与 part，
+   * 只有直接构造 IR 的调用方（AI 协作者、前端卡 generate）会用（M6 契约 §1）。
+   */
   tools?: ToolDef[];
+  /** 缺省 'auto'；{ name } = 强制调用该工具 */
+  toolChoice?: ToolChoice;
+  /** 结构化输出：JSON Schema（与 tools 同时给时以各家限制为准，冲突时给 warning） */
+  responseFormat?: ResponseFormat;
   /** 最终顺序的段列表 */
   segments: Segment[];
   /** breakpoints 指向 segments 下标 */
@@ -111,10 +133,11 @@ export const SQUASH_EXCLUDED_REFS: ReadonlySet<string> = new Set([
 
 /**
  * 该段能否参与 `squash_system_messages` 合并：system 角色、无 name、单个文本 part、
- * 且不是分隔段。带 image / document / reasoning_opaque 的段不合并。
+ * 且不是分隔段。带 image / document / reasoning_opaque / tool_call / tool_result 的段不合并。
  */
 export function isSquashableSegment(segment: Segment): boolean {
   if (segment.role !== 'system' || segment.name !== undefined) return false;
   if (SQUASH_EXCLUDED_REFS.has(segment.origin.ref ?? '')) return false;
+  if (segment.parts.some((p) => p.type === 'tool_call' || p.type === 'tool_result')) return false;
   return segment.parts.length === 1 && segment.parts[0]?.type === 'text';
 }

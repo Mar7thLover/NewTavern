@@ -17,7 +17,7 @@ const DESCRIPTION_POSITIONS: readonly PersonaRow['descriptionPosition'][] = [
 const ROLES: readonly PersonaRow['role'][] = ['system', 'user', 'assistant'];
 /** ST `MAX_INJECTION_DEPTH` */
 const MAX_DEPTH = 10000;
-const AVATAR_MAX_BYTES = 5 * 1024 * 1024;
+export const AVATAR_MAX_BYTES = 5 * 1024 * 1024;
 
 interface PersonaBody {
   name?: unknown;
@@ -87,7 +87,9 @@ function parseBody(db: Db, body: PersonaBody) {
 }
 
 /** 按文件头识别图片类型，不信任客户端给的 content-type */
-function sniffImageMime(bytes: Uint8Array): 'image/png' | 'image/jpeg' | 'image/webp' | null {
+export function sniffImageMime(
+  bytes: Uint8Array,
+): 'image/png' | 'image/jpeg' | 'image/webp' | null {
   const starts = (sig: number[], offset = 0) => sig.every((b, i) => bytes[offset + i] === b);
   if (starts([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return 'image/png';
   if (starts([0xff, 0xd8, 0xff])) return 'image/jpeg';
@@ -97,7 +99,7 @@ function sniffImageMime(bytes: Uint8Array): 'image/png' | 'image/jpeg' | 'image/
 }
 
 /** multipart（字段名 file）或原始字节 */
-async function readAvatarUpload(c: Context): Promise<Uint8Array | undefined> {
+export async function readAvatarUpload(c: Context): Promise<Uint8Array | undefined> {
   const contentType = c.req.header('content-type') ?? '';
   if (contentType.startsWith('multipart/form-data')) {
     const body = await c.req.parseBody();

@@ -19,6 +19,13 @@ import {
 import { irToChatMessages, mergeAdjacentSameRole, type ChatMessage } from '../messages.js';
 import { parseSseStream } from '../sse.js';
 import { canDisableThinking, resolveThinking, stEffortToGoogle } from '../thinking.js';
+import {
+  checkForcedTool,
+  isSyntheticCallId,
+  parseToolArgsObject,
+  sanitizeGoogleSchema,
+  syntheticCallId,
+} from '../tools.js';
 import type {
   BuildOptions,
   Connection,
@@ -90,6 +97,10 @@ interface GooglePart {
    */
   thoughtSignature?: string;
   inlineData?: GoogleInlineData;
+  /** 模型发起的函数调用（args 为对象；id 仅在上游给过时回传） */
+  functionCall?: { name: string; args: Record<string, unknown>; id?: string };
+  /** 函数结果（response 必须是对象） */
+  functionResponse?: { name: string; response: Record<string, unknown>; id?: string };
 }
 
 interface GoogleContent {
@@ -115,6 +126,9 @@ interface GoogleGenerationConfig {
   thinkingConfig?: GoogleThinkingConfig;
   /** 生图模型：`['TEXT','IMAGE']` 允许输出图片 */
   responseModalities?: string[];
+  /** 结构化输出：`application/json` + `responseSchema` */
+  responseMimeType?: string;
+  responseSchema?: Record<string, unknown>;
 }
 
 interface GoogleBody {
@@ -122,10 +136,77 @@ interface GoogleBody {
   safetySettings: GoogleSafetySetting[];
   generationConfig: GoogleGenerationConfig;
   systemInstruction?: { parts: GooglePart[] };
+  tools?: { functionDeclarations: Record<string, unknown>[] }[];
+  toolConfig?: { functionCallingConfig: { mode: string; allowedFunctionNames?: string[] } };
+}
+
+/**
+ * ir.tools / toolChoice / responseFormat → 请求体字段。
+ * JSON Schema 里 Gemini `Schema` 不认的关键字剔除并告警（见 tools.ts `sanitizeGoogleSchema`）。
+ * 函数调用与 JSON 输出同时用只有 Gemini 3 支持；更早的模型保留工具、丢掉结构化输出并告警。
+ */
+function applyTools(
+  body: GoogleBody,
+  ir: PromptIR,
+  caps: ModelCapabilities,
+  model: string,
+  warnings: string[],
+): void {
+  const tools = ir.tools ?? [];
+  const dropped = new Set<string>();
+  if (tools.length > 0) {
+    if (!caps.tools) warnings.push(`模型 ${model} 未标注支持工具调用，仍按原样发送 tools`);
+    body.tools = [
+      {
+        functionDeclarations: tools.map((t) => {
+          const params = sanitizeGoogleSchema(t.parameters, dropped);
+          // 无参数的函数：Gemini 要求省略 parameters 或给非空 properties 的 object
+          const empty =
+            params.type === 'object' &&
+            (typeof params.properties !== 'object' ||
+              params.properties === null ||
+              Object.keys(params.properties).length === 0);
+          return {
+            name: t.name,
+            description: t.description,
+            ...(empty ? {} : { parameters: params }),
+          };
+        }),
+      },
+    ];
+    checkForcedTool(ir, warnings);
+    const choice = ir.toolChoice;
+    if (choice === 'auto') body.toolConfig = { functionCallingConfig: { mode: 'AUTO' } };
+    else if (choice === 'none') body.toolConfig = { functionCallingConfig: { mode: 'NONE' } };
+    else if (choice === 'required') body.toolConfig = { functionCallingConfig: { mode: 'ANY' } };
+    else if (typeof choice === 'object') {
+      body.toolConfig = {
+        functionCallingConfig: { mode: 'ANY', allowedFunctionNames: [choice.name] },
+      };
+    }
+  } else if (ir.toolChoice !== undefined) {
+    warnings.push('没有 tools，已忽略 toolChoice');
+  }
+
+  const rf = ir.responseFormat;
+  if (rf) {
+    if (!caps.structuredOutput) {
+      warnings.push(`模型 ${model} 未标注支持结构化输出，仍按原样发送 responseSchema`);
+    }
+    if (tools.length > 0 && !/^gemini-3/i.test(model)) {
+      warnings.push(`模型 ${model} 不支持函数调用与 JSON 输出同时使用，已丢弃 responseFormat`);
+    } else {
+      body.generationConfig.responseMimeType = 'application/json';
+      body.generationConfig.responseSchema = sanitizeGoogleSchema(rf.schema, dropped);
+    }
+  }
+  if (dropped.size > 0) {
+    warnings.push(`Gemini 不支持 JSON Schema 关键字 ${[...dropped].join('、')}，已剔除`);
+  }
 }
 
 /** 签名附着的目标种类：模型输出里的文本段 / 图片 */
-type SignatureTarget = 'text' | 'image';
+type SignatureTarget = 'text' | 'image' | 'tool';
 
 /**
  * 历史里的一个签名。
@@ -148,7 +229,8 @@ function extractSignature(
   if (typeof payload === 'object' && payload !== null) {
     const p = payload as { thoughtSignature?: unknown; target?: unknown; ordinal?: unknown };
     if (typeof p.thoughtSignature !== 'string' || p.thoughtSignature === '') return undefined;
-    const target = p.target === 'text' || p.target === 'image' ? p.target : undefined;
+    const target =
+      p.target === 'text' || p.target === 'image' || p.target === 'tool' ? p.target : undefined;
     const ordinal =
       typeof p.ordinal === 'number' && Number.isInteger(p.ordinal) && p.ordinal >= 0
         ? p.ordinal
@@ -159,6 +241,16 @@ function extractSignature(
     };
   }
   return undefined;
+}
+
+/**
+ * functionResponse.response 必须是对象：结果本身是 JSON 对象就原样用，否则包成 `{ result }`；
+ * 出错时包成 `{ error }`（Gemini 文档推荐的形状）。
+ */
+function functionResponseBody(content: string, isError: boolean): Record<string, unknown> {
+  if (isError) return { error: content };
+  const parsed = parseToolArgsObject(content);
+  return parsed !== undefined && content.trim() !== '' ? parsed : { result: content };
 }
 
 /**
@@ -175,15 +267,19 @@ function renderParts(
   const out: GooglePart[] = [];
   const roleCtx = { accepts: role !== 'systemInstruction', role };
   /** IR 里第 n 个文本 / 图片 part 渲染到了 out 的哪个下标（被丢弃的为 -1） */
-  const slots: Record<SignatureTarget, number[]> = { text: [], image: [] };
+  const slots: Record<SignatureTarget, number[]> = { text: [], image: [], tool: [] };
+  /** functionResponse 排在 user parts 最前面（紧接上一轮 model 的 functionCall）；不参与签名下标 */
+  const responses: GooglePart[] = [];
   const signatures: PendingSignature[] = [];
   let prevOpaque = false;
-  let groupBase: Record<SignatureTarget, number> = { text: 0, image: 0 };
+  let groupBase: Record<SignatureTarget, number> = { text: 0, image: 0, tool: 0 };
 
   for (const part of parts) {
     const isOpaque = part.type === 'reasoning_opaque';
     // 组装器把每个节点的推理块放在该节点 parts 开头；合并过的消息里，签名的序号从这一组推理块之后算起
-    if (isOpaque && !prevOpaque) groupBase = { text: slots.text.length, image: slots.image.length };
+    if (isOpaque && !prevOpaque) {
+      groupBase = { text: slots.text.length, image: slots.image.length, tool: slots.tool.length };
+    }
     prevOpaque = isOpaque;
 
     switch (part.type) {
@@ -223,11 +319,45 @@ function renderParts(
         signatures.push({ ...sig, base: groupBase });
         break;
       }
+      case 'tool_call': {
+        if (role !== 'model') {
+          warnings.push(`工具调用只能出现在 assistant 消息里，已丢弃 ${part.name}`);
+          break;
+        }
+        let args = parseToolArgsObject(part.args);
+        if (args === undefined) {
+          warnings.push(`工具调用 ${part.name} 的参数不是 JSON 对象，已按 {} 回传`);
+          args = {};
+        }
+        slots.tool.push(out.length);
+        out.push({
+          functionCall: {
+            name: part.name,
+            args,
+            // 我们自己合成的 call_<n> 上游不认识，不回传
+            ...(isSyntheticCallId(part.id) ? {} : { id: part.id }),
+          },
+        });
+        break;
+      }
+      case 'tool_result':
+        if (role !== 'user') {
+          warnings.push(`工具结果只能出现在 user 段里，已丢弃 ${part.name}`);
+          break;
+        }
+        responses.push({
+          functionResponse: {
+            name: part.name,
+            response: functionResponseBody(part.content, part.isError === true),
+            ...(isSyntheticCallId(part.callId) ? {} : { id: part.callId }),
+          },
+        });
+        break;
     }
   }
 
   attachSignatures(out, slots, signatures, warnings);
-  return out;
+  return [...responses, ...out];
 }
 
 /**
@@ -259,7 +389,8 @@ function attachSignatures(
     const part = out.find(
       (p) =>
         p.thoughtSignature === undefined &&
-        (typeof p.text === 'string' || (allowImage && p.inlineData !== undefined)),
+        (typeof p.text === 'string' ||
+          (allowImage && (p.inlineData !== undefined || p.functionCall !== undefined))),
     );
     if (!part) return false;
     part.thoughtSignature = signature;
@@ -401,6 +532,9 @@ function buildRequest(
   };
 
   if (systemParts.length > 0) body.systemInstruction = { parts: systemParts };
+
+  // 6. 工具调用与结构化输出（M6 契约 §1.2）
+  applyTools(body, ir, caps, model, warnings);
 
   return {
     method: 'POST',
@@ -586,6 +720,8 @@ async function* stream(
   let textRuns = 0;
   let images = 0;
   let lastOutput: SignatureTarget | null = null;
+  /** 已输出的函数调用数（签名 ordinal 与合成 id 用） */
+  let toolCalls = 0;
 
   try {
     const res = await providerFetch(conn, req, signal);
@@ -664,6 +800,20 @@ async function* stream(
             data: inline.data,
           };
         }
+        // 函数调用一次给全参数（argsDelta = 整个 JSON）；Gemini 3 的签名挂在（第一个）functionCall 上
+        const fc = part.functionCall;
+        if (fc && typeof fc === 'object' && typeof fc.name === 'string') {
+          target = 'tool';
+          ordinal = toolCalls;
+          const id = typeof fc.id === 'string' && fc.id !== '' ? fc.id : syntheticCallId(toolCalls);
+          toolCalls += 1;
+          yield {
+            type: 'tool.call',
+            id,
+            name: fc.name,
+            argsDelta: JSON.stringify(fc.args ?? {}),
+          };
+        }
 
         if (typeof part.thoughtSignature === 'string' && part.thoughtSignature !== '') {
           if (!signatures.has(part.thoughtSignature)) {
@@ -696,6 +846,11 @@ async function* stream(
     };
   }
   if (usage) yield usage;
+  // Gemini 停在函数调用上时 finishReason 仍是 STOP：有调用就归一化为 tool
+  if (toolCalls > 0 && (stopEvent === undefined || stopEvent.reason === 'end')) {
+    yield { type: 'stop', reason: 'tool' };
+    return;
+  }
   yield stopEvent ?? { type: 'stop', reason: 'end' };
 }
 

@@ -5,15 +5,18 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./mvu": "./src/mvu/index.ts"
+    "./mvu": "./src/mvu/index.ts",
+    "./ejs": "./src/ejs/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@jitl/quickjs-wasmfile-release-sync": "^0.32.0",
     "@newtavern/core": "workspace:*",
     "fflate": "^0.8.3",
+    "quickjs-emscripten-core": "^0.32.0",
     "yaml": "^2.8.1",
     "zod": "^4.1.11"
   },

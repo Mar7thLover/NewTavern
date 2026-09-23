@@ -16,6 +16,7 @@ import { queryTokens, rankItems } from './match';
 import { useUiStore, type ModeSetting } from '../../app/store/ui';
 import { useCharacters, useChats, useCreateChat } from '../../lib/api';
 import { cn } from '../../lib/utils';
+import { useBackdropStore } from '../backgrounds/api';
 import { THEMES } from '../../themes/registry';
 
 /* ------------------------------------------------------------------ */
@@ -172,6 +173,17 @@ function PaletteDialog({
           label: t('palette.actions.session'),
           keywords: ['session', 'panel', t('chat.panel.title')],
           run: () => useUiStore.getState().requestChatPanel('session'),
+        },
+        {
+          // 切换背景（M4（二）§A.4）：打开会话面板并展开背景小节
+          id: 'action:background',
+          group: 'actions',
+          label: t('backgrounds.paletteAction'),
+          keywords: ['background', 'wallpaper', t('backgrounds.title')],
+          run: () => {
+            useUiStore.getState().requestChatPanel('session');
+            useBackdropStore.getState().requestFocus();
+          },
         },
       );
     }

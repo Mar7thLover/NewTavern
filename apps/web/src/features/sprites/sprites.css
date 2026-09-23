@@ -1,0 +1,24 @@
+/*
+ * 立绘区的引擎部分（M4（二）§B.3）：只管换表情时的淡入。框、底、光由各世界的 media.css 画。
+ * 时长槽位 `--sprite-fade`：缺省 200ms；素 120ms；书斋 0（直接换）。
+ */
+@layer components {
+  [data-part='sprite-image'] > img[data-entering] {
+    animation: nt-sprite-in var(--sprite-fade, 200ms) linear both;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    [data-part='sprite-image'] > img[data-entering] {
+      animation: none;
+    }
+  }
+}
+
+@keyframes nt-sprite-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
