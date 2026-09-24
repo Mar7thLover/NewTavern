@@ -33,8 +33,8 @@ export interface ChatViewProps {
   chat: ChatDetail;
   /** root→head 路径 */
   path: MessageNode[];
-  /** 窄屏：打开会话列表抽屉 */
-  onOpenList: () => void;
+  /** 窄屏：打开会话列表抽屉；不给则不显示列表键（工作台的测试对话） */
+  onOpenList?: () => void;
   /** 会话面板开关（窄屏开抽屉，宽屏折叠右栏） */
   onTogglePanel: () => void;
   /** 打开右栏的检查器页签 */
@@ -133,9 +133,11 @@ export function ChatView({
         data-part="chat-header"
         className="flex shrink-0 items-center gap-2 border-b edge-rule px-3 py-2"
       >
-        <IconButton label={t('chat.list.title')} onClick={onOpenList}>
-          <Menu aria-hidden />
-        </IconButton>
+        {onOpenList && (
+          <IconButton label={t('chat.list.title')} onClick={onOpenList}>
+            <Menu aria-hidden />
+          </IconButton>
+        )}
         <div className="min-w-0 flex-1">
           <div data-part="chat-title" className="truncate text-sm font-semibold">
             {title}
@@ -159,7 +161,9 @@ export function ChatView({
           onSwitchSibling={switchSibling}
           onRegenerate={regenerate}
         />
-        {spriteLayout === 'stage' && <SpriteStage state={sprite} layout="stage" name={spriteName} />}
+        {spriteLayout === 'stage' && (
+          <SpriteStage state={sprite} layout="stage" name={spriteName} />
+        )}
       </div>
       {spriteLayout === 'strip' && <SpriteStage state={sprite} layout="strip" name={spriteName} />}
 

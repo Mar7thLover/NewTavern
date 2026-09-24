@@ -1,0 +1,91 @@
+/**
+ * 暖房 · 背景与立绘（M4（二）§A §B.3；与 theme.css 一起按需加载，见 apply.ts）。
+ *
+ * 背景：柔光衰减。
+ *  - 用户的图做一次静态 filter：轻模糊、去一点饱和、往暖里偏——像午后隔着纱帘看到的东西；
+ *  - 上面一层奶油色的光：从右上（阳光进来的方向）往左下越来越浓，图在那边几乎褪成奶油的淡影；
+ *  - 阳光与窗台压回到图的上面；对话托盘（桌布）有图时变薄一点，便签本身不透明，字照旧清楚。
+ *
+ * 立绘框：剪成贴纸（[data-nf='sprite']，结构见 signature.tsx）。
+ *
+ * 元素规则一律在 @scope ([data-theme='nuanfang']) to ([data-theme]) 里；
+ * 需要压过 theme.css 同名规则时用 `:scope` 前缀抬特异性——两份 CSS 各自懒加载，先后不保证。
+ */
+
+/* ------------------------------------------------------------------ */
+/* 背景：柔光                                                           */
+/* ------------------------------------------------------------------ */
+
+@scope ([data-theme='nuanfang']) to ([data-theme]) {
+  :scope [data-part='user-backdrop'] {
+    inset: -16px;
+    filter: blur(3px) saturate(0.72) sepia(0.16);
+  }
+
+  /* 光从右上来：那一角的图最清楚，往左下慢慢褪进奶油里 */
+  :scope [data-part='user-backdrop']::after {
+    background-color: transparent;
+    background-image: radial-gradient(
+      140% 120% at 100% 0%,
+      oklch(0.975 0.022 88 / 0.46) 0%,
+      oklch(0.97 0.02 85 / 0.64) 38%,
+      oklch(0.97 0.02 85 / 0.84) 72%,
+      oklch(0.97 0.02 85 / 0.92) 100%
+    );
+  }
+
+  /* 阳光与窗台在图的上面 */
+  [data-nf='sunlight'],
+  .nf-sill {
+    z-index: 1;
+  }
+}
+
+/* 有图时：桌布薄一点，透出一点点背后的光（便签、面板仍不透明） */
+@scope (:root[data-theme='nuanfang'][data-has-backdrop]) to ([data-theme]) {
+  :scope [data-part='chat-view'] {
+    background-color: oklch(0.955 0.024 82 / 0.72);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* 立绘框：贴纸                                                          */
+/* ------------------------------------------------------------------ */
+
+@scope ([data-theme='nuanfang']) to ([data-theme]) {
+  /*
+   * 沿人的轮廓留一圈 3px 的奶油白边（四个方向各推一次，叠成一圈实边），再落一层软影。
+   * 只作用在包住图层的那一层上（往里收 6px 给白边和软影留地方），不改 img 尺寸；静止时栅格化一次，只有换表情那 200ms 会重算。
+   */
+  [data-nf='sprite-cut'] {
+    position: absolute;
+    inset: 0;
+  }
+
+  [data-nf='sprite'][data-collapsed='false'] > [data-nf='sprite-cut'] {
+    inset: 6px 6px 8px;
+    filter: drop-shadow(3px 0 0 var(--nf-sticker-bg)) drop-shadow(-3px 0 0 var(--nf-sticker-bg))
+      drop-shadow(0 3px 0 var(--nf-sticker-bg)) drop-shadow(0 -3px 0 var(--nf-sticker-bg))
+      drop-shadow(0 6px 10px var(--nf-shadow-tint));
+  }
+
+  /* 脚下一片暖的软影，像贴纸微微离开墙面 */
+  [data-nf='sprite-rest'] {
+    position: absolute;
+    left: 14%;
+    right: 14%;
+    bottom: 0;
+    height: 20px;
+    border-radius: 50%;
+    background-image: radial-gradient(closest-side, oklch(0.6 0.08 60 / 0.2), transparent);
+  }
+
+  /* 折叠成头像：圆形贴纸，3px 奶油描边（同消息头像） */
+  [data-nf='sprite'][data-collapsed='true'] {
+    overflow: hidden;
+    border: 3px solid var(--nf-sticker-bg);
+    border-radius: var(--r-pill);
+    background-color: var(--nf-apricot-soft);
+    box-shadow: var(--nf-soft-sm);
+  }
+}

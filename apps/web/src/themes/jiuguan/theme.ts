@@ -32,6 +32,7 @@ const jiuguan: ThemeMeta = {
     MessageDivider: signature.MessageDivider,
     EmptyIllustration: signature.EmptyIllustration,
     StreamingCursor: signature.StreamingCursor,
+    SpriteFrame: signature.SpriteFrame,
     MessageOrnament: signature.MessageOrnament,
     Backdrop: signature.Backdrop,
   },

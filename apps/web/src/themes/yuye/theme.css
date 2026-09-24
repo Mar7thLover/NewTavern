@@ -1550,3 +1550,134 @@
     }
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* 写作页（M7 §5.5）：湿玻璃后面的一张纸。                              */
+/* 纸是压暗的蓝灰（夜里的纸，不是白），隔着一层玻璃：上缘一道冷高光、    */
+/* 下沿一点水汽；雨在纸列背后照常下。目录与工具是湿玻璃。               */
+/* ------------------------------------------------------------------ */
+
+@scope ([data-theme='yuye']) to ([data-theme]) {
+  [data-part='writing-aside'] {
+    --yy-drop-x: 88%;
+    --yy-drop-y: 64%;
+    border-color: transparent;
+    background-color: var(--panel);
+    background-image:
+      radial-gradient(
+        0.8px 0.8px at calc(var(--yy-drop-x) - 1.1px) calc(var(--yy-drop-y) - 1.2px),
+        oklch(0.99 0.01 240 / 0.95),
+        transparent
+      ),
+      radial-gradient(
+        3.6px 3.8px at calc(var(--yy-drop-x) - 0.8px) calc(var(--yy-drop-y) - 0.8px),
+        transparent 0 66%,
+        oklch(0.12 0.035 258 / 0.55) 80%,
+        transparent 88%
+      ),
+      radial-gradient(
+        3px 3.2px at var(--yy-drop-x) var(--yy-drop-y),
+        oklch(0.44 0.04 248 / 0.5) 0 35%,
+        oklch(0.33 0.04 252 / 0.35) 75%,
+        transparent 100%
+      );
+    -webkit-backdrop-filter: blur(18px);
+    backdrop-filter: blur(18px);
+    box-shadow: inset 0 1px 0 var(--edge-highlight);
+  }
+
+  [data-part='writing-header'],
+  [data-part='writing-project-head'] {
+    border-color: transparent;
+    background-image: linear-gradient(
+      90deg,
+      transparent,
+      oklch(0.88 0.02 240 / 0.12) 20%,
+      transparent 85%
+    );
+    background-size: 100% 1px;
+    background-position: bottom;
+    background-repeat: no-repeat;
+  }
+
+  [data-part='writing-title'],
+  [data-part='writing-project-head'] input {
+    font-family: var(--font-display);
+    font-weight: 400;
+    letter-spacing: 0.06em;
+  }
+
+  /* 纸列本身不铺底：雨在它背后 */
+  [data-part='writing-scroll'] {
+    background: none;
+  }
+
+  /* 纸：夜里压暗的一张纸，隔着玻璃。颗粒 + 玻璃上缘一道冷高光 + 下沿一点凝在玻璃上的水汽 */
+  [data-part='writing-page'] {
+    position: relative;
+    border: 0;
+    border-radius: var(--r-panel);
+    background-color: var(--reading);
+    background-image:
+      var(--yy-grain), linear-gradient(180deg, oklch(0.93 0.02 240 / 0.06), transparent 18%),
+      linear-gradient(0deg, oklch(0.6 0.04 245 / 0.07), transparent 22%);
+    background-size:
+      128px 128px,
+      100% 100%,
+      100% 100%;
+    box-shadow:
+      inset 0 1px 0 var(--edge-highlight),
+      0 18px 40px oklch(0.1 0.035 258 / 0.35);
+  }
+
+  /* 待定的字：玻璃上被灯照亮的一小块冷光，下沿一线水光 */
+  [data-part='writing-ai-pending'] {
+    background-color: var(--accent-soft);
+    box-shadow: inset 0 -1px 0 oklch(0.86 0.03 245 / 0.28);
+    color: var(--ink);
+    border-radius: 3px;
+  }
+
+  [data-part='writing-ai-target'] {
+    text-decoration-color: oklch(0.86 0.03 245 / 0.5);
+  }
+
+  [data-part='writing-diff'] del {
+    text-decoration-color: oklch(0.66 0.03 248 / 0.8);
+  }
+
+  [data-part='writing-diff'] ins {
+    background-color: var(--accent-soft);
+    text-decoration-color: oklch(0.86 0.03 245 / 0.45);
+  }
+
+  /* 完成：远处的一点灯 */
+  [data-part='writing-tree-done'][data-done='true'] {
+    border-color: oklch(0.82 0.1 75 / 0.35);
+    color: var(--accent);
+    box-shadow: 0 0 10px oklch(0.82 0.1 75 / 0.18);
+  }
+
+  [data-part='writing-toolbar'],
+  [data-part='writing-ai-bar'] {
+    border-color: transparent;
+    box-shadow: inset 0 1px 0 var(--edge-highlight);
+  }
+
+  [data-part='writing-project-card'] {
+    border-color: transparent;
+    background-color: oklch(0.28 0.04 255 / 0.42);
+    background-image: var(--yy-grain);
+    -webkit-backdrop-filter: blur(18px);
+    backdrop-filter: blur(18px);
+    box-shadow: inset 0 1px 0 var(--edge-highlight);
+  }
+}
+
+@media (max-width: 639px) {
+  @scope ([data-theme='yuye']) to ([data-theme]) {
+    [data-part='writing-scroll'] {
+      padding: 10px;
+    }
+  }
+}

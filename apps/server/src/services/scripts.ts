@@ -308,13 +308,24 @@ export function deleteScript(db: Db, id: string): boolean {
   return row !== undefined;
 }
 
-/** 预设删除时带走它自带的脚本 */
+/** 预设删除时带走它自带的脚本（及脚本各自的变量表），以及这份预设的 preset 作用域变量 */
 export function deleteOwnerScripts(db: Db, scope: ScriptScope, ownerId: string): number {
-  return db
+  const removed = db
     .delete(schema.scripts)
     .where(and(eq(schema.scripts.scope, scope), eq(schema.scripts.ownerId, ownerId)))
     .returning()
-    .all().length;
+    .all();
+  for (const row of removed) {
+    db.delete(schema.variables)
+      .where(and(eq(schema.variables.scope, 'script'), eq(schema.variables.ownerId, row.id)))
+      .run();
+  }
+  if (scope === 'preset') {
+    db.delete(schema.variables)
+      .where(and(eq(schema.variables.scope, 'preset'), eq(schema.variables.ownerId, ownerId)))
+      .run();
+  }
+  return removed.length;
 }
 
 /** 按给定顺序重排；不认识的 id 忽略 */
@@ -408,6 +419,41 @@ export function presetEmbeddedScripts(data: unknown): unknown[] {
   if (helper && Array.isArray(helper.scripts)) return helper.scripts;
   if (Array.isArray(extensions.TavernHelper_scripts)) return extensions.TavernHelper_scripts;
   return [];
+}
+
+/** 预设 JSON 里的 `extensions.tavern_helper.variables`（酒馆助手 4.9.3 `PresetSettings.variables`） */
+export function presetEmbeddedVariables(data: unknown): Record<string, unknown> {
+  const extensions = isRecord(data) && isRecord(data.extensions) ? data.extensions : undefined;
+  const helper =
+    extensions && isRecord(extensions.tavern_helper) ? extensions.tavern_helper : undefined;
+  return helper && isRecord(helper.variables) ? helper.variables : {};
+}
+
+/**
+ * 预设自带的酒馆助手变量 → `variables` 表 scope='preset'（前端卡 `getVariables({type:'preset'})`
+ * 在酒馆助手里读的就是这份）。只在导入时做一次；表里已有这份预设的变量时不动。
+ * `null` 值在变量表里等于删除，跳过。返回写入的键数。
+ */
+export function seedPresetVariables(db: Db, preset: { id: string; data: unknown }): number {
+  const entries = Object.entries(presetEmbeddedVariables(preset.data)).filter(
+    ([, value]) => value !== null && value !== undefined,
+  );
+  if (entries.length === 0) return 0;
+  const existing = db
+    .select({ id: schema.variables.id })
+    .from(schema.variables)
+    .where(and(eq(schema.variables.scope, 'preset'), eq(schema.variables.ownerId, preset.id)))
+    .get();
+  if (existing) return 0;
+  const now = new Date();
+  db.transaction((tx) => {
+    for (const [key, value] of entries) {
+      tx.insert(schema.variables)
+        .values({ scope: 'preset', ownerId: preset.id, key, value, updatedAt: now })
+        .run();
+    }
+  });
+  return entries.length;
 }
 
 function hasOwnerRows(db: Db, scope: ScriptScope, ownerId: string): boolean {

@@ -8,6 +8,7 @@ import type {
   MessageDividerProps,
   MessageOrnamentProps,
   SendButtonProps,
+  SpriteFrameProps,
   StreamingCursorProps,
   SwipeIndicatorProps,
 } from '../signature';
@@ -386,6 +387,31 @@ export function Backdrop({ scope }: BackdropProps) {
       <span className="liuli-beam liuli-beam-a" />
       <span className="liuli-beam liuli-beam-b" />
       <span className="liuli-beam liuli-beam-c" />
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* 立绘框：一面竖起的冰屏（形态在 media.css 的 .liuli-stand）             */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 人站在一面削了两角的冰屏前：屏是透的（不做 backdrop-filter，只是一层渐变的冰），
+ * 边上一道白棱与 1px 的虹，脚下是冰屏的厚度（一条亮的横棱），一道斜光扫过左上的削角。
+ * 折叠成头像时是一粒切角的冰晶。
+ */
+export function SpriteFrame({ layout, collapsed, children }: SpriteFrameProps) {
+  return (
+    <div
+      data-part="sprite-frame"
+      data-layout={layout}
+      data-collapsed={collapsed}
+      className="liuli-stand relative size-full"
+    >
+      <span aria-hidden className="liuli-stand-rim" />
+      <span aria-hidden className="liuli-stand-pane" />
+      <div className="liuli-stand-view">{children}</div>
+      <span aria-hidden className="liuli-stand-glint" />
     </div>
   );
 }

@@ -45,7 +45,7 @@ import {
   type ImportStChatResult,
 } from './chat-transfer.js';
 import { extractEmbeddedRegex, nextGlobalOrder, summarize } from './embedded-regex.js';
-import { extractPresetScripts, summarizeScripts } from './scripts.js';
+import { extractPresetScripts, seedPresetVariables, summarizeScripts } from './scripts.js';
 import { stRegexToScript, toRegexColumns, toRegexScript, type RegexScript } from './regex-map.js';
 import { recordCurrentVersion } from './versions.js';
 import { importCardSprites } from './sprites.js';
@@ -385,6 +385,8 @@ export function createImporter(db: Db, assets: AssetsService, dataDir: string) {
       );
       // 预设自带的酒馆助手脚本也抽进脚本库（默认关闭，前端问过再开；M5（三）§2.1）
       const embeddedScripts = summarizeScripts(row.id, row.name, extractPresetScripts(db, row));
+      // 预设自带的酒馆助手变量（`tavern_helper.variables`）作 preset 作用域的初值（M5（三）§1）
+      seedPresetVariables(db, row);
       // 导入即第 1 版（M6 §2.2）
       recordCurrentVersion(db, 'preset', row.id);
       return {

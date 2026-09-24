@@ -17,6 +17,7 @@ import {
   useSetGlobalBookIds,
   type LorebookSummary,
 } from '../../lib/api';
+import { studioPath } from '../../lib/api-studio';
 import { EmptyState, LibraryHeader, QueryStatus, errorMessage, formatDate } from './shared';
 
 const LOREBOOK_ACCEPT = '.json';
@@ -140,6 +141,12 @@ export function LorebooksPage() {
                     className={buttonVariants({ variant: 'outline', size: 'sm' })}
                   >
                     {t('common.edit')}
+                  </Link>
+                  <Link
+                    to={studioPath('lorebook', book.id)}
+                    className={buttonVariants({ variant: 'outline', size: 'sm' })}
+                  >
+                    {t('studio.openInStudio')}
                   </Link>
                   <a
                     href={apiUrls.exportLorebook(book.id)}

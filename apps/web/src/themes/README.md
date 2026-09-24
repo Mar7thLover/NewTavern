@@ -214,6 +214,7 @@ loadFonts: () =>
 | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
 | `app-shell`               | 应用最外层 `div`（`surface-canvas relative isolate flex`）                                                                                                      | —                                           |
 | `backdrop`                | `app-shell` 第一个子元素；预览卡 `theme-preview` 第一个子元素。`fixed`(app)/`absolute`(preview) `inset-0 -z-10 overflow-hidden pointer-events-none aria-hidden` | `data-scope="app\|preview"`                 |
+| `user-backdrop`           | 用户背景图层：只在 app 作用域、会话有背景时出现，排在 `backdrop` 里世界自己的 Backdrop 之后（`absolute inset-0`，`background-image: var(--user-backdrop)`，cover 居中）；同时 `<html data-has-backdrop="world\|veil">`。各世界怎么处理见 §11 | —                                           |
 | `sidebar`                 | 桌面左侧栏 `aside`（≥md）                                                                                                                                       | —                                           |
 | `brand`                   | `sidebar` 顶部的应用名块                                                                                                                                        | —                                           |
 | `nav`                     | 主导航 `nav`：侧栏里一份、窄屏顶栏里一份                                                                                                                        | `data-variant="sidebar\|compact"`           |
@@ -249,9 +250,20 @@ loadFonts: () =>
 | `gallery` / `gallery-item`                                     | 会话面板「图片」分区 / 每张图                                                                                           | —                                                                                       |
 | `image-output-switch`                                          | 会话设置里「允许模型输出图片」开关行                                                                                    | —                                                                                       |
 | `frontend-card`                                                | 一张跑起来的前端卡（沙箱 iframe 的外框，M5 §4）；**里面是卡自己的世界，不要去染色**                                     | `data-trust`、`data-nt-card`                                                            |
-| `frontend-card-placeholder`                                    | 流式中前端卡的占位（消息写完才真的跑）                                                                                 | —                                                                                       |
+| `frontend-card-placeholder`                                    | 流式中前端卡的占位（消息写完才真的跑）                                                                                  | —                                                                                       |
 | `script-buttons`                                               | 脚本库按钮条（输入框正上方）                                                                                            | —                                                                                       |
 | `inspector-variables`                                          | 检查器「变量」页签的内容                                                                                                | —                                                                                       |
+| `variable-editor`                                              | 变量编辑器根（检查器「变量」页签：会话 / 消息作用域一份，脚本作用域选中脚本后一份）：说明 + `variable-tree` + 问题提示 + `variable-editor-bar` | —                                                                                       |
+| `variable-tree`                                                | 变量树（`role=tree`，`edge-rule` 细框）                                                                                 | —                                                                                       |
+| `variable-node`                                                | 树的一个节点（`role=treeitem`；分支可展开，叶子是一行键 + 值）                                                          | `data-kind="branch\|leaf"`                                                              |
+| `variable-issues`                                              | 节点下的结构校验问题列表（`--danger` 小字，按层级缩进）                                                                  | —                                                                                       |
+| `variable-editor-bar`                                          | 编辑器底部一行：改动计数 + 放弃 / 保存                                                                                  | —                                                                                       |
+| `chat-stage`                                                   | `chat-view` 里消息区那一行：消息列表的父级 `div` + （宽时）右侧 `sprite-stage`                                          | —                                                                                       |
+| `sprite-stage`                                                 | 立绘区（M4（二）§B.3）：`stage` = `chat-stage` 右侧的 `aside`（底部对齐）；`strip` = 输入框上方一条可折叠的 `section`   | `data-layout="stage\|strip"`；`strip` 另有 `data-open`                                   |
+| `sprite-well`                                                  | `sprite-stage` 里给立绘框定尺寸的容器（`relative`；stage 高 `min(72%,600px)`，strip 展开高 `min(34dvh,260px)`）         | —                                                                                       |
+| `sprite-frame`                                                 | 世界的 `SpriteFrame` 根（记忆物件，§6）；折叠的小窗里是 40px 的头像大小                                                   | `data-layout="stage\|strip"`、`data-collapsed`                                         |
+| `sprite-image`                                                 | 引擎的立绘图层（`absolute inset-0`，内含叠放的 `img`，换表情淡入读 `--sprite-fade`）；**框不要改里面 img 的尺寸规则**    | `data-fit="contain\|face"`                                                              |
+| `sprite-caption` / `sprite-bar` / `sprite-expression`          | stage 下方的表情行 / strip 的横条（名字 + 表情 + 展开键）/ 手动选表情的 `select`                                         | —                                                                                       |
 | `start-screen`                                                 | 未选会话时的开始页（滚动容器，`surface-reading`）                                                                       | —                                                                                       |
 | `start-persona`                                                | 开始页「以谁的身份开始」下拉的外层 `div`（有用户档案时才渲染）                                                          | —                                                                                       |
 | `character-card`                                               | 开始页每张角色卡 `button`（3:4）                                                                                        | —                                                                                       |
@@ -293,63 +305,115 @@ loadFonts: () =>
 
 ### 5.3 其他页面与浮层
 
-| data-part                                          | DOM 位置                                                                                                                   | 附加属性                                                                                  |
-| -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `page-header`                                      | 库页面/连接页的标题块（`LibraryHeader`）；开始页标题块                                                                     | —                                                                                         |
-| `library-item`                                     | 角色卡按钮 / 预设行 / 世界书行 / 用户档案卡                                                                                | `data-kind="character\|preset\|lorebook\|persona"`；预设行与用户档案卡另有 `data-default` |
-| `preset-default-badge`                             | 预设行名称旁的「默认」徽标 `span`（`Badge`，仅默认预设渲染）                                                               | —                                                                                         |
-| `persona-form`                                     | 用户档案新建/编辑表单 `form`（`modal-body` 内，左头像右字段，窄屏单列）                                                    | —                                                                                         |
-| `persona-avatar-field`                             | `persona-form` 左栏：`AvatarFrame` 预览 + 上传/移除按钮；选图后叠一层裁切弹窗（`image-cropper`）                           | —                                                                                         |
-| `image-cropper`                                    | 图片裁切组件根（`ImageCropper`，在 `modal-body` 内）：视窗 + 提示 + 缩放条 + 按钮行                                        | —                                                                                         |
-| `image-cropper-viewport`                           | 正方形裁切视窗（可聚焦，`surface-control edge-rule border`），内含 `canvas` 与圆形参考线 `svg`（圆外 `fill-overlay`）      | `data-status="loading\|ready\|error"`                                                     |
-| `image-cropper-zoom`                               | 缩放条：缩小键 + `input[type=range]`（`accent-primary`）+ 放大键                                                           | —                                                                                         |
-| `persona-depth-fields`                             | `persona-form` 里「按深度注入」时出现的深度 + 消息角色两栏                                                                 | —                                                                                         |
-| `preset-editor`                                    | 预设编辑器页根（`/presets/:id`）                                                                                           | —                                                                                         |
-| `preset-section`                                   | 编辑器分区 `section`（基本 / 采样参数 / 提示词条目）                                                                       | `data-section="basic\|sampling\|prompts"`                                                 |
-| `preset-prompt-list`                               | 提示词条目列表 `ol`（按组装使用的 `prompt_order` 排序）                                                                    | —                                                                                         |
-| `preset-prompt-item`                               | 每个条目 `li`（开关、上移/下移、名称；普通条目可展开编辑）                                                                 | `data-marker`、`data-enabled`、`data-open`                                                |
-| `preset-save-bar`                                  | 编辑器底部吸附的保存条（`surface-raised`，保存 / 放弃修改）                                                                | `data-dirty`                                                                              |
-| `lorebook-editor`                                  | 世界书编辑器页根（`/lorebooks/:id`）                                                                                       | —                                                                                         |
-| `lorebook-entry-list`                              | 条目列表 `ol`（按展示顺序；搜索时只列匹配项，条目多时分批渲染）                                                            | —                                                                                         |
-| `lorebook-entry`                                   | 每个条目 `li`（开关、标题、策略徽标、位置/顺序、上移/下移；展开后是编辑表单与「高级」折叠区）                              | `data-enabled`、`data-open`、`data-constant`                                              |
-| `lorebook-save-bar`                                | 世界书编辑器底部吸附的保存条（与 `preset-save-bar` 同形态）                                                                | `data-dirty`                                                                              |
-| `connection-card`                                  | 连接页每个连接 `li`                                                                                                        | —                                                                                         |
-| `settings-nav`                                     | 设置页分区导航 `nav`                                                                                                       | —                                                                                         |
-| `settings-nav-item`                                | 分区按钮                                                                                                                   | `data-active`（另有 `aria-current`）                                                      |
-| `settings-section`                                 | 设置分区 `section`（标题 + 说明 + 内容）                                                                                   | —                                                                                         |
-| `theme-card`                                       | 外观页每张主题卡（外层 `div`，最上层盖一个透明点击 `button`）                                                              | `data-active`                                                                             |
-| `theme-preview`                                    | 预览卡的作用域根：`data-theme / data-mode / data-opt-*`，`surface-canvas relative isolate overflow-hidden`                 | 同 `<html>`                                                                               |
-| `modal-overlay` / `modal`                          | 模态遮罩 / 面板（Portal 到 `body`，仍在 `<html data-theme>` 作用域内）                                                     | —                                                                                         |
-| `modal-header`                                     | `modal` 头部行（仅传了 `title` 时渲染，含关闭键）                                                                          | —                                                                                         |
-| `modal-title`                                      | `modal-header` 内的标题 `h2`                                                                                               | —                                                                                         |
-| `modal-body`                                       | `modal` 正文（`children`）                                                                                                 | —                                                                                         |
-| `modal-footer`                                     | `modal` 底部按钮区（仅传了 `footer` 时渲染）                                                                               | —                                                                                         |
-| `drawer-overlay` / `drawer`                        | 抽屉遮罩 / 面板                                                                                                            | `drawer`：`data-side="left\|right"`                                                       |
-| `drawer-header`                                    | `drawer` 头部行（仅传了 `title` 时渲染，含关闭键）                                                                         | —                                                                                         |
-| `drawer-title`                                     | `drawer-header` 内的标题 `div`                                                                                             | —                                                                                         |
-| `drawer-body`                                      | `drawer` 正文（`children`）                                                                                                | —                                                                                         |
-| `command-palette-overlay`                          | 命令面板遮罩（`surface-overlay`）                                                                                          | —                                                                                         |
-| `command-palette`                                  | 命令面板 `role=dialog`（`surface-raised edge-rule rounded-panel border overflow-hidden`；主题可像 `modal` 一样整体换形态） | —                                                                                         |
-| `command-palette-header`                           | 面板顶部输入区（`border-b`）                                                                                               | —                                                                                         |
-| `command-palette-field`                            | 输入框外框（`.field`），内含搜索图标、`command-palette-input`（`role=combobox`）与 Esc 提示                                | —                                                                                         |
-| `command-palette-list`                             | 结果列表 `role=listbox`（自身滚动）                                                                                        | —                                                                                         |
-| `command-palette-group`                            | 结果分组                                                                                                                   | `data-group="actions                                                                      | chats   | pages     | characters | themes"` |
-| `command-palette-group-label`                      | 分组标题                                                                                                                   | —                                                                                         |
-| `command-palette-item`                             | 每条命令 `role=option`                                                                                                     | `data-active`、`data-group`、`data-current`                                               |
-| `command-palette-marker`                           | 选中项左侧 2px 强调短线（`bg-accent`）                                                                                     | —                                                                                         |
-| `command-palette-empty` / `command-palette-footer` | 无结果提示 / 底部键位提示行（窄屏隐藏）                                                                                    | —                                                                                         |
-| `migration-page`                                   | 迁移向导页根（`/migration`）；非本机访问时只有 `migration-forbidden`                                                       | —                                                                                         |
-| `migration-steps` / `migration-step`               | 顶部三步指示 / 每一步                                                                                                      | `migration-step`：`data-active`                                                           |
-| `migration-source` / `migration-users`             | 第一步：路径输入表单 / 多用户时的用户选择                                                                                  | —                                                                                         |
-| `migration-review`                                 | 第二步：清单根                                                                                                             | —                                                                                         |
-| `migration-category`                               | 清单里的一个类别（标题行含「勾选 / 总数」与全选）                                                                          | `data-category="characters                                                                | chats   | lorebooks | presets    | personas | settings"` |
-| `migration-item`                                   | 清单里的一项（勾选框 + 名称 + 说明，已在库中时带标记）                                                                     | `data-exists`、`data-error`                                                               |
-| `migration-skipped`                                | 清单底部「这一版不迁移」说明行                                                                                             | —                                                                                         |
-| `migration-start-bar`                              | 底部吸附的开始条（与 `preset-save-bar` 同形态）                                                                            | —                                                                                         |
-| `migration-run` / `migration-progress`             | 第三步根 / 进度标题行                                                                                                      | —                                                                                         |
-| `migration-log` / `migration-log-item`             | 逐项进度列表 / 每一项                                                                                                      | `migration-log-item`：`data-status="imported                                              | skipped | failed"`  |
-| `migration-warnings` / `migration-next`            | 告警列表 / 完成后的去向按钮行                                                                                              | —                                                                                         |
-| `storage-gc`                                       | 设置页「存储」分区的清理块（按钮 + 结果）                                                                                  | —                                                                                         |
+| data-part                                          | DOM 位置                                                                                                                   | 附加属性                                                                                             |
+| -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `page-header`                                      | 库页面/连接页的标题块（`LibraryHeader`）；开始页标题块                                                                     | —                                                                                                    |
+| `library-item`                                     | 角色卡按钮 / 预设行 / 世界书行 / 用户档案卡                                                                                | `data-kind="character\|preset\|lorebook\|persona"`；预设行与用户档案卡另有 `data-default`            |
+| `preset-default-badge`                             | 预设行名称旁的「默认」徽标 `span`（`Badge`，仅默认预设渲染）                                                               | —                                                                                                    |
+| `persona-form`                                     | 用户档案新建/编辑表单 `form`（`modal-body` 内，左头像右字段，窄屏单列）                                                    | —                                                                                                    |
+| `persona-avatar-field`                             | `persona-form` 左栏：`AvatarFrame` 预览 + 上传/移除按钮；选图后叠一层裁切弹窗（`image-cropper`）                           | —                                                                                                    |
+| `image-cropper`                                    | 图片裁切组件根（`ImageCropper`，在 `modal-body` 内）：视窗 + 提示 + 缩放条 + 按钮行                                        | —                                                                                                    |
+| `image-cropper-viewport`                           | 正方形裁切视窗（可聚焦，`surface-control edge-rule border`），内含 `canvas` 与圆形参考线 `svg`（圆外 `fill-overlay`）      | `data-status="loading\|ready\|error"`                                                                |
+| `image-cropper-zoom`                               | 缩放条：缩小键 + `input[type=range]`（`accent-primary`）+ 放大键                                                           | —                                                                                                    |
+| `persona-depth-fields`                             | `persona-form` 里「按深度注入」时出现的深度 + 消息角色两栏                                                                 | —                                                                                                    |
+| `preset-editor`                                    | 预设编辑器根（受控 `PresetEditor`：`/presets/:id` 页面与工作台 / 写作页的嵌入版；`@container`，窄栏按容器宽度排版）        | `data-embedded`                                                                                      |
+| `preset-section`                                   | 编辑器分区 `section`（基本 / 采样参数 / 布局策略 / 提示词条目）                                                            | `data-section="basic\|sampling\|layout\|prompts"`                                                    |
+| `preset-prompt-list`                               | 提示词条目列表 `ol`（按组装使用的 `prompt_order` 排序）                                                                    | —                                                                                                    |
+| `preset-prompt-item`                               | 每个条目 `li`（拖拽把手、开关、名称、保真锁、上移/下移；普通条目可展开编辑）；拖拽落点是 `li` 内一条 2px `bg-accent` 短线  | `data-marker`、`data-enabled`、`data-open`、`data-locked`、`data-drag="source\|before\|after"`       |
+| `preset-prompt-handle`                             | `preset-prompt-item` 左侧的拖拽把手 `span`（`draggable`，`pointer: coarse` 时隐藏，键盘与触屏用上移/下移）                 | —                                                                                                    |
+| `preset-save-bar`                                  | 编辑器底部吸附的保存条（`surface-raised`，保存 / 放弃修改）                                                                | `data-dirty`                                                                                         |
+| `lorebook-editor`                                  | 世界书编辑器根（受控 `LorebookEditor`：`/lorebooks/:id` 页面与嵌入版；`@container`）                                       | `data-embedded`                                                                                      |
+| `lorebook-entry-list`                              | 条目列表 `ol`（按展示顺序；搜索时只列匹配项，条目多时分批渲染）                                                            | —                                                                                                    |
+| `lorebook-entry`                                   | 每个条目 `li`（开关、标题、策略徽标、位置/顺序、上移/下移；展开后是编辑表单与「高级」折叠区）                              | `data-enabled`、`data-open`、`data-constant`                                                         |
+| `lorebook-save-bar`                                | 世界书编辑器底部吸附的保存条（与 `preset-save-bar` 同形态）                                                                | `data-dirty`                                                                                         |
+| `lorebook-simulate`                                | 「触发模拟」抽屉的内容（`drawer-body` 内：输入、结果）                                                                     | —                                                                                                    |
+| `lorebook-simulate-hit` / `lorebook-simulate-skip` | 模拟结果里会激活 / 被挡下的每一条 `li`（能跳回编辑器时内含按钮）                                                           | `data-reason`（激活：`constant\|key\|secondary\|recursion\|decorator`；挡下：引擎原因或 `no-match`） |
+| `connection-card`                                  | 连接页每个连接 `li`                                                                                                        | —                                                                                                    |
+| `settings-nav`                                     | 设置页分区导航 `nav`                                                                                                       | —                                                                                                    |
+| `settings-nav-item`                                | 分区按钮                                                                                                                   | `data-active`（另有 `aria-current`）                                                                 |
+| `settings-section`                                 | 设置分区 `section`（标题 + 说明 + 内容）                                                                                   | —                                                                                                    |
+| `theme-card`                                       | 外观页每张主题卡（外层 `div`，最上层盖一个透明点击 `button`）                                                              | `data-active`                                                                                        |
+| `theme-preview`                                    | 预览卡的作用域根：`data-theme / data-mode / data-opt-*`，`surface-canvas relative isolate overflow-hidden`                 | 同 `<html>`                                                                                          |
+| `modal-overlay` / `modal`                          | 模态遮罩 / 面板（Portal 到 `body`，仍在 `<html data-theme>` 作用域内）                                                     | —                                                                                                    |
+| `modal-header`                                     | `modal` 头部行（仅传了 `title` 时渲染，含关闭键）                                                                          | —                                                                                                    |
+| `modal-title`                                      | `modal-header` 内的标题 `h2`                                                                                               | —                                                                                                    |
+| `modal-body`                                       | `modal` 正文（`children`）                                                                                                 | —                                                                                                    |
+| `modal-footer`                                     | `modal` 底部按钮区（仅传了 `footer` 时渲染）                                                                               | —                                                                                                    |
+| `drawer-overlay` / `drawer`                        | 抽屉遮罩 / 面板                                                                                                            | `drawer`：`data-side="left\|right"`                                                                  |
+| `drawer-header`                                    | `drawer` 头部行（仅传了 `title` 时渲染，含关闭键）                                                                         | —                                                                                                    |
+| `drawer-title`                                     | `drawer-header` 内的标题 `div`                                                                                             | —                                                                                                    |
+| `drawer-body`                                      | `drawer` 正文（`children`）                                                                                                | —                                                                                                    |
+| `command-palette-overlay`                          | 命令面板遮罩（`surface-overlay`）                                                                                          | —                                                                                                    |
+| `command-palette`                                  | 命令面板 `role=dialog`（`surface-raised edge-rule rounded-panel border overflow-hidden`；主题可像 `modal` 一样整体换形态） | —                                                                                                    |
+| `command-palette-header`                           | 面板顶部输入区（`border-b`）                                                                                               | —                                                                                                    |
+| `command-palette-field`                            | 输入框外框（`.field`），内含搜索图标、`command-palette-input`（`role=combobox`）与 Esc 提示                                | —                                                                                                    |
+| `command-palette-list`                             | 结果列表 `role=listbox`（自身滚动）                                                                                        | —                                                                                                    |
+| `command-palette-group`                            | 结果分组                                                                                                                   | `data-group="actions                                                                                 | chats   | pages     | characters | themes"` |
+| `command-palette-group-label`                      | 分组标题                                                                                                                   | —                                                                                                    |
+| `command-palette-item`                             | 每条命令 `role=option`                                                                                                     | `data-active`、`data-group`、`data-current`                                                          |
+| `command-palette-marker`                           | 选中项左侧 2px 强调短线（`bg-accent`）                                                                                     | —                                                                                                    |
+| `command-palette-empty` / `command-palette-footer` | 无结果提示 / 底部键位提示行（窄屏隐藏）                                                                                    | —                                                                                                    |
+| `migration-page`                                   | 迁移向导页根（`/migration`）；非本机访问时只有 `migration-forbidden`                                                       | —                                                                                                    |
+| `migration-steps` / `migration-step`               | 顶部三步指示 / 每一步                                                                                                      | `migration-step`：`data-active`                                                                      |
+| `migration-source` / `migration-users`             | 第一步：路径输入表单 / 多用户时的用户选择                                                                                  | —                                                                                                    |
+| `migration-review`                                 | 第二步：清单根                                                                                                             | —                                                                                                    |
+| `migration-category`                               | 清单里的一个类别（标题行含「勾选 / 总数」与全选）                                                                          | `data-category="characters                                                                           | chats   | lorebooks | presets    | personas | settings"` |
+| `migration-item`                                   | 清单里的一项（勾选框 + 名称 + 说明，已在库中时带标记）                                                                     | `data-exists`、`data-error`                                                                          |
+| `migration-skipped`                                | 清单底部「这一版不迁移」说明行                                                                                             | —                                                                                                    |
+| `migration-start-bar`                              | 底部吸附的开始条（与 `preset-save-bar` 同形态）                                                                            | —                                                                                                    |
+| `migration-run` / `migration-progress`             | 第三步根 / 进度标题行                                                                                                      | —                                                                                                    |
+| `migration-log` / `migration-log-item`             | 逐项进度列表 / 每一项                                                                                                      | `migration-log-item`：`data-status="imported                                                         | skipped | failed"`  |
+| `migration-warnings` / `migration-next`            | 告警列表 / 完成后的去向按钮行                                                                                              | —                                                                                                    |
+| `storage-gc`                                       | 设置页「存储」分区的清理块（按钮 + 结果）                                                                                  | —                                                                                                    |
+
+#### 创作工作台（`/studio/:kind/:id`，M6 §4）
+
+| data-part            | DOM 位置                                                                                                                                                                                        | 附加属性                                                |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| `studio-shell`       | 工作台根（顶栏 + 三栏；`main` 内铺满，自己管滚动）。宽屏：编辑器 / 测试对话 / 右栏；1024–1279 两栏；窄屏顶部分段切换                                                                            | —                                                       |
+| `studio-aside`       | 右栏（AI 协作 / 检查器 / 版本 / 提示库页签；窄屏时是「协作」分段），`bg-panel` 面；分区上色的世界（如酒馆）要把它归到侧栏那一区，否则字色继承主区 | —                                                       |
+| `studio-editor`      | 左栏编辑器的滚动容器（内含角色卡编辑器，或嵌入的 `preset-editor` / `lorebook-editor`）；提示库「插入」的落点在这里面                                                                            | —                                                       |
+| `studio-save-status` | 工作台页头里的保存状态（出错 / 名称为空 / 保存中 / 未保存 / 已保存）；工作台里编辑器不再各带底部保存条，保存与还原统一在页头                                                                    | `role="status\|alert"`                                  |
+| `studio-assist`      | 右栏「AI 协作」面板根：连接与模型行、对话流、输入区（`.field`）                                                                                                                                 | —                                                       |
+| `studio-tool-call`   | 对话流里一次工具调用的折叠条（扳手图标 + 工具名 + 一句摘要；展开看参数与结果）                                                                                                                  | `data-status="running\|ok\|error"`                      |
+| `studio-diff`        | 一个值的差异（「本轮改动」卡与版本页签里）：文字逐字比（相同部分太少时退成「原文 / 改为」两块，各带 2px 竖线 `--danger` / `--success`）；列表按条目；对象按「字段名：值」；内嵌世界书按条目摘要 | `data-mode="chars\|words\|rewrite\|list\|fields\|book"` |
+| `studio-diff-add`    | 新增：`ins`（改动的那几个字，`--success-soft` 底 + `--success` 字），或列表里整条新增的条目 `li`（`--success-soft` 底）；标签类短列表是一枚小块                                                 | —                                                       |
+| `studio-diff-del`    | 删除：`del`（`--danger-soft` 底 + `--danger` 字 + 删除线），或列表里整条删掉的条目 `li`（`--danger-soft` 底）                                                                                   | —                                                       |
+
+#### 长篇写作（`/writing`、`/writing/:projectId`，M7 §5）
+
+写作项目页走 `main` 全出血（同对话页，`main` 内铺满、自己管滚动）。命令面板在项目页多一组 `command-palette-group[data-group="writing"]`（新建章节 / AI 续写 / 存版本）。纸面上的正文是 TipTap 的 `.writing-prose`，排版读 `--font-story / --story-size / --story-leading / --story-measure / --story-weight / --story-tracking / --story-indent / --story-paragraph-gap`；中文的 `em` 用着重号，不做合成斜体。结构默认在 `features/writing/writing.css`（`@layer components`，随写作页分块懒加载）。
+
+| data-part                                                                                         | DOM 位置                                                                                                                                            | 附加属性                                                         |
+| ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `writing-list`                                                                                    | 作品列表页根（`/writing`）                                                                                                                          | —                                                                |
+| `writing-project-card`                                                                            | 作品列表里每部作品 `li`（`surface-reading edge-rule rounded-card border`；标题、章节数、字数、更新时间，右上删除键）                                | —                                                                |
+| `writing-shell`                                                                                   | 项目页三栏根：左 `writing-aside[start]` + 中间纸面列（`div`，无 data-part）+ 右 `writing-aside[end]`；<1024 左右栏变抽屉                            | —                                                                |
+| `writing-aside`                                                                                   | 左栏（目录）/ 右栏（工具页签）`aside`（`surface-panel edge-rule`）                                                                                  | `data-side="start\|end"`                                         |
+| `writing-project-head`                                                                            | 左栏顶部：回到作品列表、书名输入框、导出链接                                                                                                        | —                                                                |
+| `writing-tree`                                                                                    | 目录 `nav`：大纲入口、章节（拖放排序）、笔记分组、底部合计                                                                                          | —                                                                |
+| `writing-tree-item`                                                                               | 目录每一项（大纲入口是 `button`，章节 / 笔记是 `li`）                                                                                               | `data-kind="outline\|chapter\|note"`、`data-active`、`data-done` |
+| `writing-tree-marker`                                                                             | 当前项左侧 2px 强调短线（`bg-accent`）                                                                                                              | —                                                                |
+| `writing-tree-done`                                                                               | 章节的完成标记键（线框小方块 + 勾）                                                                                                                 | `data-done`                                                      |
+| `writing-tree-stale`                                                                              | 「摘要过期」小标（`chip-outline`）                                                                                                                  | —                                                                |
+| `writing-tree-menu`                                                                               | 「更多」弹出的小菜单（生成摘要 / 删除，`surface-raised`）                                                                                           | —                                                                |
+| `writing-header`                                                                                  | 纸面列顶栏：章节序号 + 标题输入框 + 字数 + 保存状态（窄屏两端是目录 / 工具抽屉键）                                                                  | —                                                                |
+| `writing-title`                                                                                   | 顶栏里的章节标题输入框                                                                                                                              | —                                                                |
+| `writing-save-status`                                                                             | 保存状态文字（窄屏隐藏）                                                                                                                            | `data-status="saved\|dirty\|saving\|error"`                      |
+| `writing-scroll`                                                                                  | 纸面列的滚动容器（纸下面的那块「桌面」；≥sm 有 `px-6 py-8` 留白）                                                                                   | —                                                                |
+| `writing-page`                                                                                    | 纸（`surface-reading`；宽 `--story-measure` + 留白，居中）。里面是 `.writing-prose`（`data-part="writing-prose"`）或大纲的 `textarea.writing-prose` | `data-kind="chapter\|note\|outline"`                             |
+| `writing-ai-pending`                                                                              | 续写流式写进来、还没「保留」的文字（ProseMirror 行内装饰，不进文档内容；默认 `--accent-soft` 底）                                                   | `data-streaming`                                                 |
+| `writing-ai-target`                                                                               | 重写 / 扩写 / 压缩等待结果时被选中的原文（行内装饰；默认强调色虚线下划线）                                                                          | —                                                                |
+| `writing-ai-bar`                                                                                  | 纸面列底部的 AI 条：流式中「正在写 · 停止」，写完「重来 / 撤销 / 保留」（`surface-raised`）                                                         | `data-state="streaming\|decide"`                                 |
+| `writing-toolbar`                                                                                 | 窄屏（<1024）底部的 AI 动作条（续写、重写、扩写、压缩、更多；`surface-raised`）                                                                     | —                                                                |
+| `writing-panel`                                                                                   | 右栏（或抽屉）内容：页签 AI / 圣经 / 风格 / 上下文 / 版本                                                                                           | —                                                                |
+| `writing-ai-panel` / `writing-ai-notice` / `writing-ai-usage`                                     | 「AI」页签根 / 未连模型的提示块（带去连接页的链接）/ 用量行                                                                                         | —                                                                |
+| `writing-bible-panel` / `writing-bible-editor`                                                    | 「圣经」页签根 / 嵌入的世界书编辑器外层（里面是 `lorebook-editor`）                                                                                 | —                                                                |
+| `writing-style-panel`                                                                             | 「风格」页签根                                                                                                                                      | —                                                                |
+| `writing-context-panel` / `writing-context-segments` / `writing-summary`                          | 「上下文」页签根 / 各段 token 条 / 本章摘要编辑块                                                                                                   | —                                                                |
+| `writing-versions-panel` / `writing-version-list` / `writing-version` / `writing-version-compare` | 「版本」页签根 / 版本列表 / 每一版 / 选中版本与当前稿的对照                                                                                         | `writing-version`：`data-active`、`data-author="user\|ai"`       |
+| `writing-compare`                                                                                 | 对照弹窗（`modal-body` 内）：分段「对照 / 新文本 / 原文」+ 内容                                                                                     | —                                                                |
+| `writing-diff`                                                                                    | 字符级对照的正文（`font-story`；删去的 `del` 划线、新增的 `ins` 下划线 + `--accent-soft` 底）；流式中 / 单看一边时也用它包文字                      | `data-mode="chars                                                | words | rewrite | book"` | \|words\|whole"` |
 
 ### 5.4 预览卡的结构（外观页）
 
@@ -431,6 +495,13 @@ export interface BackdropProps {
   scope: BackdropScope;
 }
 
+export type SpriteLayout = 'stage' | 'strip';
+export interface SpriteFrameProps {
+  layout: SpriteLayout; // stage = 对话列右侧、底部对齐；strip = 窄屏输入框上方的小窗
+  collapsed: boolean; // strip 折叠成 40px 头像时为 true（stage 恒为 false）
+  children: ReactNode; // 引擎的 [data-part='sprite-image']
+}
+
 export interface ThemeSignature {
   SendButton: ComponentType<SendButtonProps>;
   SwipeIndicator: ComponentType<SwipeIndicatorProps>;
@@ -440,6 +511,7 @@ export interface ThemeSignature {
   StreamingCursor: ComponentType<StreamingCursorProps>;
   MessageOrnament: ComponentType<MessageOrnamentProps>;
   Backdrop: ComponentType<BackdropProps>;
+  SpriteFrame: ComponentType<SpriteFrameProps>;
 }
 
 // 给主题用的工具
@@ -447,7 +519,7 @@ export function stableHash(value: string): number; // FNV-1a，同一 id 永远�
 export function stablePick<T>(id: string, items: readonly T[]): T; // 「随机但对该消息固定」
 ```
 
-`ThemeMeta.signature` 是 `Partial<ThemeSignature>`，没提供的回落到 `_default`：前六件 = 「素」的实现，`MessageOrnament` / `Backdrop` = 什么也不画。
+`ThemeMeta.signature` 是 `Partial<ThemeSignature>`，没提供的回落到 `_default`：前六件 = 「素」的实现，`MessageOrnament` / `Backdrop` = 什么也不画，`SpriteFrame` = 无框（只有图）。
 
 各件的挂载位置与约定：
 
@@ -461,6 +533,7 @@ export function stablePick<T>(id: string, items: readonly T[]): T; // 「随机�
 | `StreamingCursor`   | 正文末尾（`.nt-caret` 里，inline）/ 推理区标题旁                                                            | inline 元素；动画遵守 reduced-motion                                                                                                                                                       |
 | `MessageOrnament`   | `[data-part=message-ornament]` 内（引擎已给 `absolute inset-0`、`pointer-events:none`、`aria-hidden`）      | 你只画装饰，自己再 `absolute` 定位到角上；可以略伸出消息边界，但 `message-list` 横向 `overflow: hidden`、两侧只有 16px（≥sm 24px）内边距，预览卡根也裁剪，别伸出这个范围；不要放可交互元素 |
 | `Backdrop`          | `[data-part=backdrop]` 内（引擎已给定位、`-z-10`、`overflow-hidden`、`pointer-events:none`、`aria-hidden`） | 用 `scope` 区分：`preview` 时画得更轻/更小（卡片约 360×300）；只要纯 CSS 就能做到的效果（雨、颗粒）也可以不写组件，直接在 `theme.css` 里给 `[data-part='backdrop']` 画 `background-image`  |
+| `SpriteFrame`       | `[data-part=sprite-well]` 内（stage / strip 展开）；strip 折叠时在 40px 的展开键里                           | 根元素必须是 `[data-part='sprite-frame'][data-layout][data-collapsed]`（`relative size-full`）；把 `children` 包进自己的内层（`absolute` + 内边距）来留出框的厚度，不要改 `sprite-image` / `img` 的尺寸规则；形态写在该世界的 `media.css`（§11） |
 
 **Backdrop 能被看见的前提**：它垫在 `app-shell` 底色之上、所有内容之下，而 `surface-panel / surface-reading / bg-panel` 默认是实心的。要让雨透出来，就把 `--reading` / `--panel` 设成半透明，或者在 `@scope` 里给对应 `data-part` 去底/加 `backdrop-filter`。
 
@@ -626,3 +699,48 @@ export interface ThemeOption {
 两个开关在设置 → 外观 →「正文」（`richBlocks` / `cardHtml`），默认都开。
 截图时按 §9 的办法，会话里放一条含状态栏 / 思考 / 选项 / 摘要 / 旁白 / 变量更新的助手消息，
 逐项对照 DESIGN 你那一节：**块的材质必须和你世界里的面板同源**，不能是另一个世界的做法。
+
+---
+
+## 11. 背景与立绘（`<id>/media.css`）
+
+用户背景（M4（二）§A）与立绘框（§B.3）是各世界自己的皮肤，写在 `themes/<id>/media.css`。
+`apply.ts` 用 `import.meta.glob('./*/media.css')` 自动发现，**和 `theme.css` 一起**按需加载（独立 chunk，只下载一次）；
+不需要注册。立绘框的结构在 `signature.tsx` 导出 `SpriteFrame`，并在 `theme.ts` 的 `signature` 里挂上。
+
+### 11.1 引擎给了什么
+
+- 有图时：`<html data-has-backdrop="world|veil">`（值 = `ThemeMeta.backdrop`，缺省 `world`），图挂在 `<html>` 的
+  `--user-backdrop: url("…")` 上（只由应用写，变体 JSON 写不了 url）；`[data-part='backdrop'][data-scope='app']` 里、
+  世界自己的 Backdrop 之后多一层 `[data-part='user-backdrop']`（`absolute inset-0`，cover 居中）。只在对话页（进了会话）出现。
+- 缺省形态 `themes/backdrop.css`（`@layer components`）：`user-backdrop::after` 一层 canvas 色 85% 的淡化遮罩；
+  `veil` 世界（素 / 书斋，外观里打开「也显示背景」后）应用外壳里的 `.surface-reading / .surface-panel / .bg-*` 去底。
+- 立绘图层 `sprite-image`：换表情时新图淡入，时长读继承来的 `--sprite-fade`（缺省 200ms）。
+
+### 11.2 写法约定
+
+- 与 `theme.css` 一样：元素规则一律 `@scope ([data-theme='<id>']) to ([data-theme])`；有图才生效的规则把条件写在
+  scope 根上：`@scope (:root[data-theme='<id>'][data-has-backdrop]) to ([data-theme]) { … }`（预览卡是嵌套的作用域根，天然不受影响）。
+- **`theme.css` 与 `media.css` 是两个各自懒加载的 chunk，谁先插进页面不保证。** 要压过 `theme.css` 里同名规则时，
+  用 `:scope` 前缀抬一档特异性（`:scope [data-part='message-list'] { … }`），不要指望书写顺序。
+- 槽位在有图时要换值（比如阅读面加厚），写在 `:root[data-theme='<id>'][data-mode='…'][data-has-backdrop] { --reading: … }`，
+  特异性高过 `theme.css` 的模式根，也不会波及预览卡。
+- 世界自己的雨、光、颗粒要留在图上面：给这些层 `z-index: 1`（`backdrop` 本身是层叠上下文，`user-backdrop` 不设 z-index）。
+- **性能**（软件合成、2x 截图都要扛得住）：
+  - 模糊只对 `user-backdrop` 这一层做一次静态 `filter`（不动画）。有图时不要让多块面板各自 `backdrop-filter` 去模糊这张大图；
+  - 静态装饰（水珠之类）画在 `user-backdrop` 之上、会动的层之下，不抬到动画层上面——否则变成每帧都要混一遍的整屏合成层；
+  - 多个小装饰用「只有装饰那么大的 `background-size` 瓦片」，不要几十层铺满整屏的渐变；
+  - 不做视差、不给背景加动画；`prefers-reduced-motion` 下已有的动画照 §8 处理。
+- **正文可读性第一**：背景只是氛围。有图时抽测正文与阅读面的对比度（亮图、暗图各一张），不能比无图时差一截。
+- 立绘框：见 §6 的 `SpriteFrame` 一行。换表情的节奏用 `--sprite-fade` 调（写在 `[data-part='sprite-stage']` 上即可）。
+
+### 11.3 六个世界的现状
+
+| 世界 | 背景（`data-has-backdrop`） | 立绘框（`SpriteFrame`） | 挂点 / 类 |
+| ---- | ---- | ---- | ---- |
+| 琉璃 | `world`：隔着冰面。图做一次 `blur(16px)`（夜里再压暗去饱和），上盖冰蓝白的罩、四周冰更厚；冰室的冰板与冷光压回图上且调淡；有图时常驻的三块板 `backdrop-filter` 只留提饱和（不再模糊大图，模态 / 抽屉照旧），白琉璃的 `--reading` 加厚到 0.62 | 一面削了左上、右下两角的冰屏：1px 的虹（evenodd 环）、薄冰渐变、脚下一道亮棱、一道斜光；折叠 = 四角削掉的冰晶 | `.liuli-stand` `-rim` `-pane` `-view` `-glint` |
+| 雨夜 | `world`：隔一层湿玻璃。图轻模糊、去饱和、压暗，上盖夜蓝；远灯与雨压回图上；玻璃上十几颗静态水珠 + 三道水痕（`backdrop::after`，窄屏不画） | 人在湿玻璃那一边：夜蓝的玻璃、上缘高光、下半截起雾、几颗水珠与两道水痕，立绘略去饱和；立绘区铺阅读面的夜色 | `.yy-pane` `-view` `-glass` `-run[data-run]` |
+| 酒馆 | `world`：窗外景。整面背景层 `display:none`；消息列表的父级变成一扇橡木窗（`::before` 画景 + 暗角 + 玻璃上的灯光/窗光，`::after` 是遮罩出来的木框），皮面垫板拿掉；输入区的缝线补成一圈当窗台；纸条下的操作条落在一小片皮革上 | 墙上的黄铜框：7px 黄铜压条（上亮下暗 + 内唇）、深色皮革衬板、四角铆钉、有方向的投影与灯光；折叠 = 铜圈圆像 | `.jg-portrait` `-board` `-rivet[data-corner]` |
+| 暖房 | `world`：柔光衰减。图轻模糊、去饱和、偏暖，上盖奶油色的光（右上最淡、往左下渐浓）；阳光与窗台压回图上；对话托盘有图时变成 0.72 | 剪成贴纸：沿人的轮廓 3px 奶油白边 + 软影（包裹层上一次 `drop-shadow`），脚下一片暖影；折叠 = 圆形贴纸 | `[data-nf='sprite']` `[data-nf='sprite-cut']` `[data-nf='sprite-rest']` |
+| 书斋 | `veil`：默认不显示；强制显示时只用引擎遮罩，浓度调到 canvas 88%（版框里的纸本来就是实的） | 一页画心：比阅读面略白的纸（边缘暗线、无影）、外粗内细的双线版框、左下钤一方白文小印「人」；`--sprite-fade: 0ms`；折叠 = 细墨线方框 | `.sz-leaf` `-view` `-seal` |
+| 素 | `veil`：默认不显示；强制显示时只用引擎遮罩，浓度调到 canvas 88%（阅读面在强制态下是透的） | 没有框：人站在一根 1px 的线上；`--sprite-fade: 120ms`；折叠 = 只有图 | `.su-stand` |

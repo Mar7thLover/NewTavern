@@ -318,7 +318,53 @@
       "globalOn": "Active globally",
       "globalToggle": "Enable “{{name}}” globally",
       "globalToggleShort": "Global",
-      "loadHint": "A book applies when switched on globally here, attached to a chat in the session panel, or embedded in a character card."
+      "loadHint": "A book applies when switched on globally here, attached to a chat in the session panel, or embedded in a character card.",
+      "simulate": {
+        "open": "Trigger test",
+        "title": "Trigger test",
+        "hint": "Scans this book once, treating the text as a single user message, to show which entries would reach the prompt and why. Uses the global world info settings; sticky and cooldown timers don't advance and nothing is saved.",
+        "input": "Test message",
+        "placeholder": "For example: I push open the tavern door and ask the keeper for news from the north.",
+        "useDraft": "Include unsaved changes",
+        "useDraftHint": "Turn off to test the saved entries.",
+        "shortcut": "Ctrl + Enter to run",
+        "run": "Run",
+        "running": "Running…",
+        "failed": "Test failed: {{message}}",
+        "stale": "Entries changed after this run; run it again for fresh results.",
+        "activated": "Activated: {{count}}",
+        "noneActivated": "This text activates no entries.",
+        "skipped": "Held back: {{count}}",
+        "noMatch": "No keyword match: {{count}}",
+        "disabledGroup": "Disabled: {{count}}",
+        "warnings": "Engine notes",
+        "matched": "Matched",
+        "recursionLevel": "recursion pass {{level}}",
+        "reveal": "Open this entry in the editor",
+        "reasons": {
+          "constant": "Constant",
+          "key": "Keyword",
+          "secondary": "Keyword + filter",
+          "recursion": "Recursion",
+          "decorator": "Decorator"
+        },
+        "skip": {
+          "disabled": "Disabled",
+          "trigger": "Generation type mismatch",
+          "character-filter": "Character filter",
+          "delay": "Delay not reached",
+          "cooldown": "On cooldown",
+          "delay-until-recursion": "Recursion only",
+          "exclude-recursion": "Excluded from recursion",
+          "dont-activate": "Blocked by decorator",
+          "probability": "Probability roll failed",
+          "budget": "Over budget",
+          "group-lost": "Lost to its group",
+          "empty-content": "Empty content",
+          "greeting": "Greeting entry",
+          "no-match": "No match"
+        }
+      }
     },
     "personas": {
       "create": "New persona",
@@ -593,7 +639,8 @@
         "presets": "Presets",
         "lorebooks": "Lorebooks",
         "personas": "Personas",
-        "settings": "Settings & regex"
+        "settings": "Settings & regex",
+        "scripts": "Tavern Helper scripts"
       },
       "regex": "Global regex scripts",
       "regexHint": "{{newCount}} new of {{count}}; ones already in your library are skipped.",
@@ -605,7 +652,10 @@
       "skipped": "Not migrated in this version: backgrounds {{backgrounds}} · instruct templates {{instruct}} · context templates {{contextTemplates}} · themes {{themes}} · quick replies {{quickReplies}} · group chats {{groupChats}}",
       "start": "Migrate {{count}} items",
       "nothing": "Nothing selected yet",
-      "back": "Choose another folder"
+      "back": "Choose another folder",
+      "spriteCount": "{{count}} sprites",
+      "presetScripts": "Brings {{count}} scripts (imported switched off)",
+      "presetScriptsOn": "Brings {{count}} scripts (on in Tavern Helper, so they keep their switches)"
     },
     "run": {
       "running": "Migrating {{done}} / {{total}}",
@@ -975,7 +1025,25 @@
     "sections": {
       "basic": "Basics",
       "sampling": "Sampling",
+      "layout": "Layout policy",
       "prompts": "Prompt entries"
+    },
+    "layout": {
+      "hint": "How this preset's segments are arranged at assembly. Stored in NewTavern only, never written into the exported ST file.",
+      "mode": "Layout mode",
+      "modes": {
+        "follow": "Follow default",
+        "strict": "Strict fidelity",
+        "cacheAware": "Cache-aware"
+      },
+      "modeHints": {
+        "follow": "Not set: uses the prompt layout chosen in the chat. Imported presets default to strict.",
+        "strict": "Assembled exactly in preset order, byte-identical to ST, with no cache adjustments.",
+        "cacheAware": "Moves volatile segments to the tail to keep the prefix stable and cut repeated input cost. Locked entries stay put."
+      },
+      "lockedCount": "Entries locked in place: {{count}}",
+      "lockedNone": "No locked entries. Use the lock on an entry's row to pin it in place.",
+      "strictLockNote": "strict never moves entries anyway"
     },
     "name": "Name",
     "samplingHint": "Only parameters already in this preset are listed.",
@@ -1013,7 +1081,10 @@
       "content": "Content",
       "delete": "Delete entry",
       "deleteTitle": "Delete entry?",
-      "deleteMessage": "“{{name}}” will be removed from the preset when you save."
+      "deleteMessage": "“{{name}}” will be removed from the preset when you save.",
+      "dragHandle": "Drag to reorder",
+      "lock": "Lock “{{name}}” in place (cache-aware layout won't move it)",
+      "unlock": "Unlock “{{name}}”"
     },
     "roles": {
       "system": "System",
@@ -1110,17 +1181,733 @@
       "scope": {
         "message": "This message",
         "global": "Global",
-        "character": "Character"
+        "character": "Character",
+        "preset": "Preset",
+        "script": "Script"
       }
     },
     "scriptButtons": "Script buttons",
-    "loading": "Loading the card…"
+    "loading": "Loading the card…",
+    "mvuExtra": {
+      "title": "Extra-model parsing",
+      "hint": "When a reply has no <UpdateVariable>, ask another model to work out the update from the card's variable rules.",
+      "connection": "Connection",
+      "off": "Off",
+      "model": "Model name",
+      "needModel": "Enter a model name to turn it on.",
+      "when": "When",
+      "whenMissing": "Only when the reply has no update",
+      "whenAlways": "Every reply",
+      "keepTitle": "Keep variable snapshots for the last N messages",
+      "keepHint": "0 keeps everything. Above 0, snapshots on older messages are cleared to save space; recalculation starts from the nearest full snapshot."
+    },
+    "slash": {
+      "unknownTitle": "There is no /{{name}} command",
+      "unknownBody": "Nothing was sent; your text is still in the box.",
+      "resultTitle": "Command result",
+      "failedTitle": "The command failed"
+    }
   },
-  "studio": {},
-  "writing": {},
-  "backgrounds": {},
-  "sprites": {},
-  "themeVariants": {},
+  "studio": {
+    "back": "Studio",
+    "notFound": "Nothing to edit here.",
+    "openInStudio": "Open in Studio",
+    "kinds": {
+      "character": "Character",
+      "preset": "Preset",
+      "lorebook": "Lorebook"
+    },
+    "roles": {
+      "system": "System",
+      "user": "User",
+      "assistant": "Assistant"
+    },
+    "tokens": "~{{n}} tokens",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "revert": "Revert to last save",
+    "saving": "Saving…",
+    "saved": "Saved",
+    "saveFailed": "Save failed: {{message}}",
+    "nameRequired": "Name is required",
+    "noChanges": "No unsaved changes",
+    "unsavedAi": "Unsaved · includes AI edits",
+    "leaveTitle": "Leave the studio?",
+    "leaveMessage": "You have unsaved changes; they will be lost.",
+    "leave": "Discard and leave",
+    "tabs": {
+      "label": "Studio side panel",
+      "test": "Test",
+      "assist": "AI",
+      "inspector": "Inspector",
+      "versions": "Versions",
+      "library": "Library"
+    },
+    "panes": {
+      "label": "Studio panes",
+      "edit": "Edit",
+      "test": "Test",
+      "assist": "Assist"
+    },
+    "home": {
+      "subtitle": "Edit cards, tune presets, write lorebooks — and try them as you go.",
+      "ideaLabel": "Generate a character from one line",
+      "ideaPlaceholder": "e.g. The lighthouse keeper of a harbor town, quiet, always waiting for a ship that won't return",
+      "ideaHint": "Creates a new card and lets the AI draft every field; you review each change before saving. Ctrl + Enter to start.",
+      "generate": "Generate",
+      "creating": "Creating…",
+      "newCharacterName": "New character",
+      "createTitle": "Create",
+      "newCharacter": "New character",
+      "newPreset": "New preset",
+      "newLorebook": "New lorebook",
+      "openHint": "Open an existing one:",
+      "recentTitle": "Recently edited",
+      "recentEmpty": "Nothing edited yet."
+    },
+    "character": {
+      "sections": {
+        "basic": "Basics",
+        "persona": "Definition",
+        "greetings": "Greetings",
+        "examples": "Example dialogue",
+        "prompts": "Prompt overrides",
+        "notes": "Creator notes",
+        "book": "Embedded lorebook",
+        "scripts": "Character scripts",
+        "sprites": "Sprites"
+      },
+      "fields": {
+        "name": "Name",
+        "description": "Description",
+        "personality": "Personality",
+        "scenario": "Scenario",
+        "first_mes": "First message",
+        "alternate_greetings": "Alternate greeting",
+        "mes_example": "Example dialogue",
+        "system_prompt": "System prompt",
+        "post_history_instructions": "Post-history instructions",
+        "depth_prompt": "Character note (at depth)",
+        "creator": "Creator",
+        "character_version": "Version",
+        "tags": "Tags",
+        "creator_notes": "Creator notes",
+        "creator_notes_multilingual": "Localized creator notes",
+        "character_book": "Embedded lorebook",
+        "scripts": "Character scripts"
+      },
+      "depth": {
+        "prompt": "Content",
+        "depth": "Depth",
+        "role": "Role"
+      },
+      "nameRequired": "Name is required",
+      "avatarUpload": "Upload avatar",
+      "avatarReplace": "Replace avatar",
+      "avatarRemove": "Remove",
+      "avatarHint": "Cropped square and stored as PNG (used as the base image for PNG export). Takes effect immediately.",
+      "greetingCount": "{{n}} total",
+      "addGreeting": "Add alternate greeting",
+      "mesExampleHint": "Start each block with <START>; {{char}} / {{user}} are substituted.",
+      "systemPromptHint": "Empty = use the preset's main prompt; {{original}} inserts it.",
+      "depthPromptHint": "Inserted into the chat history at the given depth from the end.",
+      "notesDefault": "Default",
+      "creatorNotesHint": "Shown to users; never sent to the model.",
+      "removeLanguage": "Remove this language",
+      "addLanguage": "Add language",
+      "languagePlaceholder": "Language code, e.g. zh",
+      "bookEntries": "{{n}} entries",
+      "openBook": "Edit in Studio",
+      "bookPending": "The draft contains a new embedded lorebook ({{n}} entries); saving turns it into its own lorebook.",
+      "bookNone": "This card has no embedded lorebook.",
+      "scriptsEmpty": "No bundled scripts.",
+      "scriptEnabled": "Enable “{{name}}”",
+      "scriptUnnamed": "Untitled script",
+      "scriptAdd": "Add script",
+      "scriptEdit": "Edit script",
+      "scriptDeleteTitle": "Delete script?",
+      "scriptDeleteMessage": "“{{name}}” will be removed from this card when you save."
+    },
+    "preset": {
+      "name": "Name",
+      "layoutPolicy": "Layout policy",
+      "promptOrder": "Prompt order & toggles",
+      "prompt": "Prompt “{{name}}”"
+    },
+    "lorebook": {
+      "name": "Name"
+    },
+    "entryFields": {
+      "keys": "Keywords",
+      "secondaryKeys": "Secondary keywords",
+      "content": "Content",
+      "comment": "Title",
+      "constant": "Constant",
+      "selective": "Selective",
+      "selectiveLogic": "Logic",
+      "position": "Position",
+      "depth": "Depth",
+      "entryOrder": "Order",
+      "probability": "Probability",
+      "disabled": "Disabled",
+      "role": "Role",
+      "group": "Group",
+      "sticky": "Sticky",
+      "cooldown": "Cooldown",
+      "delay": "Delay"
+    },
+    "diff": {
+      "old": "Before",
+      "new": "After",
+      "empty": "(cleared)",
+      "gap": "{{n}} characters omitted",
+      "showJson": "Show JSON",
+      "hideJson": "Hide JSON",
+      "item": {
+        "add": "added",
+        "del": "removed",
+        "change": "changed"
+      },
+      "fieldsSame": "{{n}} other fields unchanged",
+      "itemsSame": "{{n}} unchanged",
+      "noFields": "No field changes",
+      "untitledEntry": "Untitled entry",
+      "entry": {
+        "add": "Added",
+        "update": "Changed",
+        "delete": "Deleted"
+      }
+    },
+    "assist": {
+      "connection": "Connection",
+      "intro": {
+        "character": "Say how you'd like to change this card — fill in the definition, shift the tone, add greetings. Every change is listed so you can pick what to keep.",
+        "preset": "Say how you'd like to tune this preset — which prompt to rewrite, what rule to add, how to move the samplers.",
+        "lorebook": "Say what this lorebook is missing — new entries, better keywords, merging duplicates."
+      },
+      "examples": {
+        "character": [
+          "Split the description into looks / personality / history",
+          "Write two more greetings in different moods",
+          "Run a test turn and check the voice"
+        ],
+        "preset": [
+          "Add a rule against speaking for the user",
+          "Make the main prompt shorter",
+          "How long is the assembled prompt?"
+        ],
+        "lorebook": [
+          "List all entries and find duplicate keywords",
+          "Write one entry for each major location",
+          "Split the overly long entries"
+        ]
+      },
+      "placeholder": {
+        "edit": "What should change? Enter to send, Shift + Enter for a new line",
+        "generate": "Describe what you want in a line; the AI writes it from scratch"
+      },
+      "modeEdit": "Edit",
+      "modeGenerate": "From scratch",
+      "inputLabel": "Instruction for the AI collaborator",
+      "send": "Send",
+      "retry": "Try again",
+      "stop": "Stop",
+      "clear": "Clear conversation",
+      "you": "You",
+      "youGenerate": "You · from scratch",
+      "working": "Working…",
+      "aborted": "Stopped.",
+      "interrupted": "Connection lost; this round did not finish.",
+      "maxSteps": "Reached the tool-call limit for this round; changes so far are below.",
+      "reasoning": "Reasoning",
+      "toolArgs": "Arguments",
+      "toolResult": "Result",
+      "toolFailed": "Failed",
+      "noChanges": "No changes this round",
+      "changes": "{{n}} changes this round",
+      "accept": "Accept",
+      "reject": "Reject",
+      "acceptAll": "Accept all",
+      "rejectAll": "Reject all",
+      "accepted": "Accepted",
+      "rejected": "Rejected",
+      "decisionNote": "(The user reviewed the changes above: {{accepted}} accepted, {{rejected}} rejected, {{pending}} undecided. Only accepted changes are in the current draft.)",
+      "unsavedEntries": "There are unsaved new entries the AI can't see; save first if you want the AI to edit them."
+    },
+    "test": {
+      "title": "Test chat",
+      "draftActive": "Using draft",
+      "reset": "Restart the test chat"
+    },
+    "inspector": {
+      "draft": "Draft",
+      "saved": "Saved",
+      "tokens": "~{{n}} tokens"
+    },
+    "versions": {
+      "author": {
+        "user": "You",
+        "ai": "AI"
+      },
+      "current": "current",
+      "empty": "No versions yet.",
+      "unsaved": "You have unsaved changes.",
+      "same": "Same as the current draft.",
+      "compareHint": "Restoring this version would make {{n}} changes (current draft → this version):",
+      "restore": "Restore this version",
+      "restoreTitle": "Restore v{{version}}?",
+      "restoreMessage": "Saves this version's content as a new version; history is kept.",
+      "restoreDirty": "Saves this version's content as a new version; your unsaved changes will be lost. History is kept."
+    },
+    "library": {
+      "search": "Search snippets",
+      "new": "New",
+      "allTags": "All",
+      "insertHint": "Click into a text field on the left first, then press “Insert” on a snippet.",
+      "insertTarget": "Insert into: {{name}}",
+      "field": "text field",
+      "insert": "Insert",
+      "inserted": "Inserted",
+      "asEntry": "As new prompt",
+      "empty": "The library is empty. Keep reusable snippets here and drop them in while editing.",
+      "noMatch": "No matching snippets.",
+      "name": "Name",
+      "role": "Role",
+      "roleNone": "Any",
+      "content": "Content",
+      "tags": "Tags",
+      "tagsPlaceholder": "Comma-separated",
+      "deleteTitle": "Delete snippet?",
+      "deleteMessage": "“{{name}}” will be removed from the library."
+    }
+  },
+  "writing": {
+    "title": "Writing",
+    "subtitle": "Long-form work: chapters, notes, a story bible and an AI collaborator.",
+    "list": {
+      "new": "New work",
+      "empty": "No works yet",
+      "emptyHint": "Give it a title and start with chapter one.",
+      "untitled": "Untitled work",
+      "chapters": "{{count}} chapters",
+      "words": "{{count}} words",
+      "notes": "{{count}} notes",
+      "updated": "Updated {{time}}",
+      "delete": "Delete work",
+      "deleteConfirm": "Delete “{{title}}”?",
+      "deleteHint": "Every chapter, note and version goes with it. This can’t be undone."
+    },
+    "create": {
+      "title": "New work",
+      "name": "Title",
+      "placeholder": "You can change it later",
+      "submit": "Start writing"
+    },
+    "project": {
+      "back": "All works",
+      "titleLabel": "Title",
+      "openTree": "Contents",
+      "openPanel": "Tools",
+      "emptyTitle": "This work is still empty",
+      "emptyHint": "Start the first chapter. Outline, notes and the story bible live in the side columns.",
+      "failed": "Couldn’t finish: {{message}}",
+      "export": {
+        "md": "Export Markdown",
+        "txt": "Export plain text"
+      }
+    },
+    "tabs": {
+      "ai": "AI",
+      "bible": "Bible",
+      "style": "Style",
+      "context": "Context",
+      "versions": "Versions"
+    },
+    "tree": {
+      "title": "Contents",
+      "outline": "Outline",
+      "outlineEmpty": "empty",
+      "chapters": "Chapters",
+      "notes": "Notes",
+      "newChapter": "New chapter",
+      "newNote": "New note",
+      "chapterN": "Chapter {{n}}",
+      "untitledChapter": "Untitled chapter",
+      "untitledNote": "Untitled note",
+      "emptyChapters": "No chapters yet",
+      "emptyNotes": "Cast lists, clues, ideas. Write @title in an instruction to bring one in.",
+      "words": "{{count}} words",
+      "total": "{{chapters}} chapters · {{words}} words",
+      "markDone": "Mark done (writes a summary)",
+      "markUndone": "Mark not done",
+      "stale": "Summary outdated",
+      "summaryPending": "Summarizing…",
+      "summary": "Summary",
+      "noSummary": "No summary yet",
+      "summarize": "Summarize",
+      "menu": "More",
+      "moveUp": "Move up",
+      "moveDown": "Move down",
+      "deleteConfirm": "Delete “{{title}}”?",
+      "deleteHint": "The text and all of its versions will be deleted. This can’t be undone."
+    },
+    "editor": {
+      "titleLabel": "Title",
+      "placeholder": "Start here…",
+      "notePlaceholder": "Characters, clues, ideas…",
+      "words": "{{count}} words",
+      "status": {
+        "saved": "Saved",
+        "dirty": "Unsaved",
+        "saving": "Saving…",
+        "error": "Save failed, retrying soon"
+      }
+    },
+    "outline": {
+      "hint": "Plain text or Markdown. Every AI action sees it.",
+      "placeholder": "Where the story goes, the parts, what happens in each chapter…"
+    },
+    "ai": {
+      "actionsLabel": "Actions",
+      "actions": {
+        "continue": "Continue",
+        "rewrite": "Rewrite",
+        "expand": "Expand",
+        "condense": "Condense",
+        "summarize": "Summarize",
+        "custom": "Instruction"
+      },
+      "instruction": "Instruction",
+      "instructionPlaceholder": "e.g. Make this dialogue more restrained. @Note title brings in a note, @Chapter 3 its summary.",
+      "customSelection": "Apply to the selected text",
+      "customCursor": "Write at the cursor",
+      "selectionHint": "Rewrite, expand and condense work on a selection in the text.",
+      "connection": "Connection",
+      "connectionDefault": "Use the global default",
+      "model": "Model",
+      "modelDefault": "Use the global default",
+      "modelPlaceholder": "Model name",
+      "targetLength": "Continue length (words)",
+      "targetLengthPlaceholder": "About 300 words by default",
+      "noConnection": "No model connection yet. Everything else in writing still works.",
+      "noModel": "This work has no model, and there is no global default either.",
+      "noConnectionTitle": "AI isn’t available yet",
+      "noConnectionHint": "Add a model connection first, or pick one in the AI tab.",
+      "goConnect": "Open connections",
+      "needSelection": "Select some text first",
+      "needInstruction": "Write an instruction first",
+      "noDocument": "Open a chapter first",
+      "resolveFirst": "Deal with the AI text first (keep, undo or discard)",
+      "generating": "{{action}}…",
+      "reasoning": "The model is thinking…",
+      "pendingHint": "{{action}}: not kept yet",
+      "barLabel": "AI result",
+      "stop": "Stop",
+      "keep": "Keep",
+      "undo": "Undo",
+      "retry": "Retry",
+      "summarizing": "Summarizing…",
+      "summaryDone": "Summary updated",
+      "failed": "The AI couldn’t finish: {{message}}",
+      "usage": "Input {{input}} · output {{output}} · cache hit {{cacheRead}}"
+    },
+    "compare": {
+      "title": "Compare · {{action}}",
+      "diff": "Changes",
+      "result": "New text",
+      "original": "Original",
+      "instruction": "Instruction: {{text}}",
+      "streaming": "Generating…",
+      "replace": "Replace",
+      "discard": "Discard"
+    },
+    "diff": {
+      "stats": "+{{added}} −{{removed}}",
+      "words": "Long text: compared word by word.",
+      "whole": "Too many differences: compared as a whole.",
+      "empty": "Both sides are empty."
+    },
+    "bible": {
+      "hint": "The story bible is made of lorebooks: constant entries always go in, the rest trigger on the text before the cursor and on the instruction.",
+      "bind": "Bound lorebooks",
+      "edit": "Edit",
+      "empty": "No lorebook bound yet.",
+      "entries": "{{count}} entries",
+      "open": "Open",
+      "back": "Back to list",
+      "saved": "Saved"
+    },
+    "style": {
+      "guide": "Style guide",
+      "guidePlaceholder": "Point of view, tense, tone, words to avoid… Every AI action sees it.",
+      "systemPrompt": "Project system prompt",
+      "systemPromptPlaceholder": "Leave empty to use the built-in writing prompt",
+      "systemPromptHint": "If set, it replaces the built-in writing system prompt entirely.",
+      "language": "Writing language",
+      "layoutMode": "Layout",
+      "cacheAware": "Cache-aware",
+      "strict": "Strict",
+      "budget": "Context budget (tokens)",
+      "budgetPlaceholder": "60% of the model’s context by default",
+      "saved": "Saved"
+    },
+    "context": {
+      "title": "What the model will see",
+      "noDocument": "Open a chapter first.",
+      "notConnected": "No usable connection: previewing with the default budget.",
+      "total": "{{total}} / {{budget}} tokens",
+      "segments": {
+        "system": "Writing prompt",
+        "globalSystem": "Global prompt",
+        "style": "Style guide",
+        "bibleConstant": "Bible (constant)",
+        "outline": "Outline",
+        "summaries": "Earlier summaries",
+        "chapter": "This chapter",
+        "bibleTriggered": "Bible (triggered)",
+        "references": "@references",
+        "action": "Action"
+      },
+      "truncated": "This chapter is long: {{chars}} characters were cut from the start.",
+      "summaries": "Summaries used",
+      "noSummaries": "No earlier chapter summaries",
+      "dropped": "Summaries dropped for budget",
+      "missing": "Done but not summarized",
+      "bible": "Bible entries",
+      "noBible": "Nothing triggered",
+      "constant": "constant",
+      "references": "@references",
+      "cut": "truncated",
+      "summary": "Chapter summary",
+      "summaryPlaceholder": "Written automatically when the chapter is marked done; you can write your own.",
+      "regenerate": "Regenerate"
+    },
+    "versions": {
+      "save": "Save a version",
+      "saveShort": "Save",
+      "labelPlaceholder": "Label (optional)",
+      "list": "History",
+      "empty": "No versions yet. One is saved before each AI action and every 10 minutes of changes.",
+      "author": {
+        "user": "You",
+        "ai": "AI"
+      },
+      "labels": {
+        "auto": "timed",
+        "before": "before {{action}}",
+        "ai": "AI {{action}}",
+        "beforeRestore": "before restore"
+      },
+      "compare": "Version {{version}} → current",
+      "compareHint": "Struck-through text is only in that version; underlined text is new in the current draft.",
+      "restore": "Restore",
+      "restoreConfirm": "Restore version {{version}}?",
+      "restoreHint": "The current draft is saved as a version first, so you can always come back.",
+      "restored": "Restored version {{version}}",
+      "restoreFailed": "Couldn’t restore",
+      "newChapter": "New chapter from this",
+      "copyTitle": "{{title}} (v{{version}})",
+      "saved": "Saved as version {{version}}",
+      "unchanged": "Same as the last version; nothing new saved"
+    },
+    "toolbar": {
+      "label": "AI actions",
+      "more": "More"
+    },
+    "leave": {
+      "title": "There are unsaved changes",
+      "hint": "Save this chapter before leaving.",
+      "streaming": "The AI is still writing. Leaving stops it; what it has written so far stays.",
+      "saveAndLeave": "Save and leave",
+      "stay": "Stay"
+    },
+    "palette": {
+      "group": "This work",
+      "newChapter": "New chapter",
+      "aiContinue": "AI continue",
+      "saveVersion": "Save a version"
+    }
+  },
+  "backgrounds": {
+    "title": "Background",
+    "inherit": "Inherit",
+    "noneTile": "None",
+    "none": "No background",
+    "inheritFrom": {
+      "character": "Using this character's default background, “{{name}}”.",
+      "global": "Using the global default background, “{{name}}”.",
+      "none": "Neither the character nor the global setting has a default, so there is no background.",
+      "chat": "Using this chat's own background, “{{name}}”."
+    },
+    "ownHint": "Applies to this chat only. Pick “Inherit” to go back to the character or global default.",
+    "upload": "Upload",
+    "uploading": "Uploading…",
+    "setForCharacter": "Default for this character",
+    "setGlobal": "Make global default",
+    "settingsTitle": "Backgrounds",
+    "settingsHint": "Pick one as the global default. Chats and characters can choose their own; a chat's choice beats the character's, which beats the global one.",
+    "globalTile": "Use as global default",
+    "noGlobal": "No global default",
+    "rename": "Rename",
+    "delete": "Delete",
+    "deleteConfirm": "Delete the background “{{name}}”? Chats using it go back to inheriting.",
+    "empty": "The library is empty. Upload an image or migrate from SillyTavern.",
+    "minimalWorlds": "Show backgrounds in {{worlds}} too",
+    "minimalWorldsHint": "These two worlds normally have no background image. When on, the image sits under a plain veil tinted for light or dark — no texture. Saved on this device.",
+    "paletteAction": "Change background",
+    "migration": {
+      "label": "Background images",
+      "hint": "{{newCount}} new of {{count}}; backgrounds locked to a chat follow that chat.",
+      "category": "Background",
+      "summary": "{{count}} backgrounds",
+      "defaultLabel": "Make SillyTavern’s current background the global default",
+      "defaultHint": "“{{name}}”. Used by every chat and character that has no background of its own."
+    }
+  },
+  "sprites": {
+    "title": "Sprites",
+    "region": "Character sprite",
+    "alt": "{{name}}: {{label}}",
+    "expression": "Change expression",
+    "expand": "Show sprite",
+    "collapse": "Hide sprite",
+    "settingsTitle": "Sprites and expressions",
+    "settingsHint": "When a character has sprites, one expression is picked after each reply and shown beside the chat.",
+    "modes": {
+      "classify": "Automatic",
+      "manual": "Manual",
+      "off": "Off"
+    },
+    "modeHints": {
+      "classify": "After a reply finishes, a model picks one of this character's existing expressions (one short call, no reasoning). Falls back to the default below on failure.",
+      "manual": "No model call. Pick from the menu next to the sprite, or type /emote <name> in the composer.",
+      "off": "Sprites are not shown."
+    },
+    "connection": "Connection for classifying",
+    "connectionFollow": "Same as the chat",
+    "model": "Model",
+    "modelFollow": "Connection's default model",
+    "fallback": "When unsure, use",
+    "empty": "This character has no sprites yet.",
+    "label": "Expression name",
+    "labelPlaceholder": "joy, sadness, or any Chinese name",
+    "labelInvalid": "Use lowercase letters, digits, - and _ (up to 32), or Chinese.",
+    "add": "Upload this expression",
+    "replace": "Replace “{{label}}”",
+    "delete": "Delete “{{label}}”",
+    "importZip": "Import sprite pack (zip)",
+    "importing": "Importing…",
+    "zipHint": "A SillyTavern sprite pack: file names are expression names (joy.png, sadness.webp…). Existing ones with the same name are replaced.",
+    "importResult": "Imported {{imported}}, skipped {{skipped}}"
+  },
+  "themeVariants": {
+    "title": "Variants of {{world}}",
+    "hint": "A variant only changes colours, fonts, corner radius and shadows; the world's materials and objects stay. Export it as a file to share.",
+    "original": "Original",
+    "derive": "New variant",
+    "import": "Import",
+    "importFailed": "Could not import. The file has these problems:",
+    "edit": "Edit “{{name}}”",
+    "newName": "My {{world}}",
+    "copyName": "{{name}} copy",
+    "editorTitle": "Edit variant",
+    "name": "Name",
+    "mode": "Mode being edited",
+    "groups": {
+      "surface": "Surfaces",
+      "ink": "Text",
+      "accent": "Accent",
+      "semantic": "Status colours",
+      "font": "Fonts",
+      "shape": "Corners",
+      "shadow": "Shadows",
+      "options": "World details"
+    },
+    "slotNames": {
+      "canvas": "Canvas",
+      "reading": "Reading surface",
+      "panel": "Side panel",
+      "control": "Input background",
+      "raised": "Popovers",
+      "overlay": "Overlay",
+      "edge": "Rules",
+      "edge-strong": "Strong rules",
+      "edge-focus": "Focus ring",
+      "edge-highlight": "Highlight edge",
+      "ink": "Ink",
+      "ink-story": "Narration",
+      "ink-2": "Secondary text",
+      "ink-3": "Meta text",
+      "ink-on-primary": "Text on primary",
+      "ink-link": "Links",
+      "ink-quote": "Dialogue",
+      "ink-action": "Actions",
+      "accent": "Accent",
+      "accent-soft": "Accent tint",
+      "primary": "Primary",
+      "primary-2": "Primary gradient end",
+      "primary-edge": "Primary edge",
+      "primary-glow": "Primary glow",
+      "primary-soft": "Primary tint",
+      "danger": "Danger",
+      "danger-soft": "Danger tint",
+      "success": "Success",
+      "success-soft": "Success tint",
+      "warning": "Warning",
+      "warning-soft": "Warning tint",
+      "info": "Info",
+      "info-soft": "Info tint",
+      "font-ui": "Interface font",
+      "font-story": "Story font",
+      "font-display": "Display font",
+      "r-panel": "Panel radius",
+      "r-card": "Card radius",
+      "r-control": "Control radius",
+      "shadow-panel": "Panel shadow",
+      "shadow-raised": "Popover shadow",
+      "shadow-control": "Control shadow"
+    },
+    "worldDefault": "World default",
+    "defaultShort": "Default",
+    "reset": "Back to the world's value",
+    "shadowOverride": "Override shadows",
+    "shadow": {
+      "none": "None",
+      "soft": "Soft",
+      "medium": "Medium",
+      "deep": "Deep",
+      "custom": "Custom"
+    },
+    "contrastLow": "Text on the reading surface has a contrast of only {{ratio}} (below 4.5) — tiring for long reads.",
+    "invalidCount": "{{count}} values are invalid and will be dropped on save.",
+    "export": "Export",
+    "duplicate": "Duplicate",
+    "delete": "Delete",
+    "problems": {
+      "type": "Must be text",
+      "empty": "Empty value",
+      "too_long": "Longer than 200 characters",
+      "forbidden": "Contains forbidden characters (url(, ;, braces, @, <, backslash, comments)",
+      "color": "Not a valid colour",
+      "font": "Not one of the available fonts",
+      "length": "Must be 0–64px",
+      "shadow": "Not a valid shadow",
+      "unknown_slot": "Unknown slot"
+    },
+    "issues": {
+      "not_object": "The file is not an object",
+      "format": "Not a NewTavern theme variant (wrong format)",
+      "name": "Missing name",
+      "base": "The base world does not exist",
+      "slots": "Slots are malformed",
+      "mode_unsupported": "This world has no such mode; that part was dropped",
+      "slot_unknown": "Unknown slot",
+      "slot_value": "Invalid slot value",
+      "option_unknown": "This world has no such option",
+      "option_value": "Options must be on or off",
+      "id_regenerated": "The id clashed with an existing variant, so a new one was assigned"
+    }
+  },
   "scripts": {
     "migration": {
       "label": "Tavern Helper global scripts",
@@ -1176,7 +1963,49 @@
       "saving": "Saving…"
     }
   },
-  "variableEditor": {},
+  "variableEditor": {
+    "tree": "Variable tree",
+    "empty": "This table is empty.",
+    "addKey": "Add a key",
+    "addItem": "Add an item",
+    "add": "Add",
+    "newKey": "Key name",
+    "keyExists": "That key already exists",
+    "rename": "Rename key",
+    "renameHint": "Click to rename “{{name}}”",
+    "delete": "Delete “{{name}}”",
+    "type": "Type",
+    "kinds": {
+      "string": "Text",
+      "number": "Number",
+      "boolean": "Switch",
+      "null": "Null",
+      "json": "JSON"
+    },
+    "jsonPlaceholder": "JSON value",
+    "descriptionHint": "Variable description (MVU [value, description] form), read-only",
+    "items": "{{count}} items",
+    "keys": "{{count}} keys",
+    "changes": "{{count}} unsaved changes",
+    "clean": "No changes",
+    "revert": "Undo all changes",
+    "save": "Save",
+    "saving": "Saving…",
+    "saveWithIssues": "Save ({{count}} schema issues)",
+    "saveFailed": "Could not save: {{message}}",
+    "schemaIssues": "{{count}} values do not match the structure the card registered (registerVariableSchema); they are marked under their rows. You can still save.",
+    "messageNote": "Only this message’s snapshot changes. Later messages are not recalculated automatically — use “Recalculate from here” if needed.",
+    "presetNote": "The variable table of this chat’s preset (what Tavern Helper’s getVariables({type: 'preset'}) reads).",
+    "noCharacter": "This chat has no character card.",
+    "noPreset": "This chat has no preset selected.",
+    "noScripts": "No scripts for this chat (none global, from the preset or from the card).",
+    "pickScript": "Script",
+    "scriptGroups": {
+      "global": "Global",
+      "preset": "Preset",
+      "character": "Card"
+    }
+  },
   "imageGen": {
     "menu": {
       "trigger": "Illustrate",
@@ -1258,5 +2087,8 @@
       "saved": "Saved"
     }
   },
-  "toast": {}
+  "toast": {
+    "region": "Notifications",
+    "dismiss": "Dismiss"
+  }
 }

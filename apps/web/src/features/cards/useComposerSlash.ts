@@ -51,7 +51,8 @@ export function useComposerSlash(chatId: string | undefined): (text: string) => 
       void runSlashCommand(text, host)
         .then((result) => {
           // /echo 自己会弹提示；这里只把「有返回值但没人显示」的结果亮出来（/getvar、/len …）
-          const echoed = /(^|\|)\s*\/echo\b/.test(text);
+          // 闭包里的 /echo（`/if … {: /echo … :}`）也算：不然同一句话会弹两条
+          const echoed = /(^|\||\{:)\s*\/echo\b/.test(text);
           if (result.trim() !== '' && !echoed) {
             toast({ title: t('cards.slash.resultTitle'), description: result, tone: 'info' });
           }

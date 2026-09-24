@@ -318,7 +318,53 @@
       "globalOn": "全局生效",
       "globalToggle": "全局启用「{{name}}」",
       "globalToggleShort": "全局",
-      "loadHint": "生效方式：在这里打开「全局」，或在会话面板里挂到单个对话；角色卡内嵌的书随卡生效。"
+      "loadHint": "生效方式：在这里打开「全局」，或在会话面板里挂到单个对话；角色卡内嵌的书随卡生效。",
+      "simulate": {
+        "open": "触发模拟",
+        "title": "触发模拟",
+        "hint": "把一段文字当作一条用户消息，只扫这本书一次，看哪些条目会被带进提示词、为什么。扫描设置取全局世界书设置；不推进粘滞 / 冷却，也不保存任何东西。",
+        "input": "模拟的消息",
+        "placeholder": "比如：我推开酒馆的门，向老板打听北境的消息。",
+        "useDraft": "带上未保存的修改",
+        "useDraftHint": "关掉则按已保存的条目模拟。",
+        "shortcut": "Ctrl + Enter 运行",
+        "run": "模拟",
+        "running": "模拟中…",
+        "failed": "模拟失败：{{message}}",
+        "stale": "条目在模拟之后改过，结果可能已经不准，再模拟一次即可。",
+        "activated": "会激活 {{count}} 条",
+        "noneActivated": "这段文字不会激活任何条目。",
+        "skipped": "被挡下 {{count}} 条",
+        "noMatch": "{{count}} 条没有命中关键词",
+        "disabledGroup": "{{count}} 条已禁用",
+        "warnings": "引擎提示",
+        "matched": "命中",
+        "recursionLevel": "第 {{level}} 轮递归",
+        "reveal": "在编辑器里打开这一条",
+        "reasons": {
+          "constant": "常驻",
+          "key": "关键词",
+          "secondary": "关键词 + 过滤器",
+          "recursion": "递归",
+          "decorator": "装饰器"
+        },
+        "skip": {
+          "disabled": "已禁用",
+          "trigger": "生成类型不符",
+          "character-filter": "角色过滤",
+          "delay": "延迟未到",
+          "cooldown": "冷却中",
+          "delay-until-recursion": "只在递归时激活",
+          "exclude-recursion": "不参与递归",
+          "dont-activate": "装饰器禁止激活",
+          "probability": "概率没摇中",
+          "budget": "超出预算",
+          "group-lost": "同组落选",
+          "empty-content": "内容为空",
+          "greeting": "开场白条目",
+          "no-match": "没有命中"
+        }
+      }
     },
     "personas": {
       "create": "新建档案",
@@ -593,7 +639,8 @@
         "presets": "预设",
         "lorebooks": "世界书",
         "personas": "用户档案",
-        "settings": "设置与正则"
+        "settings": "设置与正则",
+        "scripts": "酒馆助手脚本"
       },
       "regex": "全局正则脚本",
       "regexHint": "新增 {{newCount}} 条，共 {{count}} 条；库里已有的会跳过。",
@@ -605,7 +652,10 @@
       "skipped": "这一版不迁移：背景 {{backgrounds}} · 指令模板 {{instruct}} · 上下文模板 {{contextTemplates}} · 主题 {{themes}} · 快捷回复 {{quickReplies}} · 群聊 {{groupChats}}",
       "start": "开始迁移 {{count}} 项",
       "nothing": "还没有勾选任何东西",
-      "back": "换个文件夹"
+      "back": "换个文件夹",
+      "spriteCount": "立绘 {{count}} 张",
+      "presetScripts": "自带 {{count}} 个脚本（导入后先关着）",
+      "presetScriptsOn": "自带 {{count}} 个脚本（酒馆助手里开着，导入后按原开关启用）"
     },
     "run": {
       "running": "正在迁移 {{done}} / {{total}}",
@@ -975,7 +1025,25 @@
     "sections": {
       "basic": "基本",
       "sampling": "采样参数",
+      "layout": "布局策略",
       "prompts": "提示词条目"
+    },
+    "layout": {
+      "hint": "组装时怎么排这份预设的段。只存在新酒馆里，不写进导出的 ST 文件。",
+      "mode": "布局模式",
+      "modes": {
+        "follow": "跟随默认",
+        "strict": "严格保真",
+        "cacheAware": "缓存感知"
+      },
+      "modeHints": {
+        "follow": "不指定，按会话里选的提示词布局组装；导入的预设默认严格保真。",
+        "strict": "完全按预设顺序组装，与 ST 逐字一致，不为缓存做任何调整。",
+        "cacheAware": "把会变的段挪到尾部、稳住前缀，降低重复输入的费用；锁住的条目不动。"
+      },
+      "lockedCount": "锁住了 {{count}} 个条目的位置",
+      "lockedNone": "没有锁住的条目。条目行右侧的锁可以把它钉在原位。",
+      "strictLockNote": "严格保真本来就不移动任何条目"
     },
     "name": "名称",
     "samplingHint": "只列出这份预设里已有的参数。",
@@ -1013,7 +1081,10 @@
       "content": "正文",
       "delete": "删除条目",
       "deleteTitle": "删除条目？",
-      "deleteMessage": "「{{name}}」会从预设中移除，保存后生效。"
+      "deleteMessage": "「{{name}}」会从预设中移除，保存后生效。",
+      "dragHandle": "拖动调整顺序",
+      "lock": "锁住「{{name}}」的位置（缓存感知布局不移动它）",
+      "unlock": "解除「{{name}}」的位置锁"
     },
     "roles": {
       "system": "系统",
@@ -1110,17 +1181,729 @@
       "scope": {
         "message": "本条消息",
         "global": "全局",
-        "character": "角色卡"
+        "character": "角色卡",
+        "preset": "预设",
+        "script": "脚本"
       }
     },
     "scriptButtons": "脚本按钮",
-    "loading": "界面加载中…"
+    "loading": "界面加载中…",
+    "mvuExtra": {
+      "title": "额外模型解析",
+      "hint": "模型这一轮没写 <UpdateVariable> 时，另找一个模型按卡里的变量更新规则补算一次。",
+      "connection": "用哪个连接",
+      "off": "不用",
+      "model": "模型名",
+      "needModel": "填上模型名才会生效。",
+      "when": "什么时候算",
+      "whenMissing": "正文里没有变量更新时",
+      "whenAlways": "每一轮都算",
+      "keepTitle": "保留最近几层的变量快照",
+      "keepHint": "0 = 全部保留。大于 0 时，更早楼层的快照会被清掉以节省空间；重算时从最近的完整快照起算。"
+    },
+    "slash": {
+      "unknownTitle": "没有 /{{name}} 这个命令",
+      "unknownBody": "这条输入没有发送，文字还留在输入框里。",
+      "resultTitle": "命令结果",
+      "failedTitle": "命令没有执行成功"
+    }
   },
-  "studio": {},
-  "writing": {},
-  "backgrounds": {},
-  "sprites": {},
-  "themeVariants": {},
+  "studio": {
+    "back": "工作台",
+    "notFound": "找不到要编辑的对象。",
+    "openInStudio": "在工作台打开",
+    "kinds": {
+      "character": "角色卡",
+      "preset": "预设",
+      "lorebook": "世界书"
+    },
+    "roles": {
+      "system": "系统",
+      "user": "用户",
+      "assistant": "助手"
+    },
+    "tokens": "约 {{n}} token",
+    "moveUp": "上移",
+    "moveDown": "下移",
+    "revert": "还原到上次保存",
+    "saving": "保存中…",
+    "saved": "已保存",
+    "saveFailed": "保存失败：{{message}}",
+    "nameRequired": "名称不能为空",
+    "noChanges": "没有未保存的修改",
+    "unsavedAi": "未保存 · 含 AI 改动",
+    "leaveTitle": "离开工作台？",
+    "leaveMessage": "还有没保存的修改，离开后会丢掉。",
+    "leave": "放弃修改并离开",
+    "tabs": {
+      "label": "工作台侧栏",
+      "test": "测试",
+      "assist": "AI 协作",
+      "inspector": "检查器",
+      "versions": "版本",
+      "library": "提示库"
+    },
+    "panes": {
+      "label": "工作台分栏",
+      "edit": "编辑",
+      "test": "测试",
+      "assist": "协作"
+    },
+    "home": {
+      "subtitle": "改卡、调预设、写世界书，边改边试。",
+      "ideaLabel": "一句话生成角色",
+      "ideaPlaceholder": "比如：港口小镇的灯塔看守，沉默寡言，总在等一艘不会回来的船",
+      "ideaHint": "会新建一张卡，由 AI 起草全部字段，你逐条过目后再保存。Ctrl + Enter 开始。",
+      "generate": "开始生成",
+      "creating": "正在新建…",
+      "newCharacterName": "新角色",
+      "createTitle": "新建",
+      "newCharacter": "新建角色卡",
+      "newPreset": "新建预设",
+      "newLorebook": "新建世界书",
+      "openHint": "打开已有的：",
+      "recentTitle": "最近编辑",
+      "recentEmpty": "还没有编辑记录。"
+    },
+    "character": {
+      "sections": {
+        "basic": "基本",
+        "persona": "设定",
+        "greetings": "开场白",
+        "examples": "示例对话",
+        "prompts": "提示词覆盖",
+        "notes": "创作者笔记",
+        "book": "内嵌世界书",
+        "scripts": "角色脚本",
+        "sprites": "立绘"
+      },
+      "fields": {
+        "name": "名称",
+        "description": "描述",
+        "personality": "性格",
+        "scenario": "场景",
+        "first_mes": "开场白",
+        "alternate_greetings": "备用开场白",
+        "mes_example": "示例对话",
+        "system_prompt": "系统提示词",
+        "post_history_instructions": "历史后指令",
+        "depth_prompt": "角色注释（按深度注入）",
+        "creator": "创作者",
+        "character_version": "版本",
+        "tags": "标签",
+        "creator_notes": "创作者笔记",
+        "creator_notes_multilingual": "多语言创作者笔记",
+        "character_book": "内嵌世界书",
+        "scripts": "角色脚本"
+      },
+      "depth": {
+        "prompt": "内容",
+        "depth": "深度",
+        "role": "角色"
+      },
+      "nameRequired": "名称不能为空",
+      "avatarUpload": "上传头像",
+      "avatarReplace": "更换头像",
+      "avatarRemove": "移除",
+      "avatarHint": "裁成正方形，存为 PNG（导出 PNG 卡时用它做底图）。换头像立即生效。",
+      "greetingCount": "共 {{n}} 条",
+      "addGreeting": "添加备用开场白",
+      "mesExampleHint": "每段以 <START> 开头；{{char}} / {{user}} 会被替换。",
+      "systemPromptHint": "留空则用预设里的主提示词；可写 {{original}} 引用原内容。",
+      "depthPromptHint": "插在聊天记录里离末尾指定深度的位置。",
+      "notesDefault": "默认",
+      "creatorNotesHint": "给使用者看的说明，不会发给模型。",
+      "removeLanguage": "删除这一语言",
+      "addLanguage": "添加语言",
+      "languagePlaceholder": "语言代码，如 en",
+      "bookEntries": "{{n}} 条条目",
+      "openBook": "在工作台编辑",
+      "bookPending": "草稿里新写了内嵌世界书（{{n}} 条），保存后会抽成一本独立的世界书。",
+      "bookNone": "这张卡没有内嵌世界书。",
+      "scriptsEmpty": "没有自带脚本。",
+      "scriptEnabled": "启用「{{name}}」",
+      "scriptUnnamed": "未命名脚本",
+      "scriptAdd": "添加脚本",
+      "scriptEdit": "编辑脚本",
+      "scriptDeleteTitle": "删除脚本？",
+      "scriptDeleteMessage": "「{{name}}」会从这张卡里去掉，保存后生效。"
+    },
+    "preset": {
+      "name": "名称",
+      "layoutPolicy": "布局策略",
+      "promptOrder": "条目顺序与开关",
+      "prompt": "提示词条目「{{name}}」"
+    },
+    "lorebook": {
+      "name": "名称"
+    },
+    "entryFields": {
+      "keys": "关键词",
+      "secondaryKeys": "次要关键词",
+      "content": "内容",
+      "comment": "标题",
+      "constant": "常驻",
+      "selective": "选择性",
+      "selectiveLogic": "逻辑",
+      "position": "位置",
+      "depth": "深度",
+      "entryOrder": "顺序",
+      "probability": "概率",
+      "disabled": "停用",
+      "role": "角色",
+      "group": "组",
+      "sticky": "黏性",
+      "cooldown": "冷却",
+      "delay": "延迟"
+    },
+    "diff": {
+      "old": "原文",
+      "new": "改为",
+      "empty": "（清空）",
+      "gap": "省略 {{n}} 字",
+      "showJson": "查看 JSON",
+      "hideJson": "收起 JSON",
+      "item": {
+        "add": "新增",
+        "del": "删除",
+        "change": "改动"
+      },
+      "fieldsSame": "其余 {{n}} 项未变",
+      "itemsSame": "{{n}} 条未变",
+      "noFields": "没有字段变化",
+      "untitledEntry": "未命名条目",
+      "entry": {
+        "add": "新增",
+        "update": "修改",
+        "delete": "删除"
+      }
+    },
+    "assist": {
+      "connection": "连接",
+      "intro": {
+        "character": "说说想怎么改这张卡：补全设定、换个语气、多写几条开场白……改动会逐条列出来，你决定要哪些。",
+        "preset": "说说想怎么调这份预设：改哪条提示词、加什么规则、采样参数怎么动。",
+        "lorebook": "说说这本世界书还缺什么：新增条目、改关键词、合并重复的设定。"
+      },
+      "examples": {
+        "character": [
+          "把描述整理成外貌 / 性格 / 经历三段",
+          "再写两条风格不同的备用开场白",
+          "试聊一轮，看看语气对不对"
+        ],
+        "preset": [
+          "加一条防止替用户说话的规则",
+          "把主提示词改得更简短",
+          "看看组装后的提示词有多长"
+        ],
+        "lorebook": ["列出所有条目，找出关键词重复的", "为主要地点各写一条条目", "把过长的条目拆短"]
+      },
+      "placeholder": {
+        "edit": "想怎么改？Enter 发送，Shift + Enter 换行",
+        "generate": "用一句话描述想要的内容，AI 从头写起"
+      },
+      "modeEdit": "修改",
+      "modeGenerate": "从头生成",
+      "inputLabel": "给 AI 协作者的指令",
+      "send": "发送",
+      "retry": "再试一次",
+      "stop": "停止",
+      "clear": "清空对话",
+      "you": "你",
+      "youGenerate": "你 · 从头生成",
+      "working": "正在处理…",
+      "aborted": "已停止。",
+      "interrupted": "连接中断，这一轮没有完成。",
+      "maxSteps": "已到本轮工具调用上限，下面是目前为止的改动。",
+      "reasoning": "推理过程",
+      "toolArgs": "参数",
+      "toolResult": "结果",
+      "toolFailed": "失败",
+      "noChanges": "本轮没有改动",
+      "changes": "本轮改动 {{n}} 项",
+      "accept": "接受",
+      "reject": "拒绝",
+      "acceptAll": "全部接受",
+      "rejectAll": "全部拒绝",
+      "accepted": "已接受",
+      "rejected": "已拒绝",
+      "decisionNote": "（用户处理了上面的改动：接受 {{accepted}} 项，拒绝 {{rejected}} 项，未处理 {{pending}} 项。只有接受的改动在当前草稿里。）",
+      "unsavedEntries": "有还没保存的新条目，AI 看不到它们；先保存再让 AI 改。"
+    },
+    "test": {
+      "title": "测试对话",
+      "draftActive": "按草稿",
+      "reset": "重新开始测试对话"
+    },
+    "inspector": {
+      "draft": "按草稿组装",
+      "saved": "按已保存",
+      "tokens": "约 {{n}} token"
+    },
+    "versions": {
+      "author": {
+        "user": "你",
+        "ai": "AI"
+      },
+      "current": "当前",
+      "empty": "还没有版本记录。",
+      "unsaved": "有没保存的修改。",
+      "same": "与当前草稿相同。",
+      "compareHint": "恢复这一版会带来 {{n}} 处改动（左为当前草稿，右为该版）：",
+      "restore": "恢复此版本",
+      "restoreTitle": "恢复到 v{{version}}？",
+      "restoreMessage": "会用这一版的内容保存一次，产生新版本，历史不会删除。",
+      "restoreDirty": "会用这一版的内容保存一次，当前没保存的修改会丢掉。历史不会删除。"
+    },
+    "library": {
+      "search": "搜索片段",
+      "new": "新建",
+      "allTags": "全部",
+      "insertHint": "先在左侧点一下要插入的文本框，再点片段的「插入」。",
+      "insertTarget": "插入到：{{name}}",
+      "field": "文本框",
+      "insert": "插入",
+      "inserted": "已插入",
+      "asEntry": "作为新条目",
+      "empty": "提示库是空的：把常用的片段存在这里，编辑时随手插入。",
+      "noMatch": "没有匹配的片段。",
+      "name": "名称",
+      "role": "角色",
+      "roleNone": "不限",
+      "content": "内容",
+      "tags": "标签",
+      "tagsPlaceholder": "逗号分隔",
+      "deleteTitle": "删除片段？",
+      "deleteMessage": "「{{name}}」会从提示库里删除。"
+    }
+  },
+  "writing": {
+    "title": "写作",
+    "subtitle": "长篇作品：章节、笔记、设定圣经与 AI 协作。",
+    "list": {
+      "new": "新建作品",
+      "empty": "还没有作品",
+      "emptyHint": "起个书名，从第一章写起。",
+      "untitled": "未命名作品",
+      "chapters": "{{count}} 章",
+      "words": "{{count}} 字",
+      "notes": "{{count}} 篇笔记",
+      "updated": "更新于 {{time}}",
+      "delete": "删除作品",
+      "deleteConfirm": "删除「{{title}}」？",
+      "deleteHint": "全部章节、笔记和版本都会一起删掉，不能恢复。"
+    },
+    "create": {
+      "title": "新建作品",
+      "name": "书名",
+      "placeholder": "之后还能改",
+      "submit": "开始写"
+    },
+    "project": {
+      "back": "全部作品",
+      "titleLabel": "书名",
+      "openTree": "目录",
+      "openPanel": "工具",
+      "emptyTitle": "这部作品还是空的",
+      "emptyHint": "先建第一章。大纲、笔记和设定圣经在左右两栏。",
+      "failed": "没能完成：{{message}}",
+      "export": {
+        "md": "导出 Markdown",
+        "txt": "导出纯文本"
+      }
+    },
+    "tabs": {
+      "ai": "AI",
+      "bible": "圣经",
+      "style": "风格",
+      "context": "上下文",
+      "versions": "版本"
+    },
+    "tree": {
+      "title": "目录",
+      "outline": "大纲",
+      "outlineEmpty": "还没写",
+      "chapters": "章节",
+      "notes": "笔记",
+      "newChapter": "新建章节",
+      "newNote": "新建笔记",
+      "chapterN": "第 {{n}} 章",
+      "untitledChapter": "未命名章节",
+      "untitledNote": "未命名笔记",
+      "emptyChapters": "还没有章节",
+      "emptyNotes": "人物表、线索、灵感都可以记在这里；指令里写 @标题 就能引用。",
+      "words": "{{count}} 字",
+      "total": "{{chapters}} 章 · {{words}} 字",
+      "markDone": "标记完成（会生成摘要）",
+      "markUndone": "取消完成",
+      "stale": "摘要过期",
+      "summaryPending": "摘要生成中…",
+      "summary": "摘要",
+      "noSummary": "还没有摘要",
+      "summarize": "生成摘要",
+      "menu": "更多",
+      "moveUp": "上移",
+      "moveDown": "下移",
+      "deleteConfirm": "删除「{{title}}」？",
+      "deleteHint": "正文和它的全部版本都会删掉，不能恢复。"
+    },
+    "editor": {
+      "titleLabel": "标题",
+      "placeholder": "从这里写起……",
+      "notePlaceholder": "记下人物、线索、灵感……",
+      "words": "{{count}} 字",
+      "status": {
+        "saved": "已保存",
+        "dirty": "未保存",
+        "saving": "保存中…",
+        "error": "保存失败，稍后重试"
+      }
+    },
+    "outline": {
+      "hint": "纯文本或 Markdown。每次 AI 动作都会带上它。",
+      "placeholder": "故事的走向、分卷、每章要发生的事……"
+    },
+    "ai": {
+      "actionsLabel": "动作",
+      "actions": {
+        "continue": "续写",
+        "rewrite": "重写",
+        "expand": "扩写",
+        "condense": "压缩",
+        "summarize": "生成摘要",
+        "custom": "按指令"
+      },
+      "instruction": "指令",
+      "instructionPlaceholder": "比如：让这段对白更克制。写 @笔记标题 引用笔记，@第3章 引用那一章的摘要。",
+      "customSelection": "按指令改写选中的文字",
+      "customCursor": "按指令在光标处写",
+      "selectionHint": "重写、扩写、压缩要先在正文里选中一段。",
+      "connection": "连接",
+      "connectionDefault": "跟随全局默认",
+      "model": "模型",
+      "modelDefault": "跟随全局默认",
+      "modelPlaceholder": "模型名",
+      "targetLength": "续写长度（字）",
+      "targetLengthPlaceholder": "缺省约 400 字",
+      "noConnection": "还没有可用的模型连接，写作的其余功能照常能用。",
+      "noModel": "这部作品还没选模型，也没有全局默认模型。",
+      "noConnectionTitle": "AI 还用不了",
+      "noConnectionHint": "先在连接页加一个模型连接，或在「AI」页签里选一个。",
+      "goConnect": "去连接页",
+      "needSelection": "先在正文里选中一段",
+      "needInstruction": "先写一句指令",
+      "noDocument": "先打开一章",
+      "resolveFirst": "先处理完 AI 这一段（保留、撤销或放弃）",
+      "generating": "正在{{action}}…",
+      "reasoning": "模型在想…",
+      "pendingHint": "AI {{action}}的这段还没定下",
+      "barLabel": "AI 结果",
+      "stop": "停止",
+      "keep": "保留",
+      "undo": "撤销",
+      "retry": "重来",
+      "summarizing": "摘要生成中…",
+      "summaryDone": "摘要已更新",
+      "failed": "AI 没能完成：{{message}}",
+      "usage": "输入 {{input}} · 输出 {{output}} · 缓存命中 {{cacheRead}}"
+    },
+    "compare": {
+      "title": "对照 · {{action}}",
+      "diff": "对照",
+      "result": "新文本",
+      "original": "原文",
+      "instruction": "指令：{{text}}",
+      "streaming": "正在生成…",
+      "replace": "替换",
+      "discard": "放弃"
+    },
+    "diff": {
+      "stats": "+{{added}} −{{removed}}",
+      "words": "文本较长，按词对照。",
+      "whole": "差别太多，整段对照。",
+      "empty": "两边都是空的。"
+    },
+    "bible": {
+      "hint": "设定圣经就是世界书：常驻条目每次都带，其余按光标前的正文和指令触发。",
+      "bind": "绑定的世界书",
+      "edit": "编辑",
+      "empty": "还没有绑定世界书。",
+      "entries": "{{count}} 条",
+      "open": "打开",
+      "back": "返回列表",
+      "saved": "已保存"
+    },
+    "style": {
+      "guide": "风格指南",
+      "guidePlaceholder": "视角、时态、语气、忌讳的词……每次 AI 动作都会带上。",
+      "systemPrompt": "项目系统提示词",
+      "systemPromptPlaceholder": "留空用内置的写作提示词",
+      "systemPromptHint": "写了就整个替换内置的写作系统提示词。",
+      "language": "写作语言",
+      "layoutMode": "布局",
+      "cacheAware": "缓存友好",
+      "strict": "严格",
+      "budget": "上下文预算（token）",
+      "budgetPlaceholder": "缺省为模型上下文的 60%",
+      "saved": "已保存"
+    },
+    "context": {
+      "title": "这次会带给模型的上下文",
+      "noDocument": "先打开一章。",
+      "notConnected": "没有可用连接：按缺省预算预览。",
+      "total": "{{total}} / {{budget}} token",
+      "segments": {
+        "system": "写作提示词",
+        "globalSystem": "全局提示词",
+        "style": "风格指南",
+        "bibleConstant": "圣经常驻",
+        "outline": "大纲",
+        "summaries": "前文摘要",
+        "chapter": "本章正文",
+        "bibleTriggered": "圣经触发",
+        "references": "@引用",
+        "action": "动作指令"
+      },
+      "truncated": "本章前文太长，开头截掉了 {{chars}} 字。",
+      "summaries": "用上的摘要",
+      "noSummaries": "前面没有章节摘要",
+      "dropped": "预算不够丢掉的摘要",
+      "missing": "已完成但还没摘要",
+      "bible": "圣经条目",
+      "noBible": "没有触发的条目",
+      "constant": "常驻",
+      "references": "@引用",
+      "cut": "已截断",
+      "summary": "本章摘要",
+      "summaryPlaceholder": "章节标记完成时自动生成，也可以自己写。",
+      "regenerate": "重新生成"
+    },
+    "versions": {
+      "save": "存一版",
+      "saveShort": "存版本",
+      "labelPlaceholder": "标签（可不填）",
+      "list": "历史版本",
+      "empty": "还没有版本。AI 动作前、每 10 分钟有改动时都会自动存。",
+      "author": {
+        "user": "手写",
+        "ai": "AI"
+      },
+      "labels": {
+        "auto": "定时",
+        "before": "{{action}}前",
+        "ai": "AI {{action}}",
+        "beforeRestore": "恢复前"
+      },
+      "compare": "第 {{version}} 版 → 当前稿",
+      "compareHint": "划线是这一版有、当前稿没有的；下划线是当前稿新加的。",
+      "restore": "恢复",
+      "restoreConfirm": "恢复到第 {{version}} 版？",
+      "restoreHint": "当前稿会先存一版，随时可以再恢复回来。",
+      "restored": "已恢复到第 {{version}} 版",
+      "restoreFailed": "没能恢复",
+      "newChapter": "以此为基础新建章节",
+      "copyTitle": "{{title}}（第 {{version}} 版）",
+      "saved": "已存为第 {{version}} 版",
+      "unchanged": "和上一版一样，没有新存"
+    },
+    "toolbar": {
+      "label": "AI 动作",
+      "more": "更多"
+    },
+    "leave": {
+      "title": "还有没保存的改动",
+      "hint": "离开前先把这一章存好。",
+      "streaming": "AI 还在写。离开会停下它，已经写出来的部分会保留。",
+      "saveAndLeave": "保存并离开",
+      "stay": "留下"
+    },
+    "palette": {
+      "group": "这部作品",
+      "newChapter": "新建章节",
+      "aiContinue": "AI 续写",
+      "saveVersion": "存版本"
+    }
+  },
+  "backgrounds": {
+    "title": "背景",
+    "inherit": "继承",
+    "noneTile": "无",
+    "none": "无背景",
+    "inheritFrom": {
+      "character": "现在用的是这个角色的默认背景「{{name}}」。",
+      "global": "现在用的是全局默认背景「{{name}}」。",
+      "none": "角色和全局都没设默认背景，继承下来就是没有背景。",
+      "chat": "现在用的是这个会话自己的背景「{{name}}」。"
+    },
+    "ownHint": "只对这个会话生效；选「继承」就回到角色或全局的默认。",
+    "upload": "上传",
+    "uploading": "上传中…",
+    "setForCharacter": "设为此角色默认",
+    "setGlobal": "设为全局默认",
+    "settingsTitle": "背景",
+    "settingsHint": "选一张作全局默认。会话与角色可以各自另选，优先级：会话 > 角色 > 全局。",
+    "globalTile": "用作全局默认",
+    "noGlobal": "不设全局默认",
+    "rename": "重命名",
+    "delete": "删除",
+    "deleteConfirm": "删除背景「{{name}}」？用到它的会话会改回继承。",
+    "empty": "背景库还是空的。上传图片，或者从 SillyTavern 迁移过来。",
+    "minimalWorlds": "在{{worlds}}里也显示背景",
+    "minimalWorldsHint": "这两个世界本来不放背景图。打开后只盖一层按明暗调色的淡化遮罩，不加任何质感。存在这台设备上。",
+    "paletteAction": "切换背景",
+    "migration": {
+      "label": "背景图",
+      "hint": "新增 {{newCount}} 张，共 {{count}} 张；聊天里锁定过的背景会跟着对应的会话走。",
+      "category": "背景",
+      "summary": "背景 {{count}} 张",
+      "defaultLabel": "把 SillyTavern 当前的背景设为全局默认",
+      "defaultHint": "「{{name}}」。会话与角色没单独选背景时都用它。"
+    }
+  },
+  "sprites": {
+    "title": "立绘",
+    "region": "立绘",
+    "alt": "{{name}}：{{label}}",
+    "expression": "换表情",
+    "expand": "展开立绘",
+    "collapse": "收起立绘",
+    "settingsTitle": "立绘与表情",
+    "settingsHint": "角色有立绘时，每轮回复结束后选一张表情显示在对话旁边。",
+    "modes": {
+      "classify": "自动判断",
+      "manual": "手动",
+      "off": "关闭"
+    },
+    "modeHints": {
+      "classify": "回复写完后让模型从这个角色已有的表情里挑一个（一次很短的调用，不开推理）。失败时用下面的默认表情。",
+      "manual": "不调用模型；在立绘旁的下拉里自己选，或者在输入框里用 /emote 表情名。",
+      "off": "不显示立绘。"
+    },
+    "connection": "判断表情用的连接",
+    "connectionFollow": "跟随会话的连接",
+    "model": "模型",
+    "modelFollow": "跟随连接的默认模型",
+    "fallback": "判断不出来时用",
+    "empty": "这个角色还没有立绘。",
+    "label": "表情名",
+    "labelPlaceholder": "joy、sadness 或中文，如 开心",
+    "labelInvalid": "表情名只能是小写字母、数字、- 与 _（最多 32 个），或者中文。",
+    "add": "上传这个表情",
+    "replace": "替换「{{label}}」",
+    "delete": "删除「{{label}}」",
+    "importZip": "导入立绘包（zip）",
+    "importing": "导入中…",
+    "zipHint": "SillyTavern 的立绘包：文件名就是表情名（joy.png、sadness.webp…），同名的会被替换。",
+    "importResult": "导入 {{imported}} 张，跳过 {{skipped}} 个"
+  },
+  "themeVariants": {
+    "title": "{{world}}的变体",
+    "hint": "变体只换颜色、字体、圆角与阴影，世界的材质和物件不变。可以导出成文件分享。",
+    "original": "原版",
+    "derive": "派生变体",
+    "import": "导入",
+    "importFailed": "导入失败，文件里有这些问题：",
+    "edit": "编辑「{{name}}」",
+    "newName": "我的{{world}}",
+    "copyName": "{{name}} 副本",
+    "editorTitle": "编辑变体",
+    "name": "名称",
+    "mode": "编辑哪种模式",
+    "groups": {
+      "surface": "表面",
+      "ink": "文字",
+      "accent": "强调",
+      "semantic": "语义色",
+      "font": "字体",
+      "shape": "圆角",
+      "shadow": "阴影",
+      "options": "世界的细节"
+    },
+    "slotNames": {
+      "canvas": "底色",
+      "reading": "阅读面",
+      "panel": "侧栏",
+      "control": "输入框底",
+      "raised": "弹层",
+      "overlay": "遮罩",
+      "edge": "分隔线",
+      "edge-strong": "强分隔线",
+      "edge-focus": "焦点线",
+      "edge-highlight": "高光边",
+      "ink": "正文墨色",
+      "ink-story": "叙述文字",
+      "ink-2": "次要文字",
+      "ink-3": "元信息",
+      "ink-on-primary": "主按钮上的字",
+      "ink-link": "链接",
+      "ink-quote": "对白",
+      "ink-action": "动作",
+      "accent": "强调色",
+      "accent-soft": "强调软底",
+      "primary": "主按钮",
+      "primary-2": "主按钮渐变末端",
+      "primary-edge": "主按钮描边",
+      "primary-glow": "主按钮光晕",
+      "primary-soft": "主按钮软底",
+      "danger": "危险",
+      "danger-soft": "危险软底",
+      "success": "成功",
+      "success-soft": "成功软底",
+      "warning": "警告",
+      "warning-soft": "警告软底",
+      "info": "提示",
+      "info-soft": "提示软底",
+      "font-ui": "界面字体",
+      "font-story": "故事字体",
+      "font-display": "标题字体",
+      "r-panel": "面板圆角",
+      "r-card": "卡片圆角",
+      "r-control": "控件圆角",
+      "shadow-panel": "面板阴影",
+      "shadow-raised": "弹层阴影",
+      "shadow-control": "控件阴影"
+    },
+    "worldDefault": "跟随世界",
+    "defaultShort": "默认",
+    "reset": "恢复世界的值",
+    "shadowOverride": "改写阴影",
+    "shadow": {
+      "none": "无",
+      "soft": "轻",
+      "medium": "中",
+      "deep": "深",
+      "custom": "自定义"
+    },
+    "contrastLow": "正文与阅读面的对比度只有 {{ratio}}，低于 4.5，长时间读会累。",
+    "invalidCount": "有 {{count}} 处值不合法，保存时会被丢掉。",
+    "export": "导出",
+    "duplicate": "复制一份",
+    "delete": "删除",
+    "problems": {
+      "type": "值必须是文字",
+      "empty": "值是空的",
+      "too_long": "超过 200 个字符",
+      "forbidden": "含有不允许的字符（url(、;、{ } 、@、<、反斜杠、注释）",
+      "color": "不是有效的颜色",
+      "font": "不在可选的字体里",
+      "length": "只能是 0–64px",
+      "shadow": "不是有效的阴影",
+      "unknown_slot": "不认识的槽位"
+    },
+    "issues": {
+      "not_object": "文件内容不是一个对象",
+      "format": "不是新酒馆的主题变体文件（format 不对）",
+      "name": "缺少名称",
+      "base": "基于的世界不存在",
+      "slots": "槽位的写法不对",
+      "mode_unsupported": "这个世界没有这种模式，这部分已丢弃",
+      "slot_unknown": "不认识的槽位",
+      "slot_value": "槽位值不合法",
+      "option_unknown": "这个世界没有这个选项",
+      "option_value": "选项只能是 on 或 off",
+      "id_regenerated": "id 和已有的变体重复，已换成新的 id"
+    }
+  },
   "scripts": {
     "migration": {
       "label": "酒馆助手全局脚本",
@@ -1176,7 +1959,49 @@
       "saving": "保存中…"
     }
   },
-  "variableEditor": {},
+  "variableEditor": {
+    "tree": "变量树",
+    "empty": "这张表是空的。",
+    "addKey": "加一个键",
+    "addItem": "加一项",
+    "add": "加上",
+    "newKey": "键名",
+    "keyExists": "已经有这个键了",
+    "rename": "改键名",
+    "renameHint": "点一下改键名「{{name}}」",
+    "delete": "删除「{{name}}」",
+    "type": "类型",
+    "kinds": {
+      "string": "文本",
+      "number": "数字",
+      "boolean": "开关",
+      "null": "空",
+      "json": "JSON"
+    },
+    "jsonPlaceholder": "JSON 值",
+    "descriptionHint": "变量说明（MVU 的 [值, 说明] 写法），只读",
+    "items": "{{count}} 项",
+    "keys": "{{count}} 个键",
+    "changes": "{{count}} 处改动未保存",
+    "clean": "没有改动",
+    "revert": "撤销到打开时",
+    "save": "保存",
+    "saving": "保存中…",
+    "saveWithIssues": "保存（有 {{count}} 处不合规）",
+    "saveFailed": "没保存上：{{message}}",
+    "schemaIssues": "有 {{count}} 处不符合卡注册的变量结构（registerVariableSchema），标在对应的行下面；仍然可以保存。",
+    "messageNote": "只改当前这条消息的快照。从这里往后的楼层不会自动重算，需要时点「从这条重算」。",
+    "presetNote": "当前会话用的预设的变量表（酒馆助手 getVariables({type: 'preset'}) 读的就是它）。",
+    "noCharacter": "这个会话没有绑定角色卡。",
+    "noPreset": "这个会话没有选预设。",
+    "noScripts": "当前会话没有可用的脚本（全局、预设、角色卡都没有）。",
+    "pickScript": "看哪个脚本的变量",
+    "scriptGroups": {
+      "global": "全局",
+      "preset": "预设",
+      "character": "角色卡"
+    }
+  },
   "imageGen": {
     "menu": {
       "trigger": "生图",
@@ -1258,5 +2083,8 @@
       "saved": "已保存"
     }
   },
-  "toast": {}
+  "toast": {
+    "region": "通知",
+    "dismiss": "关闭"
+  }
 }

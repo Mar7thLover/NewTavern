@@ -339,32 +339,69 @@ export function createSandboxRoutes(db: Db, providers: ProviderService, assets: 
     let textFormat = false;
     try {
       const caps = resolved.adapter.capabilities(model, resolved.conn);
-      const assembled = assemblePrompt(
-        buildAssembleInput(db, {
-          chat,
-          overrides,
-          nodes,
-          parentId,
-          provider: resolved.conn.provider,
-          model,
-          layoutMode,
-          caps,
-          assets,
-          // 前端卡的生成不改任何状态
-          dryRun: true,
-          ...(extraInjections.length > 0 ? { extraInjections } : {}),
-          ...(promptOverrides ? { promptOverrides } : {}),
-        }),
-      );
+      // 非 raw 的 user_input 照酒馆助手 4.9.3（`handlePresetPath` 把它 unshift 进 oaiMessages 再
+      // prepareOpenAIMessages）：当作历史末尾的一条 user 消息参与组装——深度注入（injects / 作者注释 /
+      // @depth 世界书）按它算深度，世界书扫描也看得到它。以前是组装完才拼在最后，depth 0 的注入会落在它前面。
+      const userInputAsHistory =
+        body.mode !== 'raw' && typeof body.userInput === 'string' && body.userInput !== '';
+      const assembleInput = buildAssembleInput(db, {
+        chat,
+        overrides,
+        nodes,
+        parentId,
+        provider: resolved.conn.provider,
+        model,
+        layoutMode,
+        caps,
+        assets,
+        // 前端卡的生成不改任何状态
+        dryRun: true,
+        ...(extraInjections.length > 0 ? { extraInjections } : {}),
+        ...(promptOverrides ? { promptOverrides } : {}),
+      });
+      const historyOverride = assembleInput.promptOverrides?.chat_history?.prompts;
+      // chat_history.prompts 为空数组 = 「不要历史」（连带不插作者注释等）：user_input 组装完再接在最后
+      const appendAfter =
+        userInputAsHistory && Array.isArray(historyOverride) && historyOverride.length === 0;
+      if (appendAfter) {
+        // 见下方组装之后
+      } else if (
+        userInputAsHistory &&
+        Array.isArray(historyOverride) &&
+        assembleInput.promptOverrides
+      ) {
+        // overrides.chat_history 整段替换历史：user_input 接在替换后的历史末尾（酒馆助手同样如此）
+        assembleInput.promptOverrides = {
+          ...assembleInput.promptOverrides,
+          chat_history: {
+            ...assembleInput.promptOverrides.chat_history,
+            prompts: [...historyOverride, { role: 'user', content: body.userInput as string }],
+          },
+        };
+      } else if (userInputAsHistory) {
+        assembleInput.history = [
+          ...assembleInput.history,
+          {
+            id: 'sandbox_user_input',
+            role: 'user',
+            parts: [{ type: 'text', text: body.userInput as string }],
+          },
+        ];
+      }
+      const assembled = assemblePrompt(assembleInput);
       ir = assembled.ir;
       const max = body.maxChatHistory;
-      if (typeof max === 'number' && Number.isFinite(max) && max >= 0) ir = truncateHistory(ir, max);
+      // 酒馆助手的 max_chat_history 截的是原有聊天记录，user_input 不占名额——
+      // 组装器把最后一条 user 消息标成 `user_input` 段而不是 `history`，截断本来就不算它
+      if (typeof max === 'number' && Number.isFinite(max) && max >= 0) {
+        ir = truncateHistory(ir, max);
+      }
       if (body.mode === 'raw') {
         const segments = buildRawSegments(body.orderedPrompts, ir, body.userInput, warnings);
         ir = { ...ir, segments, cachePlan: { breakpoints: [] } };
-      } else if (body.userInput !== undefined && body.userInput !== '') {
+      } else if (appendAfter) {
         const order = (ir.segments[ir.segments.length - 1]?.anchor.order ?? 0) + 1;
-        ir = { ...ir, segments: [...ir.segments, userSegment(body.userInput, order)] };
+        ir = { ...ir, segments: [...ir.segments, userSegment(body.userInput as string, order)] };
       }
       if (tools.length > 0) {
         ir = { ...ir, tools, ...(toolChoice ? { toolChoice } : {}) };

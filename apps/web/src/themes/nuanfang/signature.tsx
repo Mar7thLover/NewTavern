@@ -7,6 +7,7 @@ import {
   type MessageDividerProps,
   type MessageOrnamentProps,
   type SendButtonProps,
+  type SpriteFrameProps,
   type StreamingCursorProps,
   type SwipeIndicatorProps,
 } from '../signature';
@@ -219,5 +220,29 @@ export function Backdrop({ scope }: BackdropProps) {
       <span data-nf="sunlight" data-scope={scope} />
       <WindowsillScene className={scope === 'app' ? 'nf-sill' : 'nf-sill nf-sill-mini'} />
     </>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* 立绘框：剪成贴纸（形态在 media.css 的 [data-nf='sprite']）             */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 立绘沿着人的轮廓剪下来，留一圈奶油色的白边，像一张厚厚的贴纸贴在墙上：
+ * 描边与软影由 media.css 对图层做一次 drop-shadow（不改 img 的尺寸），脚下垫一片暖的软影。
+ * 折叠成头像时是圆形贴纸（同头像：3px 奶油描边）。
+ */
+export function SpriteFrame({ layout, collapsed, children }: SpriteFrameProps) {
+  return (
+    <div
+      data-part="sprite-frame"
+      data-layout={layout}
+      data-collapsed={collapsed}
+      data-nf="sprite"
+      className="relative size-full"
+    >
+      {!collapsed && <span aria-hidden data-nf="sprite-rest" />}
+      <div data-nf="sprite-cut">{children}</div>
+    </div>
   );
 }

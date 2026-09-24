@@ -7,7 +7,13 @@ import { asc, eq } from 'drizzle-orm';
 
 import { schema, type Db } from '../db/client.js';
 import type { AssetsService } from './assets.js';
-import { saveBackground, sniffBackgroundMime, stCustomBackgroundFile } from './backgrounds.js';
+import {
+  BACKGROUND_MAX_BYTES,
+  DEFAULT_BACKGROUND_KEY,
+  saveBackground,
+  sniffBackgroundMime,
+  stCustomBackgroundRef,
+} from './backgrounds.js';
 import { setOwnerRegexEnabled } from './embedded-regex.js';
 import { ImportError, type Importer } from './importer.js';
 import { DEFAULT_PERSONA_KEY } from './personas.js';
@@ -16,6 +22,7 @@ import {
   globalScriptKeys,
   importScripts,
   parseScriptTrees,
+  presetEmbeddedScripts,
   scriptKeysOf,
   setOwnerScriptsEnabled,
   type ParsedScript,
@@ -58,7 +65,16 @@ export interface StInventory {
   chats: { file: string; characterFile: string | null; title: string; exists: boolean }[];
   /** 暂不迁移，只报数 */
   groupChats: number;
-  presets: { file: string; name: string; exists: boolean; error?: string }[];
+  presets: {
+    file: string;
+    name: string;
+    exists: boolean;
+    error?: string;
+    /** 预设自带的酒馆助手脚本个数（有才带）；导入时收进脚本库 */
+    scripts?: number;
+    /** 酒馆助手里这份预设的脚本是开着的（`script.enabled.presets`）：导入后按原件开关启用 */
+    scriptsEnabled?: boolean;
+  }[];
   lorebooks: { file: string; name: string; entryCount: number; exists: boolean; error?: string }[];
   regex: { count: number; newCount: number };
   /** 酒馆助手的全局脚本（M5（三）§2.1）；`globalEnabled`：ST 里脚本库总开关 */
@@ -66,8 +82,11 @@ export interface StInventory {
   personas: { avatar: string; name: string; exists: boolean }[];
   defaultPersona: string | null;
   worldInfo: { globalBooks: string[]; hasSettings: boolean };
-  /** `backgrounds/` 下的图片（M4（二）§A.5）；newCount = 库里还没有的 */
-  backgrounds: { count: number; newCount: number };
+  /**
+   * `backgrounds/` 下的图片（M4（二）§A.5）；newCount = 库里还没有的；
+   * current = ST 当前的全局背景（`settings.background.name`，文件在 backgrounds/ 里才给）
+   */
+  backgrounds: { count: number; newCount: number; current: string | null };
   skipped: {
     instruct: number;
     context: number;
@@ -91,6 +110,8 @@ export interface MigrationSelect {
   defaultPersona: boolean;
   /** 导入 `backgrounds/` 下全部图片为背景库 */
   backgrounds: boolean;
+  /** 把 ST 当前的全局背景设为新酒馆的全局默认背景（缺省 false） */
+  defaultBackground: boolean;
 }
 
 export type MigrationCategory =
@@ -308,9 +329,10 @@ function stHelperScripts(settings: Record<string, unknown> | null): {
   presets: Set<string>;
 } {
   const ext = isRecord(settings?.['extension_settings']) ? settings['extension_settings'] : {};
-  const modern = isRecord(ext['tavern_helper']) && isRecord(ext['tavern_helper']['script'])
-    ? ext['tavern_helper']['script']
-    : null;
+  const modern =
+    isRecord(ext['tavern_helper']) && isRecord(ext['tavern_helper']['script'])
+      ? ext['tavern_helper']['script']
+      : null;
   if (modern) {
     const enabled = isRecord(modern['enabled']) ? modern['enabled'] : {};
     return {
@@ -466,6 +488,17 @@ function listImages(dir: string): string[] {
     .sort((a, b) => a.localeCompare(b));
 }
 
+/** ST 当前的全局背景文件名（`settings.background.name`；旧版只有 `url`） */
+function stGlobalBackground(settings: Record<string, unknown> | null): string | null {
+  const background = isRecord(settings?.['background']) ? settings['background'] : null;
+  if (!background) return null;
+  if (typeof background['name'] === 'string' && background['name'].trim() !== '') {
+    return background['name'].trim();
+  }
+  const ref = stCustomBackgroundRef(background['url']);
+  return ref?.startsWith('backgrounds/') ? ref.slice('backgrounds/'.length) : null;
+}
+
 /** 库里已有的背景：sha256 → assetId */
 function existingBackgroundHashes(db: Db): Map<string, string> {
   const map = new Map<string, string>();
@@ -571,15 +604,20 @@ export function scanStDirectory(db: Db, root: string): StInventory {
       .all()
       .map((row) => row.name),
   );
+  const helperEnabledPresets = stHelperScripts(settings).presets;
   const presets = listFiles(path.join(root, 'OpenAI Settings'), '.json').map((file) => {
     const name = baseName(file);
     try {
       const json = readJsonFile(path.join(root, 'OpenAI Settings', file));
       const jsonName = isRecord(json) && typeof json['name'] === 'string' ? json['name'] : null;
+      const scriptCount = parseScriptTrees(presetEmbeddedScripts(json)).length;
       return {
         file,
         name,
         exists: presetNames.has(name) || (jsonName !== null && presetNames.has(jsonName)),
+        ...(scriptCount > 0
+          ? { scripts: scriptCount, scriptsEnabled: helperEnabledPresets.has(name) }
+          : {}),
       };
     } catch {
       return { file, name, exists: presetNames.has(name), error: '不是有效的 JSON' };
@@ -637,11 +675,17 @@ export function scanStDirectory(db: Db, root: string): StInventory {
   const wi = wiSource(settings);
   const backgroundHashes = existingBackgroundHashes(db);
   const backgroundFiles = listImages(path.join(root, 'backgrounds'));
+  const currentBackground = stGlobalBackground(settings);
   const backgrounds = {
     count: backgroundFiles.length,
     newCount: backgroundFiles.filter(
-      (file) => !backgroundHashes.has(sha256(fs.readFileSync(path.join(root, 'backgrounds', file)))),
+      (file) =>
+        !backgroundHashes.has(sha256(fs.readFileSync(path.join(root, 'backgrounds', file)))),
     ).length,
+    current:
+      currentBackground !== null && backgroundFiles.includes(currentBackground)
+        ? currentBackground
+        : null,
   };
   return {
     root,
@@ -686,6 +730,7 @@ export function parseMigrationSelect(value: unknown): MigrationSelect {
     worldInfo: value['worldInfo'] === true,
     defaultPersona: value['defaultPersona'] === true,
     backgrounds: value['backgrounds'] === true,
+    defaultBackground: value['defaultBackground'] === true,
   };
 }
 
@@ -704,7 +749,8 @@ export function countMigrationItems(root: string, select: MigrationSelect): numb
     regexCount +
     scriptCount +
     (select.worldInfo ? 1 : 0) +
-    (select.defaultPersona ? 1 : 0)
+    (select.defaultPersona ? 1 : 0) +
+    (select.defaultBackground ? 1 : 0)
   );
 }
 
@@ -1084,6 +1130,22 @@ export async function runStMigration(
       return { id };
     });
   }
+  // ST 当前的全局背景 → 全局默认背景（会话 > 角色 > 全局，M4（二）§A.1）
+  if (select.defaultBackground && !isAborted()) {
+    await attempt('settings', 'defaultBackground', () => {
+      const file = stGlobalBackground(settings);
+      if (!file) return { status: 'skipped', message: 'SillyTavern 里没有设全局背景' };
+      const id = backgroundIdOf(file);
+      if (!id) {
+        return {
+          status: 'skipped',
+          message: `背景「${baseName(file)}」没有迁移进背景库，没法设为全局默认`,
+        };
+      }
+      writeSetting(db, DEFAULT_BACKGROUND_KEY, id);
+      return { id, message: baseName(file) };
+    });
+  }
 
   // 7. 聊天：角色按「这次导入的」→「库里同 hash 的」关联，都没有就按 header 里的角色名匹配
   const charHashes = existingCharacterHashes(db);
@@ -1099,6 +1161,33 @@ export async function runStMigration(
       return undefined;
     }
   };
+  /**
+   * 聊天专属背景（`user/images/…`，ST `forceSetBackground`）：不在 backgrounds/ 里，
+   * 随聊天一起收进背景库（按内容去重）。找不到 / 不是图片 / 超限返回 undefined。
+   */
+  const chatBackgroundIdOf = (relPath: string): string | undefined => {
+    let abs: string;
+    try {
+      abs = childPath(root, '.', relPath);
+    } catch {
+      return undefined;
+    }
+    if (!isFile(abs) || fs.statSync(abs).size > BACKGROUND_MAX_BYTES) return undefined;
+    const bytes = new Uint8Array(fs.readFileSync(abs));
+    const hash = sha256(bytes);
+    const existing = backgroundHashes.get(hash);
+    if (existing) return existing;
+    const mime = sniffBackgroundMime(bytes);
+    if (!mime) return undefined;
+    const row = saveBackground(assets, {
+      bytes,
+      mime,
+      name: baseName(path.basename(abs)),
+      source: 'st-import:chat-background',
+    });
+    backgroundHashes.set(hash, row.id);
+    return row.id;
+  };
   for (const file of select.chats) {
     const ok = await attempt('chats', file, () => {
       const bytes = readChild('chats', file);
@@ -1111,15 +1200,23 @@ export async function runStMigration(
         characterId,
         mediaRoot: root,
       });
-      applyStCustomBackground(db, result.chat.id, backgroundIdOf);
-      if (result.warnings.length > 0) {
+      const backgroundWarning = applyStCustomBackground(
+        db,
+        result.chat.id,
+        backgroundIdOf,
+        chatBackgroundIdOf,
+      );
+      const chatWarnings = backgroundWarning
+        ? [...result.warnings, backgroundWarning]
+        : result.warnings;
+      if (chatWarnings.length > 0) {
         warnings.push(
-          ...result.warnings.map((warning) => `${baseName(path.basename(file))}：${warning}`),
+          ...chatWarnings.map((warning) => `${baseName(path.basename(file))}：${warning}`),
         );
       }
       return {
         id: result.chat.id,
-        ...(result.warnings.length > 0 ? { message: result.warnings.join('；') } : {}),
+        ...(chatWarnings.length > 0 ? { message: chatWarnings.join('；') } : {}),
       };
     });
     if (!ok) break;
@@ -1128,24 +1225,37 @@ export async function runStMigration(
   return { counts, warnings };
 }
 
-/** ST 聊天 header 的 `chat_metadata.custom_background` → 会话 `metadata.background`（库里有这张才写） */
+/**
+ * ST 聊天 header 的 `chat_metadata.custom_background` → 会话 `metadata.background`。
+ * 系统背景（`backgrounds/…`）要在背景库里（这次导入的或库里同内容的）；聊天专属背景（`user/images/…`）
+ * 随聊天收进背景库。对不上时返回一句告警（会话照常导入，背景继承）。
+ */
 function applyStCustomBackground(
   db: Db,
   chatId: string,
   backgroundIdOf: (file: string) => string | undefined,
-): void {
+  chatBackgroundIdOf: (relPath: string) => string | undefined,
+): string | null {
   const chat = db.select().from(schema.chats).where(eq(schema.chats.id, chatId)).get();
   const st = chat?.metadata?.['st'];
   const header = isRecord(st) && isRecord(st['header']) ? st['header'] : null;
   // 导入时 header 已转成 compat 的 ImportedChatHeader（chatMetadata）；原样的 chat_metadata 兜底
   const raw = header?.['chatMetadata'] ?? header?.['chat_metadata'];
   const chatMetadata = isRecord(raw) ? raw : null;
-  const file = stCustomBackgroundFile(chatMetadata?.['custom_background']);
-  if (!chat || !file) return;
-  const assetId = backgroundIdOf(file);
-  if (!assetId) return;
+  const value = chatMetadata?.['custom_background'];
+  if (!chat || typeof value !== 'string' || value.trim() === '') return null;
+  const ref = stCustomBackgroundRef(value);
+  const assetId = !ref
+    ? undefined
+    : ref.startsWith('backgrounds/')
+      ? backgroundIdOf(ref.slice('backgrounds/'.length))
+      : chatBackgroundIdOf(ref);
+  if (!assetId) {
+    return `锁定的背景（${ref ?? value}）没有对应到背景库，会话改为继承默认背景`;
+  }
   db.update(schema.chats)
     .set({ metadata: { ...(chat.metadata ?? {}), background: assetId } })
     .where(eq(schema.chats.id, chatId))
     .run();
+  return null;
 }

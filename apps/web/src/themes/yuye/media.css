@@ -1,0 +1,213 @@
+/**
+ * 雨夜 · 背景与立绘（M4（二）§A §B.3；与 theme.css 一起按需加载，见 apply.ts）。
+ *
+ * 背景：隔一层湿玻璃看出去。
+ *  - 用户的图在自己这一层做一次静态 filter（轻模糊 + 去饱和 + 压暗），上面一层夜蓝——
+ *    玻璃外的东西是失焦的、蓝的、暗的；
+ *  - 远灯与三层雨压回到图的上面（z-index），颗粒本来就在 app-shell::after（z 40）最上层；
+ *  - 玻璃上停着十几颗水珠、挂着三道水痕：一张静态的径向渐变图（[data-part='backdrop']::after），
+ *    不做滤镜、不动画、不单独成层，只在有图时出现。
+ *
+ * 立绘框：人在一扇湿玻璃那一边（.yy-pane，结构见 signature.tsx）。
+ *
+ * 元素规则一律在 @scope ([data-theme='yuye']) to ([data-theme]) 里；
+ * 需要压过 theme.css 同名规则时用 `:scope` 前缀抬特异性——两份 CSS 各自懒加载，先后不保证。
+ */
+
+[data-theme='yuye'] {
+  /* 一颗水珠：左上一点高光、中间被放大的亮、右下一道暗边（与面板上那颗同一配方，只是更小更淡） */
+  --yy-bead-hi: oklch(0.97 0.01 240 / 0.8);
+  --yy-bead-body: oklch(0.72 0.03 245 / 0.16);
+  --yy-bead-rim: oklch(0.1 0.035 258 / 0.5);
+  --yy-run: oklch(0.85 0.025 240 / 0.16);
+}
+
+/* ------------------------------------------------------------------ */
+/* 背景：玻璃外                                                         */
+/* ------------------------------------------------------------------ */
+
+@scope ([data-theme='yuye']) to ([data-theme]) {
+  /* 放大一圈再模糊，边缘不露底 */
+  :scope [data-part='user-backdrop'] {
+    inset: -24px;
+    filter: blur(5px) saturate(0.5) brightness(0.62);
+  }
+
+  :scope [data-part='user-backdrop']::after {
+    background-color: transparent;
+    background-image:
+      radial-gradient(90% 70% at 88% 100%, oklch(0.24 0.05 250 / 0.2), transparent 70%),
+      linear-gradient(
+        172deg,
+        oklch(0.19 0.045 258 / 0.66) 0%,
+        oklch(0.21 0.047 255 / 0.5) 48%,
+        oklch(0.24 0.05 250 / 0.56) 100%
+      );
+  }
+
+  /* 远灯与雨在图的上面 */
+  .yy-far-lamp,
+  .yy-rain {
+    z-index: 1;
+  }
+
+  /*
+   * 玻璃上的水珠与水痕：只在有图时（有图 = 用户背景层存在）出现。
+   * 位置用百分比，落在侧栏、顶栏与四周的留白里；每颗 6–10px，淡，远看是玻璃的湿，近看是水珠。
+   */
+  :scope [data-part='backdrop'][data-scope='app']:has(> [data-part='user-backdrop'])::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    /*
+     * 不抬 z-index：画在图之上、雨之下，和图一起栅格化在背景层的底层里。
+     * 抬到动着的雨上面会变成一张单独合成的整屏图层，软件合成时每帧多混一整屏（实测掉到 30 帧）。
+     */
+    pointer-events: none;
+    background:
+      /*
+       * 水珠：每颗是一小块只有珠子那么大的图（高光 + 带暗边的珠体），不铺满整屏——
+       * 几十层整屏渐变会让每次栅格化都把整屏画几十遍。侧栏、顶栏与四周的留白里多一些。
+       */
+      radial-gradient(18% 16% at 36% 30%, var(--yy-bead-hi), transparent) 1.4% 60% / 8px 9.0px no-repeat,
+      radial-gradient(closest-side at 50% 44%, var(--yy-bead-body) 0 50%, var(--yy-bead-rim) 80%, transparent) 1.4% 60% / 8px 9.0px no-repeat,
+      radial-gradient(18% 16% at 36% 30%, var(--yy-bead-hi), transparent) 10.5% 66% / 6.5px 7.3px no-repeat,
+      radial-gradient(closest-side at 50% 44%, var(--yy-bead-body) 0 50%, var(--yy-bead-rim) 80%, transparent) 10.5% 66% / 6.5px 7.3px no-repeat,
+      radial-gradient(18% 16% at 36% 30%, var(--yy-bead-hi), transparent) 4.5% 76% / 10px 11.2px no-repeat,
+      radial-gradient(closest-side at 50% 44%, var(--yy-bead-body) 0 50%, var(--yy-bead-rim) 80%, transparent) 4.5% 76% / 10px 11.2px no-repeat,
+      radial-gradient(18% 16% at 36% 30%, var(--yy-bead-hi), transparent) 12% 83% / 7px 7.8px no-repeat,
+      radial-gradient(closest-side at 50% 44%, var(--yy-bead-body) 0 50%, var(--yy-bead-rim) 80%, transparent) 12% 83% / 7px 7.8px no-repeat,
+      radial-gradient(18% 16% at 36% 30%, var(--yy-bead-hi), transparent) 2.2% 90% / 8.5px 9.5px no-repeat,
+      radial-gradient(closest-side at 50% 44%, var(--yy-bead-body) 0 50%, var(--yy-bead-rim) 80%, transparent) 2.2% 90% / 8.5px 9.5px no-repeat,
+      radial-gradient(18% 16% at 36% 30%, var(--yy-bead-hi), transparent) 8% 95.5% / 6.5px 7.3px no-repeat,
+      radial-gradient(closest-side at 50% 44%, var(--yy-bead-body) 0 50%, var(--yy-bead-rim) 80%, transparent) 8% 95.5% / 6.5px 7.3px no-repeat,
+      radial-gradient(18% 16% at 36% 30%, var(--yy-bead-hi), transparent) 24% 2.5% / 7.5px 8.4px no-repeat,
+      radial-gradient(closest-side at 50% 44%, var(--yy-bead-body) 0 50%, var(--yy-bead-rim) 80%, transparent) 24% 2.5% / 7.5px 8.4px no-repeat,
+      radial-gradient(18% 16% at 36% 30%, var(--yy-bead-hi), transparent) 46% 3% / 6.5px 7.3px no-repeat,
+      radial-gradient(closest-side at 50% 44%, var(--yy-bead-body) 0 50%, var(--yy-bead-rim) 80%, transparent) 46% 3% / 6.5px 7.3px no-repeat,
+      radial-gradient(18% 16% at 36% 30%, var(--yy-bead-hi), transparent) 66% 2.2% / 8.5px 9.5px no-repeat,
+      radial-gradient(closest-side at 50% 44%, var(--yy-bead-body) 0 50%, var(--yy-bead-rim) 80%, transparent) 66% 2.2% / 8.5px 9.5px no-repeat,
+      radial-gradient(18% 16% at 36% 30%, var(--yy-bead-hi), transparent) 98.6% 30% / 8px 9.0px no-repeat,
+      radial-gradient(closest-side at 50% 44%, var(--yy-bead-body) 0 50%, var(--yy-bead-rim) 80%, transparent) 98.6% 30% / 8px 9.0px no-repeat,
+      radial-gradient(18% 16% at 36% 30%, var(--yy-bead-hi), transparent) 99% 62% / 10px 11.2px no-repeat,
+      radial-gradient(closest-side at 50% 44%, var(--yy-bead-body) 0 50%, var(--yy-bead-rim) 80%, transparent) 99% 62% / 10px 11.2px no-repeat,
+      radial-gradient(18% 16% at 36% 30%, var(--yy-bead-hi), transparent) 97.8% 86% / 6.5px 7.3px no-repeat,
+      radial-gradient(closest-side at 50% 44%, var(--yy-bead-body) 0 50%, var(--yy-bead-rim) 80%, transparent) 97.8% 86% / 6.5px 7.3px no-repeat,
+      radial-gradient(18% 16% at 36% 30%, var(--yy-bead-hi), transparent) 40% 98.5% / 7.5px 8.4px no-repeat,
+      radial-gradient(closest-side at 50% 44%, var(--yy-bead-body) 0 50%, var(--yy-bead-rim) 80%, transparent) 40% 98.5% / 7.5px 8.4px no-repeat,
+      /* 三道流下来的水痕：一条细亮线，下端挂着那颗珠子 */
+      linear-gradient(180deg, transparent, var(--yy-run)) calc(4.5% + 1px) calc(76% - 150px) / 1px 150px no-repeat,
+      linear-gradient(180deg, transparent, var(--yy-run)) calc(12% + 0.5px) calc(83% - 90px) / 1px 90px no-repeat,
+      linear-gradient(180deg, transparent, var(--yy-run)) calc(99% - 1px) calc(62% - 170px) / 1px 170px no-repeat;
+  }
+}
+
+/* 窄屏没有侧栏，背景只从阅读面后面隐约透出来：玻璃上的珠子落在正文边上像灰尘，不画 */
+@media (max-width: 767.98px) {
+  @scope ([data-theme='yuye']) to ([data-theme]) {
+    :scope [data-part='backdrop'][data-scope='app']:has(> [data-part='user-backdrop'])::after {
+      content: none;
+    }
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* 立绘框：隔着湿玻璃                                                    */
+/* ------------------------------------------------------------------ */
+
+@scope ([data-theme='yuye']) to ([data-theme]) {
+  /* 立绘区接在阅读面旁边（宽屏在右、窄屏在输入框上）：同一层夜色，别在对话列里空出一块更透的方框 */
+  [data-part='sprite-stage'] {
+    background-color: var(--reading);
+  }
+
+  .yy-pane {
+    border-radius: var(--r-card);
+    overflow: hidden;
+    /* 玻璃那一边是屋里更深的夜 */
+    background-color: oklch(0.2 0.04 256 / 0.55);
+  }
+
+  /* 玻璃那一边的人也浸在夜里：略去饱和、略暗（只对立绘这一小块做一次静态 filter） */
+  .yy-pane-view {
+    position: absolute;
+    inset: 0;
+    filter: saturate(0.82) brightness(0.92);
+  }
+
+  /*
+   * 玻璃本身盖在人的前面：一层很淡的夜蓝、上缘一道高光、下半截起雾，
+   * 玻璃上三颗水珠（位置对这扇窗固定）。
+   */
+  .yy-pane-glass {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background-image:
+      radial-gradient(1.2px 1.2px at calc(18% - 1px) calc(52% - 1.2px), var(--yy-bead-hi), transparent),
+      radial-gradient(2.6px 3px at 18% 52%, var(--yy-bead-body) 0 45%, var(--yy-bead-rim) 80%, transparent),
+      radial-gradient(1.2px 1.2px at calc(83% - 1px) calc(56% - 1.2px), var(--yy-bead-hi), transparent),
+      radial-gradient(2.2px 2.5px at 83% 56%, var(--yy-bead-body) 0 45%, var(--yy-bead-rim) 80%, transparent),
+      radial-gradient(1.2px 1.2px at calc(62% - 1px) calc(12% - 1.2px), var(--yy-bead-hi), transparent),
+      radial-gradient(2.8px 3.2px at 62% 12%, var(--yy-bead-body) 0 45%, var(--yy-bead-rim) 80%, transparent),
+      radial-gradient(1.2px 1.2px at calc(30% - 1px) calc(80% - 1.2px), var(--yy-bead-hi), transparent),
+      radial-gradient(2px 2.2px at 30% 80%, var(--yy-bead-body) 0 45%, var(--yy-bead-rim) 80%, transparent),
+      /* 下半截的雾：玻璃靠下更凉，水汽结在那里 */
+      linear-gradient(
+        0deg,
+        oklch(0.36 0.035 250 / 0.62) 0%,
+        oklch(0.36 0.035 250 / 0.3) 20%,
+        transparent 42%
+      ),
+      /* 玻璃的夜蓝 */
+      linear-gradient(oklch(0.3 0.06 255 / 0.18), oklch(0.3 0.06 255 / 0.18));
+    box-shadow:
+      inset 0 1px 0 var(--edge-highlight),
+      inset 0 0 0 1px oklch(0.85 0.03 245 / 0.05);
+  }
+
+  /* 两道水痕：从一颗珠子往下拖出的细线，下端再挂一颗 */
+  .yy-pane-run {
+    position: absolute;
+    width: 6px;
+    pointer-events: none;
+    background-image:
+      radial-gradient(1.2px 1.2px at 2px calc(100% - 4.2px), var(--yy-bead-hi), transparent),
+      radial-gradient(2.8px 3.2px at 3px calc(100% - 3.2px), var(--yy-bead-body) 0 45%, var(--yy-bead-rim) 80%, transparent),
+      linear-gradient(180deg, transparent, var(--yy-run) 70%, transparent calc(100% - 5px));
+    background-size:
+      100% 100%,
+      100% 100%,
+      1px 100%;
+    background-position:
+      0 0,
+      0 0,
+      2.5px 0;
+    background-repeat: no-repeat;
+  }
+
+  /* 水痕往下流，下端挂着那颗珠子 */
+  .yy-pane-run[data-run='a'] {
+    left: calc(18% - 3px);
+    top: 24%;
+    height: calc(28% + 3px);
+  }
+
+  .yy-pane-run[data-run='b'] {
+    left: calc(83% - 3px);
+    top: 30%;
+    height: calc(26% + 3px);
+  }
+
+  /* 折叠成头像：一枚起雾的圆玻璃 */
+  .yy-pane[data-collapsed='true'] {
+    border-radius: var(--r-pill);
+  }
+
+  .yy-pane[data-collapsed='true'] .yy-pane-glass {
+    background-image:
+      linear-gradient(0deg, oklch(0.34 0.035 250 / 0.4) 0%, transparent 50%),
+      linear-gradient(oklch(0.3 0.06 255 / 0.14), oklch(0.3 0.06 255 / 0.14));
+  }
+}

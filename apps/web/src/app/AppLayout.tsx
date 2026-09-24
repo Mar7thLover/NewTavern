@@ -40,8 +40,12 @@ export function AppLayout() {
   const language = useUiStore((s) => s.language);
   const setLanguage = useUiStore((s) => s.setLanguage);
   const health = useServerHealth();
-  // 对话页自己管三栏与滚动，外壳不加内边距、不撑高
-  const fullBleed = useLocation().pathname === '/';
+  // 对话页、写作项目页自己管三栏与滚动，外壳不加内边距、不撑高
+  const pathname = useLocation().pathname;
+  const fullBleed =
+    pathname === '/' ||
+    /^\/writing\/[^/]+/.test(pathname) ||
+    /^\/studio\/[^/]+\/[^/]+/.test(pathname);
 
   useEffect(() => {
     applyTheme(themeId, mode, themeOptions, variantId);
@@ -66,6 +70,7 @@ export function AppLayout() {
       <BackdropLayer
         scope="app"
         imageUrl={showBackdrop && backdropAssetId ? backgroundUrl(backdropAssetId) : null}
+        treatment={getTheme(themeId).backdrop ?? 'world'}
       />
 
       <aside

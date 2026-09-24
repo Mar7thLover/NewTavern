@@ -4,6 +4,7 @@ import { useCallback } from 'react';
 import { useChatStore } from '../../app/store/chat';
 import { emitCompat, emitNative, NATIVE_EVENTS } from '../cards/bus';
 import { cardQueryKeys, type MvuNodeResult } from '../../lib/api-cards';
+import { chatDraftFor } from '../../lib/api-studio';
 import { pathToHead } from './shared';
 import {
   mergeNode,
@@ -179,10 +180,12 @@ async function runGeneration(
   let finished = false;
 
   try {
+    // 工作台测试会话：带上当前未保存的草稿（M6 §2.4），每次发请求时现取
+    const draft = chatDraftFor(chatId);
     const response = await fetch(`/api/chats/${encodeURIComponent(chatId)}/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
-      body: JSON.stringify(body),
+      body: JSON.stringify(draft ? { ...body, draft } : body),
       signal: controller.signal,
     });
 

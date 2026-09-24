@@ -1,0 +1,256 @@
+/**
+ * 琉璃 · 背景与立绘（M4（二）§A §B.3；与 theme.css 一起按需加载，见 apply.ts）。
+ *
+ * 背景：隔着冰面。
+ *  - 用户的图只在自己这一层做一次静态 `filter: blur()`（不动画、不叠 backdrop-filter），
+ *    上面罩一层冰蓝白（夜里是冰室的深蓝），四周的冰更厚一点；
+ *  - 冰室自己的冰板与冷光压回到图的上面（z-index），光还是从四面来；
+ *  - 有图时，常驻的板（侧栏、会话列表、对话列）的 backdrop-filter 只留提饱和、不再模糊——
+ *    图已经隔着冰了，再让三块板各自去模糊一张大图是纯粹的浪费（2x 截图会卡死）；
+ *    临时浮起的模态 / 抽屉照旧模糊，免得正文从底下透成重影。
+ *
+ * 立绘框：一面削了两角的冰屏（.liuli-stand，结构见 signature.tsx）。
+ *
+ * 写法同 theme.css：元素规则一律在 @scope ([data-theme='liuli']) to ([data-theme]) 里。
+ * 需要压过 theme.css 同名规则时用 `:scope` 前缀抬特异性——两份 CSS 各自懒加载，先后不保证。
+ */
+
+/* ------------------------------------------------------------------ */
+/* 冰面的颜色                                                           */
+/* ------------------------------------------------------------------ */
+
+[data-theme='liuli'][data-mode='light'] {
+  --liuli-frost: linear-gradient(
+    172deg,
+    oklch(0.975 0.01 212 / 0.54) 0%,
+    oklch(0.945 0.02 222 / 0.4) 52%,
+    oklch(0.91 0.03 220 / 0.46) 100%
+  );
+  /* 冰在四周更厚：边缘多一层白 */
+  --liuli-frost-rim: radial-gradient(
+    120% 100% at 50% 45%,
+    transparent 55%,
+    oklch(0.975 0.012 215 / 0.5) 100%
+  );
+  --liuli-stand-ledge: oklch(1 0 0 / 0.9);
+  --liuli-stand-ledge-glow: oklch(0.9 0.05 205 / 0.35);
+}
+
+[data-theme='liuli'][data-mode='dark'] {
+  --liuli-frost: linear-gradient(
+    172deg,
+    oklch(0.235 0.036 226 / 0.56) 0%,
+    oklch(0.2 0.03 230 / 0.46) 50%,
+    oklch(0.165 0.028 235 / 0.58) 100%
+  );
+  --liuli-frost-rim: radial-gradient(
+    120% 100% at 50% 45%,
+    transparent 55%,
+    oklch(0.19 0.03 232 / 0.6) 100%
+  );
+  --liuli-stand-ledge: oklch(0.9 0.05 205 / 0.55);
+  --liuli-stand-ledge-glow: oklch(0.7 0.08 205 / 0.18);
+}
+
+/*
+ * 白琉璃有图时，对话列那块冰板厚一点：暗的图隔着薄冰会把冷墨正文的底压灰（实测 3.3:1），
+ * 阅读面加到 0.62 的白，正文回到与无图时相当；侧栏、会话列表仍是原来的薄冰，图照样透得出来。
+ */
+:root[data-theme='liuli'][data-mode='light'][data-has-backdrop] {
+  --reading: oklch(1 0 0 / 0.62);
+}
+
+/* ------------------------------------------------------------------ */
+/* 背景：隔着冰                                                         */
+/* ------------------------------------------------------------------ */
+
+@scope ([data-theme='liuli']) to ([data-theme]) {
+  /* 放大一圈再模糊：模糊后的边不会在视口边上露出一道亮框 */
+  :scope [data-part='user-backdrop'] {
+    inset: -48px;
+    /* 白琉璃：暗部抬起来一些，隔着冰看什么都是亮的 */
+    filter: blur(16px) saturate(1.05) contrast(0.72) brightness(1.18);
+  }
+
+  /* 夜琉璃：图更冷更暗一点，别让暖色的景从冰里透成一片浊色 */
+  :scope[data-mode='dark'] [data-part='user-backdrop'] {
+    filter: blur(16px) saturate(0.6) brightness(0.85);
+  }
+
+  :scope [data-part='user-backdrop']::after {
+    background-color: transparent;
+    background-image: var(--liuli-frost-rim), var(--liuli-frost);
+  }
+
+  /* 冰室的冰板与冷光在图的上面 */
+  .liuli-panes,
+  .liuli-beam {
+    z-index: 1;
+  }
+}
+
+/*
+ * 有图时冰板不再模糊，冰室的棱线与冷光会直接穿过对话列：压淡一些，只留冰的层次，
+ * 不然窄屏上整列正文都压在几道白光上。
+ */
+@scope (:root[data-theme='liuli'][data-has-backdrop]) to ([data-theme]) {
+  /*
+   * 常驻的三块板（侧栏、会话列表 / 会话面板、对话列）只提饱和、不再模糊：图本身已经模糊过一次。
+   * 模态、抽屉、命令面板这些临时浮起的冰照旧模糊——它们下面压着的是正文，不模糊会透出一层重影。
+   */
+  :scope [data-part='sidebar'],
+  :scope [data-part='chat-aside'],
+  :scope [data-part='chat-page'] > div:not([data-part]) {
+    backdrop-filter: saturate(1.15);
+  }
+
+  [data-part='backdrop'][data-scope='app'] .liuli-panes {
+    opacity: 0.55;
+  }
+
+  [data-part='backdrop'][data-scope='app'] .liuli-beam {
+    opacity: 0.42;
+  }
+
+  [data-part='backdrop'][data-scope='app'] .liuli-beam-b {
+    opacity: 0.36;
+  }
+
+  [data-part='backdrop'][data-scope='app'] .liuli-beam-c {
+    opacity: 0.3;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* 立绘框：冰屏                                                          */
+/* ------------------------------------------------------------------ */
+
+@scope ([data-theme='liuli']) to ([data-theme]) {
+  .liuli-stand {
+    /* 左上、右下两角削掉：一片冰棱，不是相框 */
+    --liuli-cut: 18px;
+    --liuli-stand-shape: polygon(
+      var(--liuli-cut) 0,
+      100% 0,
+      100% calc(100% - var(--liuli-cut)),
+      calc(100% - var(--liuli-cut)) 100%,
+      0 100%,
+      0 var(--liuli-cut)
+    );
+  }
+
+  /*
+   * 外缘：1px 的虹，由上往下淡出（与板、卡的虹边同一配方）。
+   * 用 evenodd 的双圈多边形只留 1px 的环——屏是半透明的，整块铺虹会从屏里透出来。
+   */
+  .liuli-stand-rim {
+    position: absolute;
+    inset: 0;
+    --liuli-cut-in: calc(var(--liuli-cut) + 0.42px);
+    clip-path: polygon(
+      evenodd,
+      var(--liuli-cut) 0,
+      100% 0,
+      100% calc(100% - var(--liuli-cut)),
+      calc(100% - var(--liuli-cut)) 100%,
+      0 100%,
+      0 var(--liuli-cut),
+      var(--liuli-cut) 0,
+      var(--liuli-cut-in) 1px,
+      1px var(--liuli-cut-in),
+      1px calc(100% - 1px),
+      calc(100% - var(--liuli-cut-in)) calc(100% - 1px),
+      calc(100% - 1px) calc(100% - var(--liuli-cut-in)),
+      calc(100% - 1px) 1px,
+      var(--liuli-cut-in) 1px
+    );
+    background-image: var(--liuli-iris);
+    mask-image: var(--liuli-rim-fade);
+  }
+
+  /* 屏本身：一层薄冰的渐变，上缘受光；不做 backdrop-filter */
+  .liuli-stand-pane {
+    position: absolute;
+    inset: 1px;
+    clip-path: var(--liuli-stand-shape);
+    background-image:
+      linear-gradient(180deg, var(--edge-highlight) 0 1px, transparent 1px),
+      var(--liuli-sheet);
+  }
+
+  /* 脚下：冰屏的厚度——一道亮棱，下面一抹冷光 */
+  .liuli-stand-pane::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 14px;
+    background-image:
+      linear-gradient(180deg, var(--liuli-stand-ledge) 0 1px, transparent 1px),
+      linear-gradient(180deg, var(--liuli-stand-ledge-glow), transparent);
+  }
+
+  /* 人站在棱上，不被屏裁（可以略出屏的削角，像站在屏前） */
+  .liuli-stand-view {
+    position: absolute;
+    inset: 10px 8px 14px;
+  }
+
+  /* 一道斜光扫过左上的削角 */
+  .liuli-stand-glint {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 46%;
+    height: 34%;
+    pointer-events: none;
+    background-image: linear-gradient(
+      135deg,
+      transparent 30%,
+      var(--liuli-trace) 31.5%,
+      transparent 33%,
+      transparent 40%,
+      var(--liuli-trace-glow, transparent) 41%,
+      transparent 44%
+    );
+    opacity: 0.55;
+  }
+
+  /* 折叠成头像：一粒四角都削掉的冰晶，脸被切进冰里 */
+  .liuli-stand[data-collapsed='true'] {
+    --liuli-cut: 9px;
+    --liuli-stand-shape: polygon(
+      var(--liuli-cut) 0,
+      calc(100% - var(--liuli-cut)) 0,
+      100% var(--liuli-cut),
+      100% calc(100% - var(--liuli-cut)),
+      calc(100% - var(--liuli-cut)) 100%,
+      var(--liuli-cut) 100%,
+      0 calc(100% - var(--liuli-cut)),
+      0 var(--liuli-cut)
+    );
+  }
+
+  .liuli-stand[data-collapsed='true'] .liuli-stand-rim {
+    clip-path: var(--liuli-stand-shape);
+    mask-image: none;
+    background-image: none;
+    background-color: var(--liuli-bead-edge);
+  }
+
+  .liuli-stand[data-collapsed='true'] .liuli-stand-pane::after,
+  .liuli-stand[data-collapsed='true'] .liuli-stand-glint {
+    display: none;
+  }
+
+  .liuli-stand[data-collapsed='true'] .liuli-stand-view {
+    inset: 1px;
+    clip-path: var(--liuli-stand-shape);
+  }
+
+  /* 窄屏展开的小窗：屏矮，削角跟着小一点 */
+  .liuli-stand[data-layout='strip'][data-collapsed='false'] {
+    --liuli-cut: 14px;
+  }
+}

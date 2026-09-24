@@ -263,7 +263,50 @@ describe('前端卡 generate 的补全字段', () => {
     expect(text).toContain('思维链提示');
     expect(text).toContain('替换后的历史');
     expect(text).not.toContain('旧历史');
-    expect(messages[messages.length - 1]?.content).toBe('新问题');
+    // user_input 当历史末尾的一条 user 消息参与组装（酒馆助手 handlePresetPath）：
+    // depth 0 的注入落在它之后，而不是被它压在前面
+    const contents = messages.map((message) => String(message.content));
+    const history = contents.findIndex((content) => content.includes('替换后的历史'));
+    const input = contents.findIndex((content) => content.includes('新问题'));
+    const inject = contents.findIndex((content) => content.includes('思维链提示'));
+    expect(history).toBeGreaterThanOrEqual(0);
+    expect(input).toBeGreaterThan(history);
+    expect(inject).toBeGreaterThan(input);
+  });
+
+  it('user_input 参与深度注入；max_chat_history 不把它算进名额', async () => {
+    const { app, db } = makeTestApp(dataDir);
+    const record = capturingAdapter('extras-sandbox-depth', events('ok'));
+    const { chat } = await setupChat(app, db, 'extras-sandbox-depth');
+    await app.request(`/api/chats/${chat.id}/messages`, post({ role: 'user', text: '第一句' }));
+    await app.request(`/api/chats/${chat.id}/messages`, post({ role: 'assistant', text: '第二句' }));
+
+    await sandbox(app, chat.id, {
+      userInput: '新问题',
+      maxChatHistory: 1,
+      injects: [{ role: 'system', content: 'D1 注入', position: 'in_chat', depth: 1 }],
+    });
+    const contents = (record.requests[0]?.messages ?? []).map((message) => String(message.content));
+    const joined = contents.join('\n');
+    expect(joined).not.toContain('第一句');
+    expect(joined).toContain('第二句');
+    // depth 1 = 倒数第一条（user_input）之前
+    const input = contents.findIndex((content) => content.includes('新问题'));
+    const inject = contents.findIndex((content) => content.includes('D1 注入'));
+    const second = contents.findIndex((content) => content.includes('第二句'));
+    expect(inject).toBeLessThan(input);
+    expect(inject).toBeGreaterThan(second);
+  });
+
+  it('overrides.chat_history 为空数组时：没有历史，user_input 仍在最后', async () => {
+    const { app, db } = makeTestApp(dataDir);
+    const record = capturingAdapter('extras-sandbox-empty', events('ok'));
+    const { chat } = await setupChat(app, db, 'extras-sandbox-empty');
+    await app.request(`/api/chats/${chat.id}/messages`, post({ role: 'user', text: '旧历史' }));
+    await sandbox(app, chat.id, { userInput: '只有这句', overrides: { chat_history: { prompts: [] } } });
+    const messages = record.requests[0]?.messages ?? [];
+    expect(JSON.stringify(messages)).not.toContain('旧历史');
+    expect(messages[messages.length - 1]?.content).toBe('只有这句');
   });
 
   it('preset_name 按名字换预设；找不到报 400', async () => {

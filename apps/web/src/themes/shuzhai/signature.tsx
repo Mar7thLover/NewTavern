@@ -5,6 +5,7 @@ import type {
   EmptyIllustrationProps,
   MessageDividerProps,
   SendButtonProps,
+  SpriteFrameProps,
   StreamingCursorProps,
   SwipeIndicatorProps,
 } from '../signature';
@@ -203,5 +204,42 @@ export function StreamingCursor({ kind }: StreamingCursorProps) {
         />
       </svg>
     </span>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* 立绘框：一页画心（形态在 media.css 的 .sz-leaf）                        */
+/* ------------------------------------------------------------------ */
+
+/** 白文「人」：两笔，笔画等粗 */
+function GlyphRen() {
+  return (
+    <>
+      <path d="M10.4 3.2c-.3 5.6-2.4 10.2-6.6 13.8" />
+      <path d="M10.2 8.6c1.4 3.6 3.4 6.4 6.2 8.4" />
+    </>
+  );
+}
+
+/**
+ * 人画在一页比阅读面略白的纸上：纸叠在页面上（边缘一条暗线，没有影），
+ * 纸上印着外粗内细的双线版框，左下角钤一方白文小印。换表情不做过渡（--sprite-fade: 0）。
+ * 折叠成头像时是一方细墨线框住的小像。
+ */
+export function SpriteFrame({ layout, collapsed, children }: SpriteFrameProps) {
+  return (
+    <div
+      data-part="sprite-frame"
+      data-layout={layout}
+      data-collapsed={collapsed}
+      className="sz-leaf relative size-full"
+    >
+      <div className="sz-leaf-view">{children}</div>
+      {!collapsed && (
+        <svg aria-hidden viewBox="0 0 20 20" className="sz-leaf-seal">
+          <GlyphRen />
+        </svg>
+      )}
+    </div>
   );
 }

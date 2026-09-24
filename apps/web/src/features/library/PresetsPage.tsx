@@ -17,6 +17,7 @@ import {
   useSetDefaultPresetId,
   type PresetSummary,
 } from '../../lib/api';
+import { studioPath } from '../../lib/api-studio';
 import { EmptyState, LibraryHeader, QueryStatus, errorMessage, formatDate } from './shared';
 
 const PRESET_ACCEPT = '.json';
@@ -139,6 +140,12 @@ export function PresetsPage() {
                       className={buttonVariants({ variant: 'outline', size: 'sm' })}
                     >
                       {t('common.edit')}
+                    </Link>
+                    <Link
+                      to={studioPath('preset', preset.id)}
+                      className={buttonVariants({ variant: 'outline', size: 'sm' })}
+                    >
+                      {t('studio.openInStudio')}
                     </Link>
                     <Button
                       variant="outline"

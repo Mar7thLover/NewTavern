@@ -3,6 +3,7 @@ import type {
   EmptyIllustrationProps,
   MessageDividerProps,
   SendButtonProps,
+  SpriteFrameProps,
   StreamingCursorProps,
   SwipeIndicatorProps,
 } from '../signature';
@@ -120,5 +121,22 @@ export function StreamingCursor({ kind }: StreamingCursorProps) {
         kind === 'reasoning' ? 'bg-ink-2' : 'bg-ink',
       )}
     />
+  );
+}
+
+/**
+ * 立绘框：没有框。人站在一根 1px 的线上（stage），线就是地面；
+ * 折叠成头像时和消息头像一样，只有图，不描边。
+ */
+export function SpriteFrame({ layout, collapsed, children }: SpriteFrameProps) {
+  return (
+    <div
+      data-part="sprite-frame"
+      data-layout={layout}
+      data-collapsed={collapsed}
+      className="su-stand relative size-full"
+    >
+      {children}
+    </div>
   );
 }

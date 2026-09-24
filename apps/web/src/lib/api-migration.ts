@@ -34,10 +34,27 @@ export interface StUserChoice {
 
 export interface StInventory {
   root: string;
-  characters: { file: string; name: string; exists: boolean; chatCount: number; error?: string }[];
+  characters: {
+    file: string;
+    name: string;
+    exists: boolean;
+    chatCount: number;
+    error?: string;
+    /** `characters/<角色名>/` 下的立绘张数（有才带） */
+    sprites?: number;
+  }[];
   chats: { file: string; characterFile: string | null; title: string; exists: boolean }[];
   groupChats: number;
-  presets: { file: string; name: string; exists: boolean; error?: string }[];
+  presets: {
+    file: string;
+    name: string;
+    exists: boolean;
+    error?: string;
+    /** 自带的酒馆助手脚本个数（有才带） */
+    scripts?: number;
+    /** 酒馆助手里这份预设的脚本是开着的 */
+    scriptsEnabled?: boolean;
+  }[];
   lorebooks: { file: string; name: string; entryCount: number; exists: boolean; error?: string }[];
   regex: { count: number; newCount: number };
   /** 酒馆助手全局脚本（M5（三）§2.1）；globalEnabled = ST 里脚本库总开关 */
@@ -45,8 +62,8 @@ export interface StInventory {
   personas: { avatar: string; name: string; exists: boolean }[];
   defaultPersona: string | null;
   worldInfo: { globalBooks: string[]; hasSettings: boolean };
-  /** `backgrounds/` 下的图片（M4（二）§A.5）；newCount = 库里还没有的 */
-  backgrounds?: { count: number; newCount: number };
+  /** `backgrounds/` 下的图片（M4（二）§A.5）；newCount = 库里还没有的；current = ST 当前的全局背景 */
+  backgrounds?: { count: number; newCount: number; current?: string | null };
   skipped: {
     /** M4（二）起背景会迁移，服务端不再报这一项 */
     backgrounds?: number;
@@ -72,6 +89,8 @@ export interface MigrationSelect {
   defaultPersona: boolean;
   /** 背景库（M4（二）§A.5） */
   backgrounds?: boolean;
+  /** 把 ST 当前的全局背景设为全局默认背景 */
+  defaultBackground?: boolean;
 }
 
 export type MigrationCategory =

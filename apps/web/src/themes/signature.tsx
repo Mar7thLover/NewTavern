@@ -206,7 +206,15 @@ function cssUrl(url: string): string {
  * Backdrop 之后）。它怎么出现——隔冰、隔湿玻璃、窗外景——由各世界的 `media.css` 决定，
  * 它们可以用 z-index 把自己的雨、颗粒压回到图上面。
  */
-export function BackdropLayer({ scope, imageUrl = null }: BackdropProps & { imageUrl?: string | null }) {
+export function BackdropLayer({
+  scope,
+  imageUrl = null,
+  treatment = 'world',
+}: BackdropProps & {
+  imageUrl?: string | null;
+  /** 这个世界怎么处理用户背景（`ThemeMeta.backdrop`），写进 `data-has-backdrop` 的值；缺省形态见 themes/backdrop.css */
+  treatment?: 'world' | 'veil';
+}) {
   const { Backdrop } = useSignature();
   const url = scope === 'app' ? imageUrl : null;
 
@@ -214,13 +222,13 @@ export function BackdropLayer({ scope, imageUrl = null }: BackdropProps & { imag
     if (scope !== 'app') return;
     const root = document.documentElement;
     if (url) {
-      root.setAttribute('data-has-backdrop', '');
+      root.setAttribute('data-has-backdrop', treatment);
       root.style.setProperty('--user-backdrop', cssUrl(url));
     } else {
       root.removeAttribute('data-has-backdrop');
       root.style.removeProperty('--user-backdrop');
     }
-  }, [scope, url]);
+  }, [scope, url, treatment]);
 
   useEffect(
     () => () => {

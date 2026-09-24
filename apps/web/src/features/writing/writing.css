@@ -1,0 +1,123 @@
+/*
+ * 写作页的结构默认（M7 §5.5）。只用槽位；各世界在自己的 theme.css 里（@scope）改纸面与待定文字的形态。
+ * 随写作项目页的分块懒加载，不进首屏。
+ */
+
+@layer components {
+  /* 纸：surface-reading 给底与纹理，这里只管尺寸与留白 */
+  [data-part='writing-page'] {
+    width: 100%;
+    max-width: calc(var(--story-measure) + 7rem);
+    margin-inline: auto;
+    padding: 2.5rem 1.25rem 4rem;
+  }
+  @media (min-width: 640px) {
+    [data-part='writing-page'] {
+      padding: 3.5rem 3.5rem 5rem;
+    }
+  }
+
+  .writing-editor {
+    min-height: 100%;
+  }
+
+  .writing-prose {
+    max-width: var(--story-measure);
+    min-height: 55vh;
+    margin-inline: auto;
+    outline: none;
+    font-family: var(--font-story);
+    font-size: var(--story-size);
+    line-height: var(--story-leading);
+    font-weight: var(--story-weight);
+    letter-spacing: var(--story-tracking);
+    color: var(--ink-story);
+    caret-color: var(--accent);
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+  }
+  .writing-prose p {
+    margin-block: var(--story-paragraph-gap);
+    text-indent: var(--story-indent);
+  }
+  .writing-prose > :first-child {
+    margin-top: 0;
+  }
+  .writing-prose > :last-child {
+    margin-bottom: 0;
+  }
+  .writing-prose strong {
+    font-weight: 600;
+    color: var(--ink);
+  }
+  /* 中文没有真斜体：着重号代替合成倾斜 */
+  .writing-prose em {
+    font-style: italic;
+  }
+  .writing-prose:lang(zh) em {
+    font-style: normal;
+    text-emphasis: filled dot;
+    text-emphasis-position: under right;
+  }
+  .writing-prose blockquote {
+    margin-block: 1em;
+    padding-inline-start: 1em;
+    border-inline-start: 1px solid var(--edge-strong);
+    color: var(--ink-2);
+  }
+  .writing-prose hr {
+    margin: 1.75em auto;
+    border: 0;
+    text-align: center;
+    overflow: visible;
+    height: auto;
+  }
+  .writing-prose hr::after {
+    content: '* * *';
+    color: var(--ink-3);
+    letter-spacing: 0.6em;
+  }
+  .writing-prose p.is-editor-empty:first-child::before {
+    content: attr(data-placeholder);
+    float: left;
+    height: 0;
+    color: var(--ink-3);
+    pointer-events: none;
+  }
+  .writing-prose[contenteditable='false'] {
+    caret-color: transparent;
+  }
+
+  /* AI 待定文字：强调色的软底，不铺强调色本身 */
+  [data-part='writing-ai-pending'] {
+    background-color: var(--accent-soft);
+    color: var(--ink);
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+  }
+  /* 重写 / 扩写 / 压缩等待中的原文：下划线提示「这段在改」 */
+  [data-part='writing-ai-target'] {
+    text-decoration: underline dotted var(--accent);
+    text-underline-offset: 0.3em;
+  }
+
+  /* 对照 */
+  [data-part='writing-diff'] {
+    font-family: var(--font-story);
+    line-height: var(--story-leading);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  [data-part='writing-diff'] del {
+    color: var(--ink-3);
+    text-decoration: line-through;
+    text-decoration-color: var(--danger);
+  }
+  [data-part='writing-diff'] ins {
+    color: var(--ink);
+    text-decoration: underline;
+    text-decoration-color: var(--accent);
+    text-underline-offset: 0.25em;
+    background-color: var(--accent-soft);
+  }
+}

@@ -1,0 +1,45 @@
+/**
+ * 用户背景的引擎缺省形态（docs/M4-CONTRACT.md 第二部分 §A.3）。
+ *
+ * `BackdropLayer` 在有图时给 `<html>` 写 `data-has-backdrop="world|veil"`、把图挂在 `--user-backdrop` 上，
+ * 并在 `[data-part='backdrop']` 里多画一层 `[data-part='user-backdrop']`。
+ *
+ * 这里只给「素」式的最小形态：一层按模式调色的淡化遮罩（canvas 色 85% 覆盖），不做任何材质。
+ * - `veil` 世界（素 / 书斋，外观里打开「也显示背景」后）：阅读面、侧栏去底，整页统一透出遮罩后的图；
+ * - `world` 世界：只有遮罩这一层缺省，面板照各自的材质（琉璃 / 雨夜的半透明面板本来就透得出来）。
+ *   各世界想要自己的处理（隔冰模糊、隔湿玻璃、窗外景、柔光衰减），在 `themes/<id>/` 的 CSS 里用
+ *   `@scope ([data-theme='<id>']) to ([data-theme]) { [data-part='user-backdrop'] { … } }` 覆盖即可。
+ *
+ * 和 materials.css 一样放在 `@layer components`：主题 CSS 不在任何 layer 里，压得过这里。
+ */
+
+@layer components {
+  [data-part='user-backdrop']::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-color: color-mix(in oklab, var(--canvas) 85%, transparent);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    [data-part='user-backdrop'] {
+      transition: none;
+      animation: none;
+    }
+  }
+}
+
+/*
+ * veil：应用外壳里的实心面去底，只留遮罩（外观页的预览卡不受影响）。
+ * 不放进 layer：素 / 书斋的 theme.css 也在 layer 外给这些面上了底；同等特异性下
+ * scope 根（app-shell）比主题的根（html）更近，这里胜出。
+ */
+@scope (:root[data-has-backdrop='veil'] [data-part='app-shell']) to ([data-part='theme-preview']) {
+  .surface-reading,
+  .surface-panel,
+  .bg-panel,
+  .bg-reading,
+  .bg-canvas {
+    background-color: transparent;
+  }
+}

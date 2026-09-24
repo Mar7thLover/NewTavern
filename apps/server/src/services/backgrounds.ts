@@ -35,7 +35,10 @@ export function sniffBackgroundMime(bytes: Uint8Array): string | null {
   if (starts([0x52, 0x49, 0x46, 0x46]) && starts([0x57, 0x45, 0x42, 0x50], 8)) return 'image/webp';
   if (starts([0x47, 0x49, 0x46, 0x38])) return 'image/gif';
   // ISO BMFF：....ftypavif / ftypavis
-  if (starts([0x66, 0x74, 0x79, 0x70], 4) && (starts([0x61, 0x76, 0x69, 0x66], 8) || starts([0x61, 0x76, 0x69, 0x73], 8))) {
+  if (
+    starts([0x66, 0x74, 0x79, 0x70], 4) &&
+    (starts([0x61, 0x76, 0x69, 0x66], 8) || starts([0x61, 0x76, 0x69, 0x73], 8))
+  ) {
     return 'image/avif';
   }
   return null;
@@ -139,7 +142,9 @@ export function deleteBackground(db: Db, assets: AssetsService, assetId: string)
   const byCharacter = readSetting(db, BACKGROUND_BY_CHARACTER_KEY);
   if (byCharacter && typeof byCharacter === 'object' && !Array.isArray(byCharacter)) {
     const next = Object.fromEntries(
-      Object.entries(byCharacter as Record<string, unknown>).filter(([, value]) => value !== assetId),
+      Object.entries(byCharacter as Record<string, unknown>).filter(
+        ([, value]) => value !== assetId,
+      ),
     );
     if (Object.keys(next).length !== Object.keys(byCharacter).length) {
       writeSetting(db, BACKGROUND_BY_CHARACTER_KEY, next);
@@ -161,15 +166,32 @@ export function deleteBackground(db: Db, assets: AssetsService, assetId: string)
  * 认不出返回 null。
  */
 export function stCustomBackgroundFile(value: unknown): string | null {
+  const ref = stCustomBackgroundRef(value);
+  const file = ref?.split('/').pop()?.trim();
+  return file ? file : null;
+}
+
+/**
+ * `custom_background` → 解码后的相对路径（`/` 分隔、去掉开头的 `./` 与 `/`）：
+ * 系统背景是 `backgrounds/<文件>`（ST `getBackgroundPath` 用 encodeURIComponent 编码），
+ * 聊天专属背景（ST `forceSetBackground`，生图扩展等写的）是 `user/images/…`（encodeURI 编码）。
+ * 只有文件名时按系统背景处理。`http(s):` / `data:` 等外部地址返回 null。
+ */
+export function stCustomBackgroundRef(value: unknown): string | null {
   if (typeof value !== 'string' || value.trim() === '') return null;
   const match = /url\(\s*(['"]?)(.*?)\1\s*\)/i.exec(value);
-  const raw = (match ? match[2] : value) ?? '';
+  const raw = (match ? match[2] : value)?.trim() ?? '';
+  if (raw === '' || /^[a-z][a-z0-9+.-]*:/i.test(raw)) return null;
   let decoded = raw;
   try {
     decoded = decodeURIComponent(raw);
   } catch {
     // 不是合法的 URI 编码：按原样
   }
-  const file = decoded.split(/[\\/]/).pop()?.trim();
-  return file ? file : null;
+  const normalized = decoded
+    .replace(/\\/g, '/')
+    .replace(/^(\.\/|\/)+/, '')
+    .trim();
+  if (normalized === '') return null;
+  return normalized.includes('/') ? normalized : `backgrounds/${normalized}`;
 }

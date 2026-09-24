@@ -633,4 +633,25 @@ export interface ImageBackend {
 
 ## E. 待协调与修正（M4（二））
 
-（暂无）
+### 修正（2026-09-22，MIG）：收尾验收
+
+1. **§A.5 ST 迁移补全**（`services/st-migration.ts`）：
+   - 清单 `backgrounds` 多一个 `current`：ST 当前的全局背景（`settings.background.name`，老版本只有 `url` 也认），文件在 `backgrounds/` 里才给。
+     选择多一个 `defaultBackground`（缺省 false；前端默认不勾——它会改变所有会话的样子）：勾了就把那张背景设成 settings `defaultBackground`，
+     事件 `item { category:'settings', file:'defaultBackground' }`，背景没进库时 `skipped`。
+   - `custom_background` 的解码照 ST：系统背景 `url("backgrounds/<encodeURIComponent>")`，聊天专属背景（`forceSetBackground`，生图扩展等写的）
+     `url("<encodeURI(user/images/…)>")`。后者随聊天收进背景库（按内容去重，`source: 'st-import:chat-background'`）；`http(s):` / `data:` 外链不收。
+     对不上的会话照常导入（背景继承），item 的 `message` 与 `done.warnings` 各记一句。
+   - 清单里的预设项多 `scripts?`（自带酒馆助手脚本个数）与 `scriptsEnabled?`（在酒馆助手 `script.enabled.presets` 里）；角色项已有 `sprites?`。前端清单里都显示出来。
+   - 本机实测：背景 23/23 逐字节一致、名字对上；Seraphina 立绘 28/28 逐字节一致；预设自带脚本 13 个（ARGO_1.2 那 1 个按原件开启，
+     小冰块那个原件就关着、仍关着），导出与原件 deep-equal 11/13——另 2 个（TGbreak）原件缺 `export_with`，规范化后补上了默认值 `{data:true,button:true}`，
+     与酒馆助手读进来时的 zod 默认一致。本机没有全局脚本、没有任何聊天锁过背景（`custom_background` 只能用夹具测）。
+2. **§A.3 背景的缺省形态**：各世界的 `media.css`（隔冰、隔湿玻璃、窗外景、柔光衰减）与 `SpriteFrame` **都还没写**（视觉归主会话）。
+   为了背景至少能看见，引擎加了缺省形态 `themes/backdrop.css`（在 `index.css` 里引入）：
+   - `BackdropLayer` 多一个 `treatment`（= `ThemeMeta.backdrop`），写进 `<html data-has-backdrop="world|veil">`；
+   - `[data-part='user-backdrop']::after` 一层 canvas 色 85% 遮罩（`@layer components`，各世界在自己的 `@scope` 里覆盖）；
+   - `veil`（素 / 书斋，`theme.ts` 已标 `backdrop: 'veil'`）且外观里打开「也显示背景」时，应用外壳里的阅读面、侧栏去底（不在 layer 里，靠 scope 更近胜出），预览卡不受影响。
+   - 现状：琉璃 / 雨夜的面板本来半透明，背景隔着它们就能看见；酒馆 / 暖房的面板不透明，基本看不见，等各自的 `media.css`。
+3. **§B.3 立绘区的摆法**：按**对话列宽度**（`SPRITE_STAGE_MIN_WIDTH = 860px`）而不是视口 ≥1280 决定 `stage` / `strip`——
+   1440 宽而左右两栏都开着时对话列只有五百多像素，放右侧会把正文挤得没法读。
+4. **i18n**：`backgrounds.* sprites.* themeVariants.* toast.*` 先前整块缺失（界面露出键名），已补齐中英；`apps/web/src/i18n-coverage.test.ts` 兜住这几个命名空间。

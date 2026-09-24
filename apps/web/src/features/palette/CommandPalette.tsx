@@ -17,16 +17,28 @@ import { useUiStore, type ModeSetting } from '../../app/store/ui';
 import { useCharacters, useChats, useCreateChat } from '../../lib/api';
 import { cn } from '../../lib/utils';
 import { useBackdropStore } from '../backgrounds/api';
+import { useWritingCommands, writingProjectIdOf } from '../writing/commands';
 import { THEMES } from '../../themes/registry';
 
 /* ------------------------------------------------------------------ */
 /* 命令模型                                                             */
 /* ------------------------------------------------------------------ */
 
-type GroupId = 'actions' | 'chats' | 'pages' | 'characters' | 'themes';
+type GroupId = 'actions' | 'writing' | 'chats' | 'pages' | 'characters' | 'themes';
 
 /** 分组的显示顺序 */
-const GROUP_ORDER: readonly GroupId[] = ['actions', 'chats', 'pages', 'characters', 'themes'];
+const GROUP_ORDER: readonly GroupId[] = [
+  'actions',
+  'writing',
+  'chats',
+  'pages',
+  'characters',
+  'themes',
+];
+
+/** 分组标题；写作项目页的动作组文案在 `writing.*` 命名空间里 */
+const groupLabelKey = (group: GroupId) =>
+  group === 'writing' ? 'writing.palette.group' : `palette.groups.${group}`;
 
 /** 空查询时每组最多列几项（查询时放宽） */
 const IDLE_LIMIT: Partial<Record<GroupId, number>> = { chats: 6, characters: 6 };
@@ -184,6 +196,34 @@ function PaletteDialog({
             useUiStore.getState().requestChatPanel('session');
             useBackdropStore.getState().requestFocus();
           },
+        },
+      );
+    }
+
+    // 写作项目页里的操作（M7 §5.1）：交给 WritingProjectPage 响应
+    if (writingProjectIdOf(location.pathname)) {
+      const send = useWritingCommands.getState().send;
+      list.push(
+        {
+          id: 'writing:newChapter',
+          group: 'writing',
+          label: t('writing.palette.newChapter'),
+          keywords: ['chapter', 'new', t('writing.tree.chapters')],
+          run: () => send('newChapter'),
+        },
+        {
+          id: 'writing:aiContinue',
+          group: 'writing',
+          label: t('writing.palette.aiContinue'),
+          keywords: ['ai', 'continue', t('writing.ai.actions.continue')],
+          run: () => send('aiContinue'),
+        },
+        {
+          id: 'writing:saveVersion',
+          group: 'writing',
+          label: t('writing.palette.saveVersion'),
+          keywords: ['version', 'save', t('writing.tabs.versions')],
+          run: () => send('saveVersion'),
         },
       );
     }
@@ -486,7 +526,7 @@ function PaletteDialog({
                 data-part="command-palette-group-label"
                 className="px-4 pt-1.5 pb-1 text-[11px] tracking-wide text-ink-3"
               >
-                {t(`palette.groups.${group.id}`)}
+                {t(groupLabelKey(group.id))}
               </div>
               {group.items.map((command, index) => {
                 const flatIndex = group.offset + index;

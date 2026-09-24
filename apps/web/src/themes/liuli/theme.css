@@ -1459,3 +1459,150 @@
     }
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* 写作页（M7 §5.5）：冰板上书写。目录、纸面列、工具各是一块冰板；       */
+/* 纸是板上的一片薄冰，字写在冰上，边缘一道虹。                           */
+/* ------------------------------------------------------------------ */
+
+@scope ([data-theme='liuli']) to ([data-theme]) {
+  /* 写作页自己分板：外层主区不再是一整块冰板 */
+  [data-part='main']:has(> [data-part='writing-shell']) {
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    background-color: transparent;
+    backdrop-filter: none;
+    box-shadow: none;
+  }
+
+  [data-part='writing-aside'],
+  [data-part='writing-shell'] > div:not([data-part]) {
+    position: relative;
+    background-color: var(--panel);
+    backdrop-filter: var(--liuli-blur);
+    box-shadow:
+      var(--shadow-panel),
+      inset 0 1px 0 var(--edge-highlight);
+  }
+
+  [data-part='writing-shell'] > div:not([data-part]) {
+    background-color: var(--reading);
+  }
+
+  [data-part='writing-header'],
+  [data-part='writing-project-head'] {
+    border-image: linear-gradient(90deg, transparent, var(--liuli-line) 14% 86%, transparent) 1;
+  }
+
+  [data-part='writing-title'] {
+    font-weight: 300;
+    letter-spacing: 0.01em;
+  }
+
+  /* 纸：一片薄冰，半透明、不再模糊；边上 1px 虹 */
+  [data-part='writing-page'] {
+    position: relative;
+    border: 1px solid var(--liuli-sheet-edge);
+    border-radius: var(--r-card);
+    background-color: transparent;
+    background-image: var(--liuli-sheet);
+    box-shadow: var(--liuli-sheet-shadow);
+  }
+
+  [data-part='writing-page']::after {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    padding: 1px;
+    background: var(--liuli-iris);
+    mask:
+      var(--liuli-rim-fade),
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    mask-composite: intersect, exclude;
+    pointer-events: none;
+  }
+
+  /* 待定的字：冰青的一层薄霜，不是实色 */
+  [data-part='writing-ai-pending'] {
+    background-color: var(--accent-soft);
+    color: var(--ink);
+    border-radius: 3px;
+  }
+
+  [data-part='writing-ai-target'] {
+    text-decoration-color: var(--accent);
+  }
+
+  [data-part='writing-diff'] ins {
+    background-color: var(--accent-soft);
+  }
+
+  /* 完成：一粒冰珠 */
+  [data-part='writing-tree-done'][data-done='true'] {
+    border-color: var(--liuli-bead-edge);
+    background-image: var(--liuli-bead);
+    box-shadow: var(--liuli-bead-shadow);
+    color: var(--accent);
+  }
+
+  [data-part='writing-toolbar'],
+  [data-part='writing-ai-bar'] {
+    border-image: linear-gradient(90deg, transparent, var(--liuli-line) 14% 86%, transparent) 1;
+    background-color: transparent;
+    backdrop-filter: none;
+  }
+
+  [data-part='writing-project-card'] {
+    position: relative;
+    border-color: var(--liuli-sheet-edge);
+    background-color: transparent;
+    background-image: var(--liuli-sheet);
+    box-shadow: var(--liuli-sheet-shadow);
+  }
+}
+
+/* 宽屏：三块板之间留 10px 的缝 */
+@media (min-width: 768px) {
+  @scope ([data-theme='liuli']) to ([data-theme]) {
+    [data-part='writing-shell'] {
+      gap: 10px;
+      padding: 0 10px 10px;
+    }
+
+    [data-part='writing-aside'],
+    [data-part='writing-shell'] > div:not([data-part]) {
+      border: 1px solid var(--liuli-slab-edge);
+      border-radius: var(--r-panel);
+      overflow: hidden;
+    }
+
+    [data-part='writing-aside']::after,
+    [data-part='writing-shell'] > div:not([data-part])::after {
+      content: '';
+      position: absolute;
+      inset: -1px;
+      z-index: 1;
+      border-radius: inherit;
+      padding: 1px;
+      background: var(--liuli-iris);
+      mask:
+        var(--liuli-rim-fade),
+        linear-gradient(#000 0 0) content-box,
+        linear-gradient(#000 0 0);
+      mask-composite: intersect, exclude;
+      pointer-events: none;
+    }
+  }
+}
+
+/* 手机：纸面列贴满，纸与屏边留一线冰 */
+@media (max-width: 767.98px) {
+  @scope ([data-theme='liuli']) to ([data-theme]) {
+    [data-part='writing-scroll'] {
+      padding: 10px;
+    }
+  }
+}

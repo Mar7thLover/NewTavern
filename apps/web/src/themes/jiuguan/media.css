@@ -1,0 +1,277 @@
+/**
+ * 酒馆 · 背景与立绘（M4（二）§A §B.3；与 theme.css 一起按需加载，见 apply.ts）。
+ *
+ * 背景：当作窗外景。
+ *  - 整面的背景层不出现（橡木、皮革、羊皮纸都是实的，透不过光）；
+ *  - 对话区那块皮面垫板换成一扇窗：橡木窗框（有厚度，上亮下暗），框里是用户的图，
+ *    四周压暗角；夜里玻璃上映着一点灯光，白日从窗里进来冷白的光。纸条照旧钉在窗前；
+ *  - 窗下的输入区还是皮面，像窗台；纸条下方的操作条落在一小片皮革上，不直接压在景上。
+ *  图在窗的伪元素里画一次（cover、居中，不做滤镜）。
+ *
+ * 立绘框：挂在墙上的黄铜框，皮革衬板，四角铆钉（.jg-portrait，结构见 signature.tsx）。
+ *
+ * 元素规则一律在 @scope ([data-theme='jiuguan']) to ([data-theme]) 里；
+ * 需要压过 theme.css 同名规则时用 `:scope` 前缀抬特异性——两份 CSS 各自懒加载，先后不保证。
+ */
+
+/* ------------------------------------------------------------------ */
+/* 窗与框的颜色                                                          */
+/* ------------------------------------------------------------------ */
+
+[data-theme='jiuguan'][data-mode='dark'] {
+  --jg-sash-1: oklch(0.4 0.05 58);
+  --jg-sash-2: oklch(0.25 0.036 50);
+  --jg-sash-hi: oklch(0.62 0.06 70 / 0.55);
+  --jg-sash-lo: oklch(0.1 0.02 40 / 0.8);
+  /* 夜里窗外更暗；玻璃上映着桌灯（暖，不许冷色） */
+  --jg-pane-tint: linear-gradient(oklch(0.14 0.02 50 / 0.34), oklch(0.14 0.02 50 / 0.34));
+  --jg-pane-light: radial-gradient(
+    38% 26% at 74% 16%,
+    oklch(0.83 0.16 72 / 0.12),
+    transparent 70%
+  );
+  --jg-pane-vignette: oklch(0.08 0.02 40 / 0.72);
+  /* 立绘衬板上的光：桌灯在上方 */
+  --jg-portrait-light: radial-gradient(
+    110% 55% at 50% 0%,
+    oklch(0.83 0.16 72 / 0.16),
+    transparent 72%
+  );
+}
+
+[data-theme='jiuguan'][data-mode='light'] {
+  --jg-sash-1: oklch(0.56 0.07 64);
+  --jg-sash-2: oklch(0.4 0.06 58);
+  --jg-sash-hi: oklch(0.98 0.015 90 / 0.55);
+  --jg-sash-lo: oklch(0.28 0.05 50 / 0.7);
+  /* 白日：窗就是光的来处——左上一道冷白的窗光 */
+  --jg-pane-tint: linear-gradient(transparent, transparent);
+  --jg-pane-light: linear-gradient(
+    128deg,
+    oklch(0.99 0.01 230 / 0.26),
+    oklch(0.99 0.01 230 / 0.06) 38%,
+    transparent 56%
+  );
+  --jg-pane-vignette: oklch(0.2 0.04 50 / 0.5);
+  --jg-portrait-light: linear-gradient(
+    135deg,
+    oklch(0.99 0.01 230 / 0.2),
+    transparent 58%
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* 背景：窗外景                                                          */
+/* ------------------------------------------------------------------ */
+
+@scope ([data-theme='jiuguan']) to ([data-theme]) {
+  /* 整面的背景层不画：图只出现在窗里 */
+  :scope [data-part='user-backdrop'] {
+    display: none;
+  }
+}
+
+@scope (:root[data-theme='jiuguan'][data-has-backdrop]) to ([data-theme]) {
+  /* 消息列表的父级（不滚动）就是窗洞：自成层叠上下文，窗与景垫在列表下面 */
+  :scope [data-part='chat-stage'] > :has(> [data-part='message-list']) {
+    isolation: isolate;
+  }
+
+  /* 皮面垫板拿掉，透出后面的窗 */
+  :scope [data-part='chat-stage'] [data-part='message-list'] {
+    background: none;
+    box-shadow: none;
+  }
+
+  /* 窗外：图 + 暗角 + 玻璃上的光；窗框在玻璃上投下一圈内影 */
+  :scope [data-part='chat-stage'] > :has(> [data-part='message-list'])::before {
+    content: '';
+    position: absolute;
+    inset: 18px 18px 11px;
+    z-index: -1;
+    border-radius: 2px;
+    background:
+      var(--jg-pane-light),
+      radial-gradient(125% 100% at 50% 42%, transparent 46%, var(--jg-pane-vignette) 100%),
+      var(--jg-pane-tint),
+      var(--user-backdrop) center / cover no-repeat,
+      var(--jg-oak);
+    box-shadow:
+      inset 0 0 0 1px var(--jg-sash-lo),
+      inset 0 8px 12px -6px oklch(0.06 0.02 40 / 0.65),
+      inset 6px 0 10px -8px oklch(0.06 0.02 40 / 0.5),
+      inset -6px 0 10px -8px oklch(0.06 0.02 40 / 0.5);
+  }
+
+  /*
+   * 窗框：替换原来那半圈缝线。一圈 11px 的橡木（带木纹），外沿上亮、内沿下暗，
+   * 用遮罩只留边框那一圈，中间是空的。
+   */
+  :scope [data-part='chat-stage'] > :has(> [data-part='message-list'])::after {
+    inset: 7px 7px 0;
+    z-index: -1;
+    padding: 11px;
+    border: 0;
+    border-radius: 7px 7px 3px 3px;
+    background:
+      linear-gradient(180deg, var(--jg-sash-hi) 0 1px, transparent 1px calc(100% - 1px), var(--jg-sash-lo) calc(100% - 1px)),
+      linear-gradient(90deg, var(--jg-sash-hi) 0 1px, transparent 1px calc(100% - 1px), var(--jg-sash-lo) calc(100% - 1px)),
+      var(--jg-tex-grain),
+      linear-gradient(172deg, var(--jg-sash-1), var(--jg-sash-2));
+    mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    mask-composite: exclude;
+  }
+
+  /* 窗下是窗台：输入区的缝线补成一整圈 */
+  :scope [data-part='chat-view'] > [data-part='composer-dock']::after {
+    inset: 7px 7px 7px;
+    border-top: 1px dashed var(--jg-stitch);
+    border-radius: 8px;
+  }
+
+  :scope [data-part='chat-view'] > [data-part='composer-dock'] {
+    box-shadow: 0 -1px 0 var(--jg-sash-lo);
+  }
+
+  /* 纸条下方的操作条落在一小片皮革上（不直接压在景上，字才看得清） */
+  :scope [data-part='message'] > [data-part='message-actions'] {
+    width: fit-content;
+    max-width: 100%;
+    padding-inline: 8px 6px;
+    border-radius: 0 0 8px 8px;
+    background-color: var(--jg-leather-pad);
+    background-image: var(--jg-tex-specks), var(--jg-tex-leather);
+    box-shadow: var(--jg-cast-sm);
+  }
+}
+
+@media (max-width: 639.98px) {
+  @scope (:root[data-theme='jiuguan'][data-has-backdrop]) to ([data-theme]) {
+    :scope [data-part='chat-stage'] > :has(> [data-part='message-list'])::after {
+      inset: 5px 5px 0;
+      padding: 8px;
+    }
+
+    :scope [data-part='chat-stage'] > :has(> [data-part='message-list'])::before {
+      inset: 13px 13px 8px;
+    }
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* 立绘框：墙上的黄铜框                                                   */
+/* ------------------------------------------------------------------ */
+
+@scope ([data-theme='jiuguan']) to ([data-theme]) {
+  /* 黄铜压条：上亮下暗，有厚度；整件在墙上投一道有方向的影 */
+  .jg-portrait {
+    padding: 7px;
+    border-radius: 6px;
+    background-image: linear-gradient(
+      180deg,
+      var(--jg-brass-1),
+      var(--jg-brass-2) 18%,
+      var(--jg-brass-3) 55%,
+      var(--jg-brass-4) 88%,
+      var(--jg-brass-deep)
+    );
+    box-shadow:
+      inset 0 1px 0 var(--jg-brass-shine),
+      inset 0 -1px 0 var(--jg-brass-deep),
+      0 0 0 1px oklch(0.2 0.03 45 / 0.55),
+      var(--jg-cast-lg);
+  }
+
+  /* 压条的内唇：再一道细的亮—暗，框才有厚度 */
+  .jg-portrait::before {
+    content: '';
+    position: absolute;
+    inset: 4px;
+    border-radius: 3px;
+    pointer-events: none;
+    box-shadow:
+      0 0 0 1px var(--jg-brass-4),
+      0 -1px 0 1px var(--jg-brass-deep),
+      0 1px 0 1px var(--jg-brass-1);
+  }
+
+  /* 皮革衬板：压进铜框里，上沿有铜条落下的影，灯（或窗）照亮一片 */
+  .jg-portrait-board {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    border-radius: 2px;
+    background-color: var(--jg-leather-deep);
+    background-image: var(--jg-portrait-light), var(--jg-tex-specks), var(--jg-tex-leather);
+    box-shadow:
+      inset 0 0 0 1px oklch(0.1 0.02 40 / 0.75),
+      inset 0 3px 6px oklch(0.05 0.02 40 / 0.6);
+  }
+
+  /* 四角的铆钉：把框钉在墙上（与纸条上的铆钉同一配方，大一号） */
+  .jg-portrait-rivet {
+    position: absolute;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: radial-gradient(
+      circle at 34% 30%,
+      var(--jg-brass-shine) 0 0.8px,
+      var(--jg-brass-2) 1.7px,
+      var(--jg-brass-3) 2.6px,
+      var(--jg-brass-deep) 3.5px
+    );
+    box-shadow: var(--jg-rivet-cast);
+  }
+
+  .jg-portrait-rivet[data-corner='tl'] {
+    left: 0;
+    top: 0;
+  }
+
+  .jg-portrait-rivet[data-corner='tr'] {
+    right: 0;
+    top: 0;
+  }
+
+  .jg-portrait-rivet[data-corner='bl'] {
+    left: 0;
+    bottom: 0;
+  }
+
+  .jg-portrait-rivet[data-corner='br'] {
+    right: 0;
+    bottom: 0;
+  }
+
+  /* 折叠成头像：嵌在铜圈里的圆形肖像（同头像的铜框） */
+  .jg-portrait[data-collapsed='true']::before {
+    content: none;
+  }
+
+  .jg-portrait[data-collapsed='true'] {
+    padding: 3px;
+    border-radius: 999px;
+    background-image: conic-gradient(
+      from 210deg,
+      var(--jg-brass-1),
+      var(--jg-brass-3) 22%,
+      var(--jg-brass-deep) 45%,
+      var(--jg-brass-3) 62%,
+      var(--jg-brass-2) 82%,
+      var(--jg-brass-1)
+    );
+    box-shadow:
+      0 0 0 1px oklch(0.3 0.05 50 / 0.6),
+      var(--jg-cast-sm);
+  }
+
+  .jg-portrait[data-collapsed='true'] .jg-portrait-board {
+    border-radius: 999px;
+    background-image: none;
+    box-shadow: inset 0 1px 3px oklch(0.06 0.02 40 / 0.7);
+  }
+}

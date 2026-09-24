@@ -94,7 +94,7 @@ export function createApp({ db, dataDir, webDist }: AppOptions) {
     // 创作工作台（M6 §2）：版本历史、提示库、测试会话
     .route('/versions', createVersionsRoutes(db))
     .route('/prompt-library', createPromptLibraryRoutes(db))
-    .route('/studio', createStudioRoutes(db))
+    .route('/studio', createStudioRoutes(db, dataDir, providers))
     .route('/models', createModelsRoutes());
 
   app.route('/api', api);

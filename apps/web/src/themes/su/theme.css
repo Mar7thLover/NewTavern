@@ -279,3 +279,64 @@
     border-color: var(--edge-strong);
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* 写作页（M7 §5.5）：纯排版。没有纸面、没有边框，一栏字落在白纸上      */
+/* ------------------------------------------------------------------ */
+
+@scope ([data-theme='su']) to ([data-theme]) {
+  [data-part='writing-page'] {
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    background: none;
+  }
+
+  /* 标题：大号细体（与页面标题同一字重） */
+  [data-part='writing-title'] {
+    font-weight: 300;
+    letter-spacing: -0.01em;
+  }
+
+  /*
+   * 待定的字：素没有软底。用明度退半步 + 一条 1px 虚线下划线（唯一的橙）标出「还没定」，
+   * 不把整段染成橙墙。
+   */
+  [data-part='writing-ai-pending'] {
+    background: none;
+    color: var(--ink-2);
+    text-decoration: underline dotted 1px var(--accent);
+    text-underline-offset: 0.4em;
+  }
+
+  [data-part='writing-ai-target'] {
+    text-decoration: underline dotted 1px var(--ink-2);
+  }
+
+  /* 对照：删去的只降明度 + 划线；添上的是全墨 + 1px 橙色底线 */
+  [data-part='writing-diff'] del {
+    color: var(--ink-3);
+    text-decoration-color: var(--ink-3);
+  }
+
+  [data-part='writing-diff'] ins {
+    background: none;
+    text-decoration-thickness: 1px;
+  }
+
+  /* 完成标记：线框里的墨色勾，不用橙 */
+  [data-part='writing-tree-done'][data-done='true'] {
+    border-color: var(--ink);
+    color: var(--ink);
+  }
+
+  [data-part='writing-tree-stale'] {
+    border-color: var(--edge-strong);
+    color: var(--ink-2);
+  }
+
+  /* 列表里的作品：只有 1px 线，没有卡片底 */
+  [data-part='writing-project-card'] {
+    background: none;
+  }
+}

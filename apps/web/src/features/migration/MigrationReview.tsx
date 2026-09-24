@@ -47,6 +47,9 @@ export function MigrationReview({
   const [scripts, setScripts] = useState(helperScripts.newCount > 0);
   const backgroundInventory = inventory.backgrounds ?? { count: 0, newCount: 0 };
   const [backgrounds, setBackgrounds] = useState(backgroundInventory.newCount > 0);
+  // ST 当前的全局背景 → 全局默认背景：会改变所有会话的样子，默认不勾，让用户自己决定
+  const currentBackground = backgroundInventory.current ?? null;
+  const [defaultBackground, setDefaultBackground] = useState(false);
   const [worldInfo, setWorldInfo] = useState(inventory.worldInfo.hasSettings);
   const [defaultPersona, setDefaultPersona] = useState(inventory.defaultPersona !== null);
 
@@ -57,10 +60,13 @@ export function MigrationReview({
     characters: inventory.characters.map((item) => ({
       key: item.file,
       label: item.name,
-      meta:
-        item.chatCount > 0
-          ? `${item.file} · ${t('migration.review.chatCount', { count: item.chatCount })}`
-          : item.file,
+      meta: [
+        item.file,
+        item.chatCount > 0 ? t('migration.review.chatCount', { count: item.chatCount }) : null,
+        item.sprites ? t('migration.review.spriteCount', { count: item.sprites }) : null,
+      ]
+        .filter(Boolean)
+        .join(' · '),
       exists: item.exists,
       ...(item.error ? { error: item.error } : {}),
     })),
@@ -73,6 +79,16 @@ export function MigrationReview({
     presets: inventory.presets.map((item) => ({
       key: item.file,
       label: item.name,
+      ...(item.scripts
+        ? {
+            meta: t(
+              item.scriptsEnabled
+                ? 'migration.review.presetScriptsOn'
+                : 'migration.review.presetScripts',
+              { count: item.scripts },
+            ),
+          }
+        : {}),
       exists: item.exists,
       ...(item.error ? { error: item.error } : {}),
     })),
@@ -122,7 +138,8 @@ export function MigrationReview({
     (scripts ? helperScripts.newCount : 0) +
     (worldInfo ? 1 : 0) +
     (defaultPersona ? 1 : 0) +
-    (backgrounds ? backgroundInventory.count : 0);
+    (backgrounds ? backgroundInventory.count : 0) +
+    (defaultBackground && currentBackground ? 1 : 0);
 
   const submit = () =>
     onStart({
@@ -136,6 +153,7 @@ export function MigrationReview({
       worldInfo,
       defaultPersona,
       backgrounds,
+      defaultBackground: defaultBackground && currentBackground !== null,
     });
 
   const settingsTotal =
@@ -143,9 +161,15 @@ export function MigrationReview({
     (helperScripts.count > 0 ? 1 : 0) +
     (inventory.worldInfo.hasSettings ? 1 : 0) +
     (inventory.defaultPersona !== null ? 1 : 0) +
-    (backgroundInventory.count > 0 ? 1 : 0);
+    (backgroundInventory.count > 0 ? 1 : 0) +
+    (currentBackground ? 1 : 0);
   const settingsSelected =
-    (regex ? 1 : 0) + (scripts ? 1 : 0) + (worldInfo ? 1 : 0) + (defaultPersona ? 1 : 0) + (backgrounds ? 1 : 0);
+    (regex && inventory.regex.newCount > 0 ? 1 : 0) +
+    (scripts && helperScripts.newCount > 0 ? 1 : 0) +
+    (worldInfo && inventory.worldInfo.hasSettings ? 1 : 0) +
+    (defaultPersona && inventory.defaultPersona !== null ? 1 : 0) +
+    (backgrounds && backgroundInventory.newCount > 0 ? 1 : 0) +
+    (defaultBackground && currentBackground ? 1 : 0);
 
   return (
     <div data-part="migration-review" className="space-y-10">
@@ -205,6 +229,16 @@ export function MigrationReview({
                 : t('migration.review.none')
             }
           />
+          {currentBackground && (
+            <CheckRow
+              checked={defaultBackground}
+              onChange={setDefaultBackground}
+              label={t('backgrounds.migration.defaultLabel')}
+              meta={t('backgrounds.migration.defaultHint', {
+                name: currentBackground.replace(/\.[^.]+$/, ''),
+              })}
+            />
+          )}
           <CheckRow
             checked={worldInfo && inventory.worldInfo.hasSettings}
             disabled={!inventory.worldInfo.hasSettings}

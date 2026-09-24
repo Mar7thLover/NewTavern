@@ -22,6 +22,7 @@ const STATUS_CLASS: Record<MigrationStatus, string> = {
 
 function itemLabel(item: MigrationItem, t: (key: string) => string): string {
   if (item.category === 'settings') {
+    if (item.file === 'defaultBackground') return t('backgrounds.migration.defaultLabel');
     return item.file === 'worldInfo' || item.file === 'defaultPersona'
       ? t(`migration.run.settingsItems.${item.file}`)
       : item.file;

@@ -7,6 +7,7 @@ import {
   type MessageDividerProps,
   type MessageOrnamentProps,
   type SendButtonProps,
+  type SpriteFrameProps,
   type StreamingCursorProps,
   type SwipeIndicatorProps,
 } from '../signature';
@@ -209,6 +210,35 @@ export function Backdrop({ scope }: BackdropProps) {
       <span className="yy-rain yy-rain-far" />
       <span className="yy-rain yy-rain-mid" />
       <span className="yy-rain yy-rain-near" />
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* 立绘框：隔着一扇湿玻璃（形态在 media.css 的 .yy-pane）                  */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 人在玻璃那一边：玻璃是一层很淡的夜蓝，上缘一道 1px 高光，下半截起了雾；
+ * 玻璃上停着几颗水珠、挂着一两道流下来的水痕——都是静态的，不做滤镜，雨照常在背景里下。
+ * 折叠成头像时是一枚起雾的圆玻璃。
+ */
+export function SpriteFrame({ layout, collapsed, children }: SpriteFrameProps) {
+  return (
+    <div
+      data-part="sprite-frame"
+      data-layout={layout}
+      data-collapsed={collapsed}
+      className="yy-pane relative size-full"
+    >
+      <div className="yy-pane-view">{children}</div>
+      <span aria-hidden className="yy-pane-glass" />
+      {!collapsed && (
+        <>
+          <span aria-hidden className="yy-pane-run" data-run="a" />
+          <span aria-hidden className="yy-pane-run" data-run="b" />
+        </>
+      )}
     </div>
   );
 }

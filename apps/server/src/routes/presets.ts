@@ -13,7 +13,13 @@ import {
   presetColumns,
   readBuiltinPresetId,
 } from '../services/presets.js';
-import { PresetInputError, syncDataName, updatePreset } from '../services/preset-edit.js';
+import {
+  PresetInputError,
+  PresetNotFoundError,
+  syncDataName,
+  updatePreset,
+  updatePresetLayoutPolicy,
+} from '../services/preset-edit.js';
 import { parseAuthor, recordCurrentVersion } from '../services/versions.js';
 import { sendDownload } from './download.js';
 
@@ -109,6 +115,30 @@ export function createPresetsRoutes(db: Db, importer: Importer) {
           const input = { name: body.name, data: body.data, layoutPolicy: body.layoutPolicy };
           return c.json(updatePreset(db, id, input, parseAuthor(body.author)));
         } catch (e) {
+          if (e instanceof PresetInputError) {
+            return c.json({ error: 'invalid', message: e.message }, 400);
+          }
+          throw e;
+        }
+      })
+      /**
+       * 只改布局策略与保真锁（M6 §4.2）：`{ layoutPolicy: PresetLayoutPolicy | null, author? }`，
+       * 不必带整份 data；null / {} = 清空（跟随会话 / 导入默认）。返回整行，写一版版本。
+       */
+      .put('/:id/layout-policy', async (c) => {
+        const body = await readJsonObject(c);
+        if (!body) return c.json({ error: 'invalid', message: '请求体不是合法的 JSON 对象' }, 400);
+        try {
+          return c.json(
+            updatePresetLayoutPolicy(
+              db,
+              c.req.param('id'),
+              body.layoutPolicy,
+              parseAuthor(body.author),
+            ),
+          );
+        } catch (e) {
+          if (e instanceof PresetNotFoundError) return c.json({ error: 'not_found' }, 404);
           if (e instanceof PresetInputError) {
             return c.json({ error: 'invalid', message: e.message }, 400);
           }

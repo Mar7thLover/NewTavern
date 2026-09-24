@@ -141,4 +141,10 @@ export function assembleWriting(input: WritingAssembleInput): { ir: PromptIR; re
 
 ## 7. 修正
 
-（暂无）
+- **2026-09-23 修正（WW）**：前端落地时的补充约定，服务端无改动。
+  - 纯文本 `text` 由前端从 TipTap 文档导出：段落之间用空行（`\n\n`）分隔、硬换行是单个 `\n`、分隔线是 `* * *`；AI 请求里的 `cursor` / `selection` / `textBefore` / `selectionText` / `textAfter` 都按这同一份纯文本计偏移（三段拼起来等于 `text`）。这样导出的 Markdown 天然分段。
+  - 续写目标长度存在项目 `settings.targetLength`（settings 的未知字段服务端原样保留，校验不拦），请求时带 `targetLength`。
+  - §5.3「插入的文字带临时标记」用 ProseMirror **行内装饰**实现（`data-part="writing-ai-pending"`），不是 mark：标记不进 `content`，自动保存照常进行（待定文字随正文保存；「撤销」后再保存一次）。流式中编辑器只读；续写时光标仍停在全文开头（刚打开、没点进正文）则接在全文末尾。
+  - 对照视图的字符级 diff 在 `diffChars` 之后做一步简单的语义整理：夹在两段改动之间、不超过 2 个字的相同片段并进改动（中文逐字对照否则碎成一地）；增删计数仍按原始 diff。两边合计超过 24 000 字符退化为 `diffWordsWithSpace` 并提示，1.5 秒算不完则整段对照。
+  - 命令面板的写作动作单独成组 `data-group="writing"`（标题「这部作品」），不混进对话页的「这段对话」组。
+  - 圣经页签嵌入 M6 拆出的 `features/library/lorebook-editor` 的 `LorebookEditor`（`embedded`）；右栏随页签 / 抽屉卸载时若有未保存的改动会自动保存一次。

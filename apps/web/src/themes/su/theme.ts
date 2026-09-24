@@ -32,8 +32,11 @@ const su: ThemeMeta = {
     MessageDivider: signature.MessageDivider,
     EmptyIllustration: signature.EmptyIllustration,
     StreamingCursor: signature.StreamingCursor,
+    SpriteFrame: signature.SpriteFrame,
   },
   loadFonts: () => import('@fontsource-variable/inter/index.css').then(() => undefined),
+  // 用户背景默认不显示；外观里打开「在素 / 书斋里也显示背景」后只盖淡化遮罩（M4（二）§A）
+  backdrop: 'veil',
 };
 
 export default su;

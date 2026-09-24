@@ -524,6 +524,7 @@
     [data-part='message-list'],
     [data-part='start-screen'],
     [data-part='composer-dock'],
+    [data-part='studio-aside'],
     [data-part='message'] > [data-part='message-actions']
   ) {
     --ink: var(--jg-l-ink);
@@ -566,6 +567,7 @@
 
   [data-part='sidebar'],
   [data-part='chat-aside'],
+  [data-part='studio-aside'],
   [data-part='drawer'] {
     position: relative;
     background-color: var(--jg-leather);
@@ -2072,5 +2074,217 @@
 
   [data-part='lightbox-bar'] {
     text-shadow: var(--jg-emboss);
+  }
+}
+
+/* ================================================================== */
+/* 写作页（M7 §5.5）：一张羊皮纸，四角用黄铜铆钉钉在皮革上。              */
+/* 目录与工具是两块皮面（四周缝线）；纸下面的皮面托着整张纸。              */
+/* ================================================================== */
+
+@scope ([data-theme='jiuguan']) to ([data-theme]) {
+  /* 皮面区域：目录、工具、纸下的皮面、底部的动作条 */
+  :is(
+    [data-part='writing-aside'],
+    [data-part='writing-scroll'],
+    [data-part='writing-toolbar'],
+    [data-part='writing-ai-bar']
+  ) {
+    --ink: var(--jg-l-ink);
+    --ink-2: var(--jg-l-ink-2);
+    --ink-3: var(--jg-l-ink-3);
+    --ink-story: var(--jg-l-story);
+    --ink-link: var(--jg-l-accent);
+    --accent: var(--jg-l-accent);
+    --accent-soft: var(--jg-l-accent-soft);
+    --edge: var(--jg-l-edge);
+    --edge-strong: var(--jg-l-edge-strong);
+    --control: var(--jg-l-control);
+    --danger: var(--jg-l-danger);
+    --danger-soft: var(--jg-l-danger-soft);
+    --jg-btn: var(--jg-l-btn);
+    --jg-btn-edge: var(--jg-l-btn-edge);
+    --jg-btn-hi: var(--jg-l-btn-hi);
+    --jg-well-edge: var(--jg-l-well-edge);
+    --jg-well-shade: var(--jg-l-well-shade);
+    --jg-well-hi: var(--jg-l-well-hi);
+    --jg-chip: var(--jg-l-chip);
+    --jg-hi: var(--jg-l-hi);
+    --jg-groove: var(--jg-l-groove);
+    --jg-emboss: var(--jg-l-emboss);
+    --jg-sunk: var(--jg-l-sunk);
+    --jg-sunk-inset: var(--jg-l-sunk-inset);
+    color: var(--ink);
+    background-color: var(--jg-leather);
+    background-image: var(--jg-light-panel), var(--jg-tex-specks), var(--jg-tex-leather);
+    background-attachment: var(--jg-light-attach), scroll, scroll;
+  }
+
+  [data-part='writing-aside'] {
+    position: relative;
+    border-color: var(--jg-leather-deep);
+  }
+
+  [data-part='writing-aside'][data-side='start'] {
+    box-shadow:
+      inset -1px 0 0 var(--jg-hi),
+      var(--jg-cast-panel);
+    z-index: 1;
+  }
+
+  [data-part='writing-aside'][data-side='end'] {
+    box-shadow:
+      inset 1px 0 0 var(--jg-hi),
+      inset -1px 0 0 oklch(0.1 0.02 40 / 0.3);
+  }
+
+  /* 皮革四周的缝线 */
+  [data-part='writing-aside']::after {
+    content: '';
+    position: absolute;
+    inset: 6px;
+    border: 1px dashed var(--jg-stitch);
+    border-radius: 7px;
+    pointer-events: none;
+  }
+
+  [data-part='writing-header'] {
+    border-color: var(--jg-groove);
+    box-shadow: 0 1px 0 var(--jg-hi);
+  }
+
+  [data-part='writing-title'],
+  [data-part='writing-project-head'] input {
+    font-family: var(--font-display);
+    font-weight: 400;
+    letter-spacing: 0.05em;
+    text-shadow: var(--jg-emboss);
+  }
+
+  [data-part='writing-project-head'],
+  [data-part='writing-toolbar'],
+  [data-part='writing-ai-bar'] {
+    border-color: var(--jg-groove);
+  }
+
+  /* 皮面托着纸：留出一圈皮子让铆钉有地方钉 */
+  [data-part='writing-scroll'] {
+    padding: 22px 18px 36px;
+  }
+
+  /* ---------------- 羊皮纸 ---------------- */
+
+  [data-part='writing-page'] {
+    --ink: var(--jg-p-ink);
+    --ink-2: var(--jg-p-ink-2);
+    --ink-3: var(--jg-p-ink-3);
+    --ink-story: var(--jg-p-story);
+    --ink-quote: var(--jg-p-quote);
+    --ink-action: var(--jg-p-action);
+    --accent: var(--jg-p-accent);
+    --accent-soft: oklch(0.47 0.1 62 / 0.11);
+    --edge: var(--jg-p-edge);
+    --edge-strong: var(--jg-p-edge-strong);
+    --danger: var(--jg-p-danger);
+    position: relative;
+    color: var(--ink);
+    border-radius: 11px 7px 12px 8px / 8px 12px 7px 11px;
+    background-color: var(--jg-parch);
+    background-image:
+      radial-gradient(
+        140% 120% at 0% 0%,
+        oklch(0.5 0.08 55 / 0) 62%,
+        oklch(0.6 0.085 62 / 0.12) 88%,
+        oklch(0.46 0.085 52 / 0.26) 100%
+      ),
+      radial-gradient(
+        150% 140% at 50% 45%,
+        oklch(0.62 0.08 62 / 0) 66%,
+        oklch(0.62 0.08 62 / 0.16) 97%
+      ),
+      var(--jg-tex-parchment);
+    box-shadow:
+      inset 0 0 0 1px oklch(0.5 0.075 55 / 0.16),
+      inset 0 0 2px 1px oklch(0.45 0.085 52 / 0.2),
+      inset 0 0 22px 2px oklch(0.64 0.085 62 / 0.22),
+      var(--jg-cast-lg);
+  }
+
+  /* 四角四颗 7px 黄铜铆钉，钉穿纸面落在皮子上 */
+  [data-part='writing-page']::before {
+    content: '';
+    position: absolute;
+    inset: 11px;
+    pointer-events: none;
+    --jg-rivet: radial-gradient(
+      circle at 34% 30%,
+      var(--jg-brass-shine) 0 0.8px,
+      var(--jg-brass-2) 1.7px,
+      var(--jg-brass-3) 2.6px,
+      var(--jg-brass-deep) 3.4px,
+      transparent 3.6px
+    );
+    background:
+      var(--jg-rivet) 0 0 / 8px 8px no-repeat,
+      var(--jg-rivet) 100% 0 / 8px 8px no-repeat,
+      var(--jg-rivet) 0 100% / 8px 8px no-repeat,
+      var(--jg-rivet) 100% 100% / 8px 8px no-repeat;
+    filter: var(--jg-drop);
+  }
+
+  /* 待定的字：纸上一层淡淡的铜色，像刚用铅笔轻轻写上去的 */
+  [data-part='writing-ai-pending'] {
+    background-color: var(--accent-soft);
+    box-shadow: inset 0 -1px 0 oklch(0.47 0.1 62 / 0.35);
+    color: var(--jg-p-ink);
+  }
+
+  [data-part='writing-ai-target'] {
+    text-decoration-color: var(--jg-p-accent);
+  }
+
+  /* 目录里的完成标记：一颗小铜钉 */
+  [data-part='writing-tree-done'][data-done='true'] {
+    border-color: var(--jg-brass-3);
+    color: var(--jg-brass-2);
+    background-color: var(--jg-sunk);
+    box-shadow: var(--jg-sunk-inset);
+  }
+
+  /* 作品卡片：一张钉在桌上的羊皮纸 */
+  [data-part='writing-project-card'] {
+    --ink: var(--jg-p-ink);
+    --ink-2: var(--jg-p-ink-2);
+    --ink-3: var(--jg-p-ink-3);
+    --accent: var(--jg-p-accent);
+    --danger: var(--jg-p-danger);
+    --danger-soft: oklch(0.55 0.16 28 / 0.12);
+    color: var(--ink);
+    border: 0;
+    border-radius: 10px 7px 11px 8px / 8px 11px 7px 10px;
+    background-color: var(--jg-parch);
+    background-image:
+      radial-gradient(
+        150% 150% at 50% 45%,
+        oklch(0.62 0.08 62 / 0) 64%,
+        oklch(0.62 0.08 62 / 0.18) 97%
+      ),
+      var(--jg-tex-parchment);
+    box-shadow:
+      inset 0 0 0 1px oklch(0.5 0.075 55 / 0.16),
+      inset 0 0 12px 1px oklch(0.64 0.085 62 / 0.2),
+      var(--jg-cast-md);
+  }
+}
+
+@media (max-width: 639px) {
+  @scope ([data-theme='jiuguan']) to ([data-theme]) {
+    [data-part='writing-scroll'] {
+      padding: 12px 8px 24px;
+    }
+
+    [data-part='writing-page']::before {
+      inset: 7px;
+    }
   }
 }

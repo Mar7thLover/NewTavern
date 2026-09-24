@@ -1,0 +1,37 @@
+/**
+ * 素 · 背景与立绘（M4（二）§A §B.3；与 theme.css 一起按需加载，见 apply.ts）。
+ *
+ * 背景：素默认不显示用户背景（theme.ts `backdrop: 'veil'`）；外观里打开「也显示背景」后，
+ * 只走引擎统一的淡化遮罩（themes/backdrop.css：canvas 色覆盖），不加任何材质。
+ * 素的阅读面在强制态下是透的，字直接落在遮罩上，所以遮罩比缺省再浓一点。
+ *
+ * 立绘框：没有框。人站在一根 1px 的线上，线就是地面（.su-stand，结构见 signature.tsx）。
+ * 换表情 120ms 线性淡入。
+ */
+
+@scope ([data-theme='su']) to ([data-theme]) {
+  :scope [data-part='user-backdrop']::after {
+    background-color: color-mix(in oklab, var(--canvas) 88%, transparent);
+  }
+
+  [data-part='sprite-stage'] {
+    --sprite-fade: 120ms;
+  }
+
+  /* 地面：一根 1px 的线，比人宽一点 */
+  .su-stand[data-collapsed='false']::after {
+    content: '';
+    position: absolute;
+    left: -8px;
+    right: -8px;
+    bottom: 0;
+    height: 1px;
+    background-color: var(--edge);
+  }
+
+  /* 折叠成头像：同消息头像，只有图；角色是 4px 的方 */
+  .su-stand[data-collapsed='true'] {
+    overflow: hidden;
+    border-radius: var(--r-control);
+  }
+}

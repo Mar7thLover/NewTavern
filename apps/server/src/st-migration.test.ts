@@ -17,6 +17,7 @@ import {
   type MigrationSelect,
   type StInventory,
 } from './services/st-migration.js';
+import { readVariableTable } from './services/variables.js';
 import { makeTempDataDir, makeTestApp, parseSse, type TestApp } from './test-helpers.js';
 
 const dataDir = makeTempDataDir();
@@ -167,6 +168,7 @@ const selectAll = (inventory: StInventory): MigrationSelect => ({
   defaultPersona: true,
   // 背景库另有 st-migration-media.test.ts 覆盖
   backgrounds: false,
+  defaultBackground: false,
 });
 
 describe('ST 目录识别', () => {
@@ -271,7 +273,7 @@ describe('扫描与迁移', () => {
     expect(inventory.defaultPersona).toBe('me.png');
     expect(inventory.worldInfo).toEqual({ globalBooks: ['城市', '不存在的书'], hasSettings: true });
     // 背景从 M4（二）起迁移（§A.5）：两个假文件都算进清单，内容不是图片，迁移时会 failed
-    expect(inventory.backgrounds).toEqual({ count: 2, newCount: 2 });
+    expect(inventory.backgrounds).toEqual({ count: 2, newCount: 2, current: null });
     expect(inventory.skipped).toEqual({
       instruct: 0,
       context: 1,
@@ -466,10 +468,16 @@ describe('酒馆助手脚本迁移', () => {
         extensions: {
           tavern_helper: {
             scripts: [
-              { type: 'script', id: 'p1', name: '悬浮球', enabled: true, content: 'console.log(1)' },
+              {
+                type: 'script',
+                id: 'p1',
+                name: '悬浮球',
+                enabled: true,
+                content: 'console.log(1)',
+              },
               { type: 'script', id: 'p2', name: '关着的', enabled: false, content: 'x' },
             ],
-            variables: {},
+            variables: { 计数: 3, 名单: ['甲'] },
           },
         },
       }),
@@ -493,7 +501,9 @@ describe('酒馆助手脚本迁移', () => {
               id: 'f1',
               name: '工具',
               enabled: false,
-              scripts: [{ type: 'script', id: 's2', name: '夹里的', enabled: true, content: 'b()' }],
+              scripts: [
+                { type: 'script', id: 's2', name: '夹里的', enabled: true, content: 'b()' },
+              ],
             },
           ],
         },
@@ -501,6 +511,11 @@ describe('酒馆助手脚本迁移', () => {
     });
     const inventory = scanStDirectory(db, user);
     expect(inventory.scripts).toEqual({ count: 2, newCount: 2, globalEnabled: true });
+    // 预设自带脚本在清单里报数；在酒馆助手的启用名单里
+    expect(inventory.presets.find((item) => item.file === '带脚本.json')).toMatchObject({
+      scripts: 2,
+      scriptsEnabled: true,
+    });
 
     const select: MigrationSelect = {
       ...selectAll(inventory),
@@ -520,7 +535,11 @@ describe('酒馆助手脚本迁移', () => {
     ]);
     expect(done.counts.scripts).toEqual({ imported: 2, skipped: 0, failed: 0 });
 
-    const globals = db.select().from(schema.scripts).where(eq(schema.scripts.scope, 'global')).all();
+    const globals = db
+      .select()
+      .from(schema.scripts)
+      .where(eq(schema.scripts.scope, 'global'))
+      .all();
     const byName = new Map(globals.map((row) => [row.name, row]));
     expect(byName.get('开着的')?.enabled).toBe(true);
     // 文件夹关着 → 里面的脚本也关着；文件夹名进 data.folder
@@ -528,22 +547,28 @@ describe('酒馆助手脚本迁移', () => {
     expect((byName.get('夹里的')?.data as { folder?: string }).folder).toBe('工具');
 
     // 预设在 script.enabled.presets 里：自带脚本按原件开关启用
-    const presetRows = db.select().from(schema.scripts).where(eq(schema.scripts.scope, 'preset')).all();
+    const presetRows = db
+      .select()
+      .from(schema.scripts)
+      .where(eq(schema.scripts.scope, 'preset'))
+      .all();
     expect(Object.fromEntries(presetRows.map((row) => [row.name, row.enabled]))).toEqual({
       悬浮球: true,
       关着的: false,
     });
 
+    // 预设自带的 tavern_helper.variables 作 preset 作用域的初值
+    const presetRow = db.select().from(schema.presets).get();
+    expect(readVariableTable(db, 'preset', presetRow?.id as string)).toEqual({
+      计数: 3,
+      名单: ['甲'],
+    });
+
     expect(scanStDirectory(db, user).scripts.newCount).toBe(0);
     const again: MigrationItem[] = [];
-    await runStMigration(
-      { db, assets, importer },
-      user,
-      { ...select, presets: [] },
-      (item) => {
-        again.push(item);
-      },
-    );
+    await runStMigration({ db, assets, importer }, user, { ...select, presets: [] }, (item) => {
+      again.push(item);
+    });
     expect(again.map((item) => item.status)).toEqual(['skipped', 'skipped']);
   });
 
@@ -575,7 +600,14 @@ describe('酒馆助手脚本迁移', () => {
     const done = await runStMigration(
       { db, assets, importer },
       user,
-      { ...selectAll(inventory), chats: [], presets: [], regex: false, worldInfo: false, defaultPersona: false },
+      {
+        ...selectAll(inventory),
+        chats: [],
+        presets: [],
+        regex: false,
+        worldInfo: false,
+        defaultPersona: false,
+      },
       () => undefined,
     );
     expect(done.warnings.join('\n')).toContain('总开关');

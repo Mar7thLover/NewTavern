@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 
-import './app/i18n';
+import { i18nReady } from './app/i18n';
 import { AppRouter } from './app/router';
 import { useUiStore } from './app/store/ui';
 import './index.css';
@@ -16,7 +16,8 @@ applyTheme(themeId, mode, themeOptions);
 
 const root = createRoot(document.getElementById('root')!);
 
-void loadThemeAssets(themeId).finally(() => {
+// 主题与非缺省语言的词典都是按需 chunk，并行等齐再渲染
+void Promise.allSettled([loadThemeAssets(themeId), i18nReady]).finally(() => {
   root.render(
     <StrictMode>
       <QueryClientProvider client={queryClient}>

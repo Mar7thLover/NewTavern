@@ -444,3 +444,20 @@ export function hasEjs(text: string): boolean;   // 快速判断，免得每段�
 9. **沙箱生命周期**（细化 §4.2「组装结束 dispose」）：一次组装共用一个 QuickJS runtime + context（前奏只求值一次），同步组装结束后由 microtask 自动释放，所以 generate / inspect / 前端卡 generate 各调用点不用改；任一段失败（超时 / 内存 / 栈）即作废重建。栈上限定为 256KB——512KB 时 QuickJS 还没报栈溢出，V8 的原生栈先爆了。每段 200ms 墙钟上限包含其中 `getwi` 的递归渲染。
 10. **开关**：settings KV `ejs: { enabled }`，缺省开；界面在 设置 → 前端卡 → 变量框架 一节。
 11. **ST-PT 的其余功能本轮不做**：世界书标题前缀注入（`[GENERATE:BEFORE/AFTER]`、`[GENERATE:n:…]`、`[RENDER:…]`、`[GENERATE:REGEX:…]`）、`@INJECT` 提示词注入、`[InitialVariables]`、`@@preprocessing` / `@@private` 等装饰器、楼层渲染与永久求值、`include`。带这些前缀 / 装饰器的条目按普通世界书条目处理。
+
+### 修正（2026-09-22，MIG）：收尾验收
+
+1. **§1 变量管理器**：先前只有纯逻辑 `features/inspector/variable-tree.ts`，组件没写，检查器「变量」页仍是只读表。已补 `VariableEditor.tsx`：
+   五个作用域（本条消息 / 全局 / 角色卡 / 预设 / 脚本），脚本作用域先选脚本（全局 → 当前预设 → 当前角色卡，与 ScriptRunner 同序；角色卡脚本用卡里的 id）。
+   `display_data` / `delta_data` 与 `$` 开头的键默认折叠。真机：黄金庭院好感度改 77 保存后接口读回 `[77, 说明]`；长夜月的 Zod 脚本经
+   `registerMvuSchema` → `registerVariableSchema` 真的把 schema 存进了会话，把「时间」改成数字后就地标出「类型应为 string」，保存键写明不合规处数。
+2. **§1 preset 作用域的初值**：导入预设时把 `extensions.tavern_helper.variables`（酒馆助手 `getVariables({type:'preset'})` 读的就是它）写进
+   `variables` 表（`scripts.ts` `seedPresetVariables`，表里已有这份预设的变量就不动；不回填老库）。删除预设时连同它的 preset 变量、
+   它自带脚本各自的 script 变量一起删（`deleteOwnerScripts`）。本机「双人成行」预设带 2 个键，迁移后读得到。
+3. **§3.2 `generate` 的 `user_input`**：以前组装完才把它拼在最后，depth 0 的 `injects` / 作者注释 / @depth 世界书因此落在它**前面**、世界书扫描也看不到它。
+   照酒馆助手 4.9.3 `handlePresetPath`（把 user 消息 unshift 进 oaiMessages 再 `prepareOpenAIMessages`）改为当作历史末尾的一条 user 消息参与组装；
+   `overrides.chat_history.prompts` 给了时接在替换后的历史末尾；`prompts: []`（不要历史）时仍按老办法接在最后；`max_chat_history` 不把它算进名额。
+   真机：在长夜月脚本帧里调 `generate({ user_input, injects:[depth 0], overrides:{ world_info_before } })`，mock 收到的请求里注入在 user_input 之后、
+   世界书覆盖生效，会话节点数不变。
+4. **§3.1 Composer**：`/if … {: /echo … :}` 这类闭包里的 `/echo` 也算「已显示」，不再多弹一条「命令结果」。`/bg` 不带参数照 core 报「需要背景名或资源 id」（宿主的「空 = 继承」走不到，用 `/bg none` 或会话面板）。
+5. **§2.1 ST 迁移**：清单里的预设项带自带脚本个数与「酒馆助手里开着」标记（见 M4 第二部分 §E 修正 1）。

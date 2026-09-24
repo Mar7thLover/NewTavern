@@ -7,6 +7,7 @@ import type {
   MessageDividerProps,
   MessageOrnamentProps,
   SendButtonProps,
+  SpriteFrameProps,
   StreamingCursorProps,
   SwipeIndicatorProps,
 } from '../signature';
@@ -311,5 +312,35 @@ export function Backdrop({ scope }: BackdropProps) {
       <div className="jg-light absolute inset-0" data-scope={scope} />
       <div className="jg-vignette absolute inset-0" data-scope={scope} />
     </>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* 立绘框：挂在皮面上的黄铜框（形态在 media.css 的 .jg-portrait）          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 一块深色皮革衬板，四周一圈黄铜压条（上亮下暗，有厚度），四角各一颗铆钉把它钉在墙上；
+ * 光从灯（夜）或窗（白日）来，衬板上有一片对应方向的亮。
+ * 折叠成头像时是嵌在铜圈里的圆形肖像（同头像的铜框）。
+ */
+export function SpriteFrame({ layout, collapsed, children }: SpriteFrameProps) {
+  return (
+    <div
+      data-part="sprite-frame"
+      data-layout={layout}
+      data-collapsed={collapsed}
+      className="jg-portrait relative size-full"
+    >
+      <div className="jg-portrait-board">{children}</div>
+      {!collapsed && (
+        <>
+          <span aria-hidden className="jg-portrait-rivet" data-corner="tl" />
+          <span aria-hidden className="jg-portrait-rivet" data-corner="tr" />
+          <span aria-hidden className="jg-portrait-rivet" data-corner="bl" />
+          <span aria-hidden className="jg-portrait-rivet" data-corner="br" />
+        </>
+      )}
+    </div>
   );
 }

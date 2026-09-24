@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router';
 
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { ImportButton } from '../../components/ImportButton';
@@ -16,6 +17,7 @@ import {
   type CharacterExportFormat,
   type CharacterSummary,
 } from '../../lib/api';
+import { studioPath } from '../../lib/api-studio';
 import { Avatar, EmptyState, LibraryHeader, QueryStatus, errorMessage } from './shared';
 
 const CHARACTER_ACCEPT = '.png,.charx,.json';
@@ -215,6 +217,12 @@ function CharacterDetailModal({
             >
               {t('common.delete')}
             </Button>
+            <Link
+              to={studioPath('character', id)}
+              className={buttonVariants({ variant: 'outline', size: 'sm' })}
+            >
+              {t('studio.openInStudio')}
+            </Link>
             {EXPORT_FORMATS.map((format) => (
               <a
                 key={format}

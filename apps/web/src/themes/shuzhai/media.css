@@ -1,0 +1,111 @@
+/**
+ * 书斋 · 背景与立绘（M4（二）§A §B.3；与 theme.css 一起按需加载，见 apply.ts）。
+ *
+ * 背景：书斋默认不显示用户背景（theme.ts `backdrop: 'veil'`）；外观里打开「也显示背景」后，
+ * 走引擎统一的淡化遮罩（themes/backdrop.css），不加任何材质。版框里的那张纸本来就是实的，
+ * 字始终写在纸上；这里只把遮罩按纸色调准——宣纸的白天与烛夜各自一层，比缺省略浓，
+ * 让图退成纸背后隐约的一点影，不跟回目、朱砂抢。
+ *
+ * 立绘框：一页画心（.sz-leaf，结构见 signature.tsx）——比阅读面略白的纸叠在页上，
+ * 边缘一条暗线，没有影；纸上印外粗内细的双线版框，左下钤一方白文小印。换表情不做过渡。
+ *
+ * 元素规则一律在 @scope ([data-theme='shuzhai']) to ([data-theme]) 里。
+ */
+
+/* ------------------------------------------------------------------ */
+/* 强制显示背景时的遮罩                                                   */
+/* ------------------------------------------------------------------ */
+
+@scope ([data-theme='shuzhai']) to ([data-theme]) {
+  :scope [data-part='user-backdrop']::after {
+    background-color: color-mix(in oklab, var(--canvas) 88%, transparent);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* 立绘框：画心                                                          */
+/* ------------------------------------------------------------------ */
+
+@scope ([data-theme='shuzhai']) to ([data-theme]) {
+  [data-part='sprite-stage'] {
+    /* 书斋换表情直接换，不淡入 */
+    --sprite-fade: 0ms;
+  }
+
+  /* 上层纸：略白，边缘一条暗线（纸的叠放），圆角不过 2px，没有影 */
+  .sz-leaf {
+    border: 1px solid var(--sz-sheet-edge);
+    border-radius: 1px;
+    background-color: var(--raised);
+    background-image: var(--sz-fiber);
+    background-size: 200px 200px;
+  }
+
+  /* 版框：外粗内细的双线，印在纸上 */
+  .sz-leaf::before {
+    content: '';
+    position: absolute;
+    inset: 7px;
+    border: 2px solid var(--edge-strong);
+    outline: 1px solid var(--edge-strong);
+    outline-offset: -5px;
+    pointer-events: none;
+  }
+
+  /* 画心：在内框里 */
+  .sz-leaf-view {
+    position: absolute;
+    inset: 14px;
+  }
+
+  /* 白文小印：钤在画心左下，压一点画 */
+  .sz-leaf-seal {
+    position: absolute;
+    left: 18px;
+    bottom: 18px;
+    width: 18px;
+    height: 18px;
+    padding: 2px;
+    border-radius: 2px;
+    background-color: var(--sz-seal);
+    fill: none;
+    stroke: var(--sz-seal-ink);
+    stroke-width: 1.7;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    /* 印泥的不匀：边上一圈更深的朱 */
+    box-shadow: inset 0 0 0 1px var(--sz-seal-deep);
+  }
+
+  /* 窄屏展开的小窗：纸小，版框贴得更紧 */
+  .sz-leaf[data-layout='strip'][data-collapsed='false']::before {
+    inset: 5px;
+  }
+
+  .sz-leaf[data-layout='strip'][data-collapsed='false'] .sz-leaf-view {
+    inset: 11px;
+  }
+
+  .sz-leaf[data-layout='strip'][data-collapsed='false'] .sz-leaf-seal {
+    left: 14px;
+    bottom: 14px;
+    width: 15px;
+    height: 15px;
+  }
+
+  /* 折叠成头像：一方细墨线框住的小像（方的，同角色的印） */
+  .sz-leaf[data-collapsed='true'] {
+    border-color: var(--edge-strong);
+    border-radius: 2px;
+    background-image: none;
+  }
+
+  .sz-leaf[data-collapsed='true']::before {
+    content: none;
+  }
+
+  .sz-leaf[data-collapsed='true'] .sz-leaf-view {
+    inset: 2px;
+    overflow: hidden;
+  }
+}

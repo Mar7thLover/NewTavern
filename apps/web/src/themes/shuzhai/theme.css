@@ -1233,3 +1233,104 @@
     box-shadow: none;
   }
 }
+
+/* ================================================================== */
+/* 写作页（M7 §5.5）：一张宣纸摊在书案上。版框只框这张纸；               */
+/* 段首缩进两字、段间不空行由故事槽位给出。                               */
+/* ================================================================== */
+
+@scope ([data-theme='shuzhai']) to ([data-theme]) {
+  /* 写作页自己分三栏：外层 main 不再套整页版框 */
+  [data-part='main']:has(> [data-part='writing-shell']) {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    outline: 0;
+    background: none;
+  }
+
+  /* 目录与工具是下层纸，与书案之间一条纸边的暗线 */
+  [data-part='writing-aside'] {
+    border-color: var(--sz-sheet-edge);
+    background-image: var(--sz-fiber);
+    background-size: 200px 200px;
+  }
+
+  [data-part='writing-header'] {
+    border-color: var(--edge);
+  }
+
+  [data-part='writing-title'],
+  [data-part='writing-project-head'] input {
+    font-family: var(--font-display);
+    font-weight: 400;
+    letter-spacing: 0.12em;
+  }
+
+  /* 纸：上层纸，四周双边（外粗内细），纸纹按原尺寸平铺 */
+  [data-part='writing-page'] {
+    border: 2px solid var(--edge-strong);
+    outline: 1px solid var(--edge-strong);
+    outline-offset: -5px;
+    border-radius: 0;
+    background-size: 200px 200px;
+  }
+
+  .writing-prose {
+    text-align: justify;
+    font-synthesis: none;
+  }
+
+  /* 待定的字：纸上一层淡淡的底，下缘一道极淡的朱砂——批在旁边、还没誊进去 */
+  [data-part='writing-ai-pending'] {
+    background-color: var(--accent-soft);
+    box-shadow: inset 0 -1px 0 oklch(from var(--accent) l c h / 0.4);
+    color: var(--ink);
+  }
+
+  [data-part='writing-ai-target'] {
+    text-decoration: none;
+    box-shadow: inset 0 -1px 0 oklch(from var(--accent) l c h / 0.55);
+  }
+
+  /* 对照：删去的是墨线划掉，添上的是朱砂旁批的底线 */
+  [data-part='writing-diff'] del {
+    text-decoration-color: var(--edge-strong);
+  }
+
+  [data-part='writing-diff'] ins {
+    background-color: var(--accent-soft);
+    text-decoration-color: oklch(from var(--accent) l c h / 0.7);
+  }
+
+  /* 目录里完成的章：一枚小小的朱砂勾 */
+  [data-part='writing-tree-done'][data-done='true'] {
+    border-color: var(--sz-seal);
+    color: var(--sz-seal);
+  }
+
+  [data-part='writing-project-card'] {
+    border-color: var(--sz-sheet-edge);
+    background-image: var(--sz-fiber);
+    background-size: 200px 200px;
+  }
+
+  [data-part='writing-toolbar'],
+  [data-part='writing-ai-bar'] {
+    border-color: var(--sz-sheet-edge);
+    background-image: var(--sz-fiber);
+    background-size: 200px 200px;
+  }
+}
+
+@media (max-width: 639px) {
+  @scope ([data-theme='shuzhai']) to ([data-theme]) {
+    [data-part='writing-scroll'] {
+      padding: 8px;
+    }
+
+    .writing-prose {
+      text-align: start;
+    }
+  }
+}

@@ -1705,3 +1705,154 @@
     box-shadow: var(--nf-soft-lift);
   }
 }
+
+/* ================================================================ */
+/* 写作页（M7 §5.5）：一张大便签纸贴在奶油桌布上，顶上一截薄荷胶带。   */
+/* 目录是薄荷奶昔的软垫，工具是杏子色的软垫（与对话页同一分配）。       */
+/* ================================================================ */
+
+@scope ([data-theme='nuanfang']) to ([data-theme]) {
+  [data-part='writing-shell'] {
+    gap: 12px;
+    padding: 12px;
+  }
+
+  [data-part='writing-aside'] {
+    border: 0;
+    border-radius: var(--r-panel);
+    box-shadow: var(--shadow-panel);
+    overflow: hidden;
+  }
+
+  [data-part='writing-aside'][data-side='start'] {
+    background-color: var(--nf-mint-panel);
+  }
+
+  [data-part='writing-aside'][data-side='end'] {
+    background-color: var(--nf-apricot);
+  }
+
+  [data-part='writing-panel'] > [data-part='tabs'] {
+    margin: 12px 12px 4px;
+  }
+
+  /* 纸列：比墙深一点的奶油桌布 */
+  [data-part='writing-shell'] > div:not([data-part]) {
+    border-radius: var(--r-panel);
+    background-color: var(--nf-tray);
+    box-shadow: inset 0 2px 12px oklch(0.6 0.08 60 / 0.08);
+    overflow: hidden;
+  }
+
+  [data-part='writing-header'] {
+    border-color: transparent;
+    padding-inline: 16px;
+  }
+
+  [data-part='writing-title'],
+  [data-part='writing-project-head'] input {
+    font-family: var(--font-display);
+    font-weight: 400;
+    letter-spacing: 0.06em;
+  }
+
+  [data-part='writing-project-head'] {
+    border-color: oklch(0.6 0.08 60 / 0.12);
+  }
+
+  /* 便签纸：黄油色、大圆角、软影；顶上居中一截薄荷胶带 */
+  [data-part='writing-page'] {
+    position: relative;
+    margin-top: 10px;
+    border: 0;
+    border-radius: var(--r-card);
+    background-color: var(--nf-butter);
+    box-shadow: var(--nf-soft);
+  }
+
+  [data-part='writing-page']::before {
+    content: '';
+    position: absolute;
+    top: -9px;
+    left: 50%;
+    width: 72px;
+    height: 20px;
+    margin-left: -36px;
+    border-radius: 6px;
+    background-color: oklch(0.84 0.07 165 / 0.62);
+    transform: rotate(-3deg);
+    pointer-events: none;
+  }
+
+  /* 大纲用杏子色的便签 */
+  [data-part='writing-page'][data-kind='outline'] {
+    background-color: var(--nf-apricot);
+  }
+
+  [data-part='writing-page'][data-kind='note'] {
+    background-color: var(--nf-milk);
+  }
+
+  /* 待定的字：草莓牛奶色的荧光笔，软软的圆头 */
+  [data-part='writing-ai-pending'] {
+    background-color: var(--accent-soft);
+    border-radius: 6px;
+    color: var(--ink);
+  }
+
+  [data-part='writing-ai-target'] {
+    text-decoration-color: var(--nf-berry);
+    text-decoration-thickness: 2px;
+  }
+
+  [data-part='writing-diff'] ins {
+    border-radius: 4px;
+    background-color: var(--accent-soft);
+    text-decoration-color: var(--nf-berry);
+  }
+
+  /* 完成：一颗草莓色的小豆子 */
+  [data-part='writing-tree-done'] {
+    border-color: transparent;
+    border-radius: var(--r-pill);
+    background-color: var(--nf-milk);
+    box-shadow: inset 0 1px 3px oklch(0.6 0.08 60 / 0.14);
+  }
+
+  [data-part='writing-tree-done'][data-done='true'] {
+    border-color: transparent;
+    background-color: var(--nf-berry);
+    color: var(--nf-milk);
+    box-shadow: var(--nf-soft-sm);
+  }
+
+  [data-part='writing-tree-stale'] {
+    border-color: transparent;
+    background-color: var(--nf-apricot-soft);
+    color: var(--nf-caramel);
+  }
+
+  [data-part='writing-toolbar'],
+  [data-part='writing-ai-bar'] {
+    border-color: transparent;
+    background-color: var(--nf-milk);
+    box-shadow: 0 -4px 16px oklch(0.6 0.08 60 / 0.1);
+  }
+
+  [data-part='writing-project-card'] {
+    border: 0;
+    border-radius: var(--r-card);
+    background-color: var(--nf-butter);
+    box-shadow: var(--nf-soft);
+  }
+
+  @media (max-width: 639px) {
+    [data-part='writing-shell'] {
+      padding: 6px 8px 8px;
+    }
+
+    [data-part='writing-scroll'] {
+      padding: 14px 8px 10px;
+    }
+  }
+}

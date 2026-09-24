@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./locales/*": "./src/*",
     "./prompts/*": "./prompts/*"
   },
   "scripts": {

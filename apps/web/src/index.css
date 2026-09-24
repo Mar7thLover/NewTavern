@@ -4,6 +4,7 @@
 @import './themes/slots.css';
 @import './themes/materials.css';
 @import './themes/blocks.css';
+@import './themes/backdrop.css';
 
 html {
   background-color: var(--canvas);

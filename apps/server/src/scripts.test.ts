@@ -267,10 +267,30 @@ describe('预设自带脚本', () => {
     // 回填幂等：已经抽过的不再抽
     expect(backfillPresetScripts(db)).toBe(0);
 
+    // 预设自带的 tavern_helper.variables → preset 作用域变量（酒馆助手 getVariables({type:'preset'}) 读的那份）
+    const vars = (await (
+      await app.request(`/api/variables/preset?ownerId=${preset.id}`)
+    ).json()) as { variables: Record<string, unknown> };
+    expect(vars.variables).toEqual({ st_tagfixer_preset: {} });
+    // 脚本自己的变量表
+    const [firstScript] = enabled.scripts;
+    await app.request(
+      '/api/variables/script',
+      json('PUT', { ownerId: firstScript?.id, variables: { 开关: true } }),
+    );
+
     const del = await app.request(`/api/presets/${preset.id}`, { method: 'DELETE' });
     expect(del.status).toBe(204);
     expect(
       db.select().from(schema.scripts).where(eq(schema.scripts.ownerId, preset.id)).all(),
+    ).toEqual([]);
+    // 预设变量与它的脚本的变量表一起带走
+    expect(
+      db
+        .select()
+        .from(schema.variables)
+        .all()
+        .filter((row) => row.scope !== 'global'),
     ).toEqual([]);
   });
 

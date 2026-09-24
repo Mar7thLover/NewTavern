@@ -117,3 +117,35 @@ export function updatePreset(
   recordCurrentVersion(db, 'preset', id, author);
   return row;
 }
+
+/**
+ * 只写布局策略（`PUT /api/presets/:id/layout-policy`）：不需要带整份 data，
+ * 前端的布局策略 / 保真锁开关单独保存用。null = 清空（跟随会话 / 导入默认）。
+ * 预设版本数据里带着布局策略（保留键 `__layoutPolicy`），所以同样写一版。
+ */
+export function updatePresetLayoutPolicy(
+  db: Db,
+  id: string,
+  value: unknown,
+  author: VersionAuthor = 'user',
+): PresetRow {
+  const current = db.select().from(schema.presets).where(eq(schema.presets.id, id)).get();
+  if (!current) throw new PresetNotFoundError();
+  if (value === undefined) throw new PresetInputError('缺少 layoutPolicy（清空请传 null）');
+  const layoutPolicy = parseLayoutPolicy(value);
+  const row = db
+    .update(schema.presets)
+    .set({
+      // 空对象与 null 等价：都是「全部跟随默认」
+      layoutPolicy:
+        layoutPolicy && Object.keys(layoutPolicy).length > 0
+          ? (layoutPolicy as Record<string, unknown>)
+          : null,
+      updatedAt: new Date(),
+    })
+    .where(eq(schema.presets.id, id))
+    .returning()
+    .get();
+  recordCurrentVersion(db, 'preset', id, author);
+  return row;
+}
