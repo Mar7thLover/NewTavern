@@ -24,6 +24,15 @@ const updatedAt = () =>
     .notNull()
     .$defaultFn(() => new Date());
 
+/**
+ * 创作工作台标记（迁移 0004）：null = 库里的原件；非 null = 工作台自己的
+ * （`sourceId` 是复制来源，工作台里新建的为 null）。从工作台打开原件时先复制一份，
+ * 编辑的是副本，原件不动（见 services/studio-fork.ts）。
+ */
+export type StudioMarker = { sourceId: string | null };
+
+const studio = () => text('studio', { mode: 'json' }).$type<StudioMarker>();
+
 /** KV 设置：连接档案之外的全局配置、全局系统提示词覆盖层等 */
 export const settings = sqliteTable('settings', {
   key: text('key').primaryKey(),
@@ -73,6 +82,7 @@ export const characters = sqliteTable(
      */
     editedAt: integer('edited_at', { mode: 'timestamp_ms' }),
     tags: text('tags', { mode: 'json' }).$type<string[]>().notNull().default([]),
+    studio: studio(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -88,6 +98,7 @@ export const presets = sqliteTable('presets', {
   data: text('data', { mode: 'json' }).notNull(),
   sampling: text('sampling', { mode: 'json' }).$type<Record<string, unknown>>(),
   layoutPolicy: text('layout_policy', { mode: 'json' }).$type<Record<string, unknown>>(),
+  studio: studio(),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
@@ -100,6 +111,7 @@ export const lorebooks = sqliteTable('lorebooks', {
     .default('global'),
   /** scan_depth / token_budget / recursive_scanning 等书级设置 */
   settings: text('settings', { mode: 'json' }).$type<Record<string, unknown>>(),
+  studio: studio(),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });

@@ -13,10 +13,11 @@ import {
   presetColumns,
   readBuiltinPresetId,
 } from '../services/presets.js';
+import { studioMarkerFromBody } from '../services/studio-fork.js';
 import {
   PresetInputError,
   PresetNotFoundError,
-  syncDataName,
+  insertPresetCopy,
   updatePreset,
   updatePresetLayoutPolicy,
 } from '../services/preset-edit.js';
@@ -33,6 +34,7 @@ function toSummary(row: PresetRow) {
     name: row.name,
     format: row.format,
     apiFamily: row.apiFamily,
+    studio: row.studio,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -70,7 +72,7 @@ export function createPresetsRoutes(db: Db, importer: Importer) {
         const rows = db.select().from(schema.presets).orderBy(desc(schema.presets.updatedAt)).all();
         return c.json(rows.map(toSummary));
       })
-      /** 新建：`{ name?, from?: 'default' }`，内容是内置默认预设的深拷贝 */
+      /** 新建：`{ name?, from?: 'default', studio? }`，内容是内置默认预设的深拷贝 */
       .post('/', async (c) => {
         // 请求体可省略（空体 / 非对象都按 {} 处理）
         const body = (await readJsonObject(c)) ?? {};
@@ -83,7 +85,12 @@ export function createPresetsRoutes(db: Db, importer: Importer) {
         const name = (typeof body.name === 'string' && body.name.trim()) || NEW_PRESET_NAME;
         const row = db
           .insert(schema.presets)
-          .values({ name, format: DEFAULT_PRESET.format, ...presetColumns(builtinPresetData()) })
+          .values({
+            name,
+            format: DEFAULT_PRESET.format,
+            ...presetColumns(builtinPresetData()),
+            studio: studioMarkerFromBody(body.studio),
+          })
           .returning()
           .get();
         recordCurrentVersion(db, 'preset', row.id);
@@ -145,24 +152,14 @@ export function createPresetsRoutes(db: Db, importer: Importer) {
           throw e;
         }
       })
-      /** 复制：data / sampling / format / apiFamily 原样，名称「<原名> 副本」 */
+      /**
+       * 复制：data / sampling / layoutPolicy / format / apiFamily 原样，名称「<原名> 副本」。
+       * 副本与原件同为库里的（studio 列不带过去）；工作台复制见 `POST /api/studio/fork`。
+       */
       .post('/:id/duplicate', (c) => {
         const source = load(c.req.param('id'));
         if (!source) return c.json({ error: 'not_found' }, 404);
-        const name = `${source.name} 副本`;
-        const data = structuredClone(source.data) as Record<string, unknown>;
-        syncDataName(data, name);
-        const row = db
-          .insert(schema.presets)
-          .values({
-            name,
-            format: source.format,
-            apiFamily: source.apiFamily,
-            data,
-            sampling: source.sampling ? structuredClone(source.sampling) : source.sampling,
-          })
-          .returning()
-          .get();
+        const row = insertPresetCopy(db, source);
         recordCurrentVersion(db, 'preset', row.id);
         return c.json(row, 201);
       })

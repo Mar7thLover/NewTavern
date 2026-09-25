@@ -1,3 +1,4 @@
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -16,11 +17,14 @@ import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import { Segmented } from '../../components/ui/segmented';
 import {
+  forkToStudio,
   isStudioKind,
+  studioPath,
   type PromptLibraryItem,
   type StudioCharacterDetail,
   type StudioKind,
 } from '../../lib/api-studio';
+import { fetchJson, queryKeys } from '../../lib/api';
 import { useMediaQuery } from '../../lib/hooks';
 import { cn } from '../../lib/utils';
 import { LorebookEditor, type LorebookDraft } from '../library/lorebook-editor';
@@ -31,7 +35,12 @@ import { AssistPanel } from './assist/AssistPanel';
 import { useAssist, useAssistConnection } from './assist/useAssist';
 import { CharacterEditor } from './character/CharacterEditor';
 import { pairName } from './draft/adapters';
-import { useStudioDraft, type StudioDraftApi } from './draft/useStudioDraft';
+import {
+  detailQueryKey,
+  fetchStudioDetail,
+  useStudioDraft,
+  type StudioDraftApi,
+} from './draft/useStudioDraft';
 import { trackInsertTarget } from './insert-target';
 import { InspectorTab } from './panels/InspectorTab';
 import { PromptLibraryTab } from './panels/PromptLibraryTab';
@@ -77,7 +86,92 @@ export function StudioWorkbenchPage() {
     );
   }
   // key：换实体就整体重建（草稿、协作对话、测试会话都按实体来）
-  return <Workbench key={`${kind}:${id}`} kind={kind} id={id} />;
+  return <ForkGate key={`${kind}:${id}`} kind={kind} id={id} />;
+}
+
+/**
+ * 从工作台打开库里的原件（`studio` 为 null）时先复制一份，编辑的是副本、原件不动：
+ * 复制完 replace 到副本的地址（路由 state 原样带过去，「一句话生成」不丢）。
+ * 已经是工作台的（副本 / 工作台里新建的）直接进编辑器。
+ * 判定之前不挂载工作台，免得先给原件建了测试会话。
+ */
+function ForkGate({ kind, id }: { kind: StudioKind; id: string }) {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const queryClient = useQueryClient();
+  const detail = useQuery({
+    queryKey: detailQueryKey(kind, id),
+    queryFn: () => fetchStudioDetail(kind, id),
+    refetchOnWindowFocus: false,
+  });
+  const [forkError, setForkError] = useState<unknown>(null);
+  const [attempt, setAttempt] = useState(0);
+  // 第一次拿到详情时定下来：之后详情刷新（保存等）不再来回切换
+  const [decided, setDecided] = useState<'workbench' | 'fork' | null>(null);
+  const studio = detail.data?.studio;
+  if (decided === null && detail.data) setDecided(studio ? 'workbench' : 'fork');
+
+  useEffect(() => {
+    if (decided !== 'fork') return;
+    let cancelled = false;
+    setForkError(null);
+    forkToStudio(queryClient, kind, id).then(
+      (result) => {
+        if (cancelled) return;
+        if (result.id === id) {
+          // 缓存的详情过时了、其实已经是工作台的：刷新详情直接进编辑器
+          void queryClient.invalidateQueries({ queryKey: detailQueryKey(kind, id) });
+          setDecided('workbench');
+          return;
+        }
+        void navigate(studioPath(kind, result.id), { replace: true, state: location.state });
+      },
+      (error: unknown) => {
+        if (!cancelled) setForkError(error);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+    // 复制请求按 kind:id 去重（forkToStudio），依赖变化重跑也不会复制两份
+  }, [decided, attempt, queryClient, kind, id, navigate, location.state]);
+
+  if (decided === 'workbench') return <Workbench kind={kind} id={id} />;
+
+  return (
+    <div data-part="studio-forking" className="mx-auto max-w-md p-8 text-sm">
+      <Link
+        to="/studio"
+        className="focus-ring rounded-control mb-6 inline-flex items-center gap-1 text-xs text-ink-2 hover:text-ink"
+      >
+        <ArrowLeft aria-hidden className="size-3.5" />
+        {t('studio.back')}
+      </Link>
+      {decided === null ? (
+        <QueryStatus isPending={detail.isPending} error={detail.error} onRetry={detail.refetch} />
+      ) : forkError ? (
+        <div
+          role="alert"
+          className="rounded-card border-danger bg-danger-soft border p-4 text-sm text-danger"
+        >
+          <p>{t('studio.forkFailed', { message: errorMessage(forkError) })}</p>
+          <button
+            type="button"
+            onClick={() => setAttempt((n) => n + 1)}
+            className="focus-ring mt-2 cursor-pointer font-medium underline-offset-2 hover:underline"
+          >
+            {t('common.retry')}
+          </button>
+        </div>
+      ) : (
+        <div role="status" className="py-8 text-center">
+          <p className="text-ink-2">{t('studio.forking')}</p>
+          <p className="mt-1 text-[11px] text-ink-3">{t('studio.forkingHint')}</p>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function Workbench({ kind, id }: { kind: StudioKind; id: string }) {
@@ -306,6 +400,7 @@ function Workbench({ kind, id }: { kind: StudioKind; id: string }) {
           {title || t(`studio.kinds.${kind}`)}
         </h1>
         <Badge variant="outline">{t(`studio.kinds.${kind}`)}</Badge>
+        <CopyNote kind={kind} sourceId={draftApi.detail?.studio?.sourceId ?? null} />
         <SaveStatus draftApi={draftApi} kind={kind} />
         <span className="ms-auto flex gap-2">
           <Button
@@ -393,6 +488,40 @@ function Workbench({ kind, id }: { kind: StudioKind; id: string }) {
         onConfirm={() => blocker.proceed?.()}
       />
     </div>
+  );
+}
+
+const LIST_URL: Record<StudioKind, string> = {
+  character: '/api/characters',
+  preset: '/api/presets',
+  lorebook: '/api/lorebooks',
+};
+
+function listQueryKey(kind: StudioKind) {
+  return kind === 'character'
+    ? queryKeys.characters
+    : kind === 'preset'
+      ? queryKeys.presets
+      : queryKeys.lorebooks;
+}
+
+/**
+ * 页头：从库里复制来的副本注明「副本 · 原件《X》不受影响」（原件已删就只写「副本」）；
+ * 工作台里新建的（sourceId 为 null）不显示。原件名从库列表里取（与库页面共用缓存）。
+ */
+function CopyNote({ kind, sourceId }: { kind: StudioKind; sourceId: string | null }) {
+  const { t } = useTranslation();
+  const list = useQuery({
+    queryKey: listQueryKey(kind),
+    queryFn: () => fetchJson<{ id: string; name: string }[]>(LIST_URL[kind]),
+    enabled: sourceId !== null,
+  });
+  if (!sourceId) return null;
+  const source = list.data?.find((item) => item.id === sourceId);
+  return (
+    <span data-part="studio-copy-note" className="min-w-0 truncate text-[11px] text-ink-2">
+      {source ? t('studio.copyOf', { name: source.name }) : t('studio.copyBadge')}
+    </span>
   );
 }
 

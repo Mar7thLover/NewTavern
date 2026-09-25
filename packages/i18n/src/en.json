@@ -413,7 +413,9 @@
       "lorebook": "Linked lorebook",
       "lorebookNone": "None",
       "lorebookHint": "Active whenever this persona is used."
-    }
+    },
+    "studioCopy": "Studio copy",
+    "studioOwn": "Made in Studio"
   },
   "chat": {
     "you": "You",
@@ -466,7 +468,9 @@
       "lorebookKicker": "Lorebook · {{count}} opening(s)",
       "emptyTitle": "Nothing to open with yet",
       "emptyHint": "Import a character card, or import a lorebook.",
-      "lorebookKickerPlain": "Lorebook"
+      "lorebookKickerPlain": "Lorebook",
+      "copyKicker": "Copy",
+      "copySuffix": "{{label}} · copy"
     },
     "composer": {
       "placeholder": "Say something…",
@@ -1211,7 +1215,8 @@
   "studio": {
     "back": "Studio",
     "notFound": "Nothing to edit here.",
-    "openInStudio": "Open in Studio",
+    "openInStudio": "Copy to Studio",
+    "openCopyInStudio": "Open in Studio",
     "kinds": {
       "character": "Character",
       "preset": "Preset",
@@ -1265,7 +1270,12 @@
       "filterLabel": "Filter by type",
       "noMatch": "Nothing matches.",
       "emptyTitle": "Nothing to edit yet",
-      "emptyHint": "Create a character, preset or lorebook from the top right, or let the AI draft a card from one sentence."
+      "emptyHint": "Create a character, preset or lorebook from the top right, or let the AI draft a card from one sentence.",
+      "ownTitle": "In Studio",
+      "libraryTitle": "Copy from library",
+      "libraryHint": "Clicking one copies it into Studio; the original stays untouched",
+      "copyKicker": "Copy",
+      "kindCopyKicker": "{{kind}} · copy"
     },
     "character": {
       "sections": {
@@ -1491,7 +1501,12 @@
       "tagsPlaceholder": "Comma-separated",
       "deleteTitle": "Delete snippet?",
       "deleteMessage": "“{{name}}” will be removed from the library."
-    }
+    },
+    "forking": "Copying into Studio…",
+    "forkingHint": "You will edit the copy; the original in your library stays unchanged.",
+    "forkFailed": "Could not copy into Studio: {{message}}",
+    "copyOf": "Copy · the original “{{name}}” stays unchanged",
+    "copyBadge": "Copy"
   },
   "writing": {
     "title": "Writing",

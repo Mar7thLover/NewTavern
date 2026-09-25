@@ -6,6 +6,7 @@ import {
 import { asc, eq, getTableColumns, sql } from 'drizzle-orm';
 
 import { schema, type Db } from '../db/client.js';
+import type { StudioMarker } from '../db/schema.js';
 import type { LorebookEntryExtra, LorebookRow, LorebookSettings } from './character-book.js';
 
 /**
@@ -235,12 +236,12 @@ export function loadLorebookDetail(db: Db, id: string) {
   return { ...book, entries };
 }
 
-export function createEmptyLorebook(db: Db, name: string) {
+export function createEmptyLorebook(db: Db, name: string, studio: StudioMarker | null = null) {
   // ST `createNewWorldInfo` 的文件模板就是 `{ entries: {} }`：书级字段为空，条目用对象形态
   const settings: LorebookSettings = { entriesForm: 'object', meta: {} };
   const row = db
     .insert(schema.lorebooks)
-    .values({ name, scope: 'global', settings })
+    .values({ name, scope: 'global', settings, studio })
     .returning()
     .get();
   return { ...row, entries: [] as EntryRow[] };
@@ -444,7 +445,7 @@ export function saveLorebook(db: Db, bookId: string, input: SaveInput) {
 }
 
 /** 书级 meta 自带 name 时与列保持一致；ST 世界书文件大多没有这个字段，不凭空添加 */
-function syncMetaName(book: LorebookRow, name: string): LorebookSettings | undefined {
+export function syncMetaName(book: LorebookRow, name: string): LorebookSettings | undefined {
   const settings = (book.settings ?? {}) as LorebookSettings;
   const meta = settings.meta;
   if (!meta || !('name' in meta) || meta.name === name) return undefined;

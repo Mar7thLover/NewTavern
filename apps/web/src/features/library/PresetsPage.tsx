@@ -18,7 +18,14 @@ import {
   type PresetSummary,
 } from '../../lib/api';
 import { studioPath } from '../../lib/api-studio';
-import { EmptyState, LibraryHeader, QueryStatus, errorMessage, formatDate } from './shared';
+import {
+  EmptyState,
+  LibraryHeader,
+  QueryStatus,
+  errorMessage,
+  formatDate,
+  studioBadgeKey,
+} from './shared';
 
 const PRESET_ACCEPT = '.json';
 
@@ -116,6 +123,11 @@ export function PresetsPage() {
                       )}
                     </div>
                     <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-2">
+                      {preset.studio && (
+                        <Badge variant="muted" data-part="studio-copy-badge">
+                          {t(studioBadgeKey(preset.studio))}
+                        </Badge>
+                      )}
                       <Badge variant="muted">{t(`library.presets.formats.${preset.format}`)}</Badge>
                       <span>
                         {t('library.presets.apiFamily')}:{' '}
@@ -145,7 +157,7 @@ export function PresetsPage() {
                       to={studioPath('preset', preset.id)}
                       className={buttonVariants({ variant: 'outline', size: 'sm' })}
                     >
-                      {t('studio.openInStudio')}
+                      {preset.studio ? t('studio.openCopyInStudio') : t('studio.openInStudio')}
                     </Link>
                     <Button
                       variant="outline"

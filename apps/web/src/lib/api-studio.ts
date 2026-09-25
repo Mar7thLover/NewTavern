@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 
 import {
   fetchJson,
@@ -142,10 +142,11 @@ export const studioKeys = {
 /* 角色卡编辑                                                           */
 /* ------------------------------------------------------------------ */
 
-/** `POST /api/characters`：新建 V3 空卡 */
+/** `POST /api/characters`：新建 V3 空卡（`studio: true` = 工作台里新建的，库页面不带） */
 export function createCharacter(input: {
   name: string;
   data?: CharacterCardData;
+  studio?: boolean;
 }): Promise<StudioCharacterDetail> {
   return mutate<StudioCharacterDetail>('/api/characters', 'POST', input);
 }
@@ -180,6 +181,55 @@ export function useCreateCharacter() {
       return queryClient.invalidateQueries({ queryKey: queryKeys.characters, exact: true });
     },
   });
+}
+
+/* ------------------------------------------------------------------ */
+/* 复制到工作台                                                         */
+/* ------------------------------------------------------------------ */
+
+/** `POST /api/studio/fork/:kind/:id`：已是工作台的返回原 id（forked: false） */
+export interface StudioForkResult {
+  id: string;
+  forked: boolean;
+}
+
+/** 进行中的复制，按 `kind:id` 去重：StrictMode 双调用 / 重复渲染只发一次请求 */
+const pendingForks = new Map<string, Promise<StudioForkResult>>();
+
+/**
+ * 把库里的原件复制一份到工作台（原件不动），返回副本 id。同一实体同时只发一次请求；
+ * 完成后刷新三类列表（副本出现在库与工作台首页里）。失败时清掉缓存，允许重试。
+ */
+export function forkToStudio(
+  queryClient: QueryClient,
+  kind: StudioKind,
+  id: string,
+): Promise<StudioForkResult> {
+  const key = `${kind}:${id}`;
+  const pending = pendingForks.get(key);
+  if (pending) return pending;
+  const promise = mutate<StudioForkResult>(`/api/studio/fork/${kind}/${enc(id)}`, 'POST')
+    .then(async (result) => {
+      if (result.forked) {
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: queryKeys.characters, exact: true }),
+          queryClient.invalidateQueries({ queryKey: queryKeys.presets, exact: true }),
+          queryClient.invalidateQueries({ queryKey: queryKeys.lorebooks, exact: true }),
+        ]);
+      }
+      // 成功后留一小会儿：StrictMode 第二次挂载 / 跳转前的重复渲染拿到同一个结果，不会再复制一份
+      setTimeout(() => {
+        if (pendingForks.get(key) === promise) pendingForks.delete(key);
+      }, 5000);
+      return result;
+    })
+    .catch((error: unknown) => {
+      // 失败立刻清掉，重试会重新发请求
+      if (pendingForks.get(key) === promise) pendingForks.delete(key);
+      throw error;
+    });
+  pendingForks.set(key, promise);
+  return promise;
 }
 
 /* ------------------------------------------------------------------ */

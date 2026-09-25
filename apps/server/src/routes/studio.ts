@@ -18,6 +18,7 @@ import {
   type PreparedAssist,
   type StudioAssistEvents,
 } from '../services/studio-assist.js';
+import { StudioForkNotFoundError, forkToStudio } from '../services/studio-fork.js';
 import {
   StudioEntityNotFoundError,
   StudioTestChatInputError,
@@ -33,6 +34,7 @@ export type {
   StudioPatchOp,
 } from '../services/studio-assist.js';
 export type { StudioKind };
+export type { StudioForkResult } from '../services/studio-fork.js';
 
 const KINDS: readonly StudioKind[] = ['character', 'preset', 'lorebook'];
 
@@ -47,12 +49,27 @@ const PING_INTERVAL_MS = 15_000;
  *   测试会话的生成 / 检查照常走 `/api/chats/:id/generate`、`POST /api/chats/:id/inspect`，body 带 `draft`。
  * - `POST /test-chat/:kind/:id`，body `{ characterId?: string | null }`：新建一条测试会话替换当前那条
  *   （换角色 / 重开；档案、预设、覆盖、聊天书等沿用旧会话，见 `recreateTestChat`），201 返回 ChatDetail。
+ * - `POST /fork/:kind/:id`：把库里的原件复制一份到工作台（见 `services/studio-fork.ts`）。
+ *   已经是工作台的 → 200 `{ id: 原 id, forked: false }`；原件 → 201 `{ id: 新 id, forked: true }`；不存在 404。
  * - `POST /assist`（SSE）：AI 协作者。请求体与事件见 `services/studio-assist.ts`
  *   （`StudioAssistRequest` / `StudioAssistEvents`）。请求校验、target 不存在、没有连接
  *   在开流之前以 JSON 400 / 404 返回；`presetId` 指向不存在的预设 → 400 invalid。
  */
 export function createStudioRoutes(db: Db, dataDir: string, providers: ProviderService) {
   return new Hono()
+    .post('/fork/:kind/:id', (c) => {
+      const kind = c.req.param('kind') as StudioKind;
+      if (!KINDS.includes(kind)) {
+        return c.json({ error: 'invalid', message: `未知类型：${kind}` }, 400);
+      }
+      try {
+        const result = forkToStudio(db, kind, c.req.param('id'));
+        return c.json(result, result.forked ? 201 : 200);
+      } catch (e) {
+        if (e instanceof StudioForkNotFoundError) return c.json({ error: 'not_found' }, 404);
+        throw e;
+      }
+    })
     .get('/test-chat/:kind/:id', (c) => {
       const kind = c.req.param('kind') as StudioKind;
       if (!KINDS.includes(kind)) {

@@ -18,7 +18,14 @@ import {
   type CharacterSummary,
 } from '../../lib/api';
 import { studioPath } from '../../lib/api-studio';
-import { Avatar, EmptyState, LibraryHeader, QueryStatus, errorMessage } from './shared';
+import {
+  Avatar,
+  EmptyState,
+  LibraryHeader,
+  QueryStatus,
+  errorMessage,
+  studioBadgeKey,
+} from './shared';
 
 const CHARACTER_ACCEPT = '.png,.charx,.json';
 
@@ -120,6 +127,7 @@ export function CharactersPage() {
 }
 
 function CharacterCard({ character, onOpen }: { character: CharacterSummary; onOpen: () => void }) {
+  const { t } = useTranslation();
   const extraTags = character.tags.length - MAX_CARD_TAGS;
   return (
     <button
@@ -138,6 +146,11 @@ function CharacterCard({ character, onOpen }: { character: CharacterSummary; onO
       <div className="min-w-0 flex-1 sm:p-3">
         <div className="flex items-center gap-2">
           <span className="min-w-0 flex-1 truncate font-medium">{character.name}</span>
+          {character.studio && (
+            <Badge variant="muted" data-part="studio-copy-badge">
+              {t(studioBadgeKey(character.studio))}
+            </Badge>
+          )}
           <Badge variant="outline" className="uppercase">
             {character.spec}
           </Badge>
@@ -175,6 +188,8 @@ function CharacterDetailModal({
   const spec = detail.data?.spec ?? summary?.spec;
   const avatarAssetId = detail.data?.avatarAssetId ?? summary?.avatarAssetId ?? null;
   const tags = detail.data?.tags ?? summary?.tags ?? [];
+  // 工作台的卡（副本 / 工作台里新建的）直接打开；原件打开时先复制一份
+  const studio = detail.data?.studio ?? summary?.studio ?? null;
 
   const data = resolveCardData(detail.data?.data);
   const fields = DETAIL_FIELDS.map((field) => {
@@ -197,6 +212,7 @@ function CharacterDetailModal({
               textClassName="text-base"
             />
             <span className="min-w-0 truncate">{name}</span>
+            {studio && <Badge variant="muted">{t(studioBadgeKey(studio))}</Badge>}
             {spec && (
               <Badge variant="outline" className="uppercase">
                 {spec}
@@ -221,7 +237,7 @@ function CharacterDetailModal({
               to={studioPath('character', id)}
               className={buttonVariants({ variant: 'outline', size: 'sm' })}
             >
-              {t('studio.openInStudio')}
+              {studio ? t('studio.openCopyInStudio') : t('studio.openInStudio')}
             </Link>
             {EXPORT_FORMATS.map((format) => (
               <a

@@ -2,6 +2,7 @@ import { parsePreset } from '@newtavern/compat';
 import { eq } from 'drizzle-orm';
 
 import { schema, type Db } from '../db/client.js';
+import type { StudioMarker } from '../db/schema.js';
 import { presetColumns } from './presets.js';
 import { recordCurrentVersion, type VersionAuthor } from './versions.js';
 
@@ -70,6 +71,34 @@ type PresetRow = typeof schema.presets.$inferSelect;
 /** 预设 JSON 自带 name 时与列保持一致；ST 导出的预设大多没有这个字段，不凭空添加 */
 export function syncDataName(data: Record<string, unknown>, name: string): void {
   if ('name' in data) data.name = name;
+}
+
+/**
+ * 复制一份预设行（`POST /api/presets/:id/duplicate` 与工作台复制共用）：
+ * data / sampling / layoutPolicy / format / apiFamily 深拷贝，名称「<原名> 副本」。
+ * 只复制这一行；预设自带的脚本 / 正则 / 变量由调用方决定要不要跟着复制。不写版本。
+ */
+export function insertPresetCopy(
+  db: Db,
+  source: PresetRow,
+  options: { studio?: StudioMarker | null } = {},
+): PresetRow {
+  const name = `${source.name} 副本`;
+  const data = structuredClone(source.data) as Record<string, unknown>;
+  syncDataName(data, name);
+  return db
+    .insert(schema.presets)
+    .values({
+      name,
+      format: source.format,
+      apiFamily: source.apiFamily,
+      data,
+      sampling: source.sampling ? structuredClone(source.sampling) : source.sampling,
+      layoutPolicy: source.layoutPolicy ? structuredClone(source.layoutPolicy) : null,
+      studio: options.studio ?? null,
+    })
+    .returning()
+    .get();
 }
 
 export function updatePreset(

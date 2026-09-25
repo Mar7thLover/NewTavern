@@ -21,6 +21,11 @@ const DETAIL_URL: Record<StudioKind, string> = {
   lorebook: '/api/lorebooks',
 };
 
+/** 工作台实体详情（与库页面的详情查询共用缓存键） */
+export function fetchStudioDetail(kind: StudioKind, id: string): Promise<StudioDetail> {
+  return fetchJson<StudioDetail>(`${DETAIL_URL[kind]}/${encodeURIComponent(id)}`);
+}
+
 export function detailQueryKey(kind: StudioKind, id: string) {
   return kind === 'character'
     ? queryKeys.character(id)
@@ -69,7 +74,7 @@ export function useStudioDraft(kind: StudioKind, id: string): StudioDraftApi {
   const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: detailQueryKey(kind, id),
-    queryFn: () => fetchJson<StudioDetail>(`${DETAIL_URL[kind]}/${encodeURIComponent(id)}`),
+    queryFn: () => fetchStudioDetail(kind, id),
     refetchOnWindowFocus: false,
   });
   const [state, dispatch] = useReducer(studioDraftReducer, null);

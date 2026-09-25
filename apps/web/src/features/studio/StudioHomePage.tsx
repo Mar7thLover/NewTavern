@@ -11,6 +11,7 @@ import {
   useCreatePreset,
   useLorebooks,
   usePresets,
+  type StudioMarker,
 } from '../../lib/api';
 import { studioPath, useCreateCharacter, type StudioKind } from '../../lib/api-studio';
 import { EntityCard } from '../library/EntityCard';
@@ -19,8 +20,11 @@ import { AutoTextarea } from './character/fields';
 import type { StudioLocationState } from './StudioWorkbenchPage';
 
 /**
- * 工作台入口（M6 §4.1）。版式照对话页开始界面：已有的角色卡 / 预设 / 世界书都以卡面铺成网格，
- * 点哪张就在工作台里打开哪张（按最近修改排序，刚改过的在最前）；上方是新建与「一句话生成角色」。
+ * 工作台入口（M6 §4.1）。版式照对话页开始界面：角色卡 / 预设 / 世界书以卡面铺成网格，
+ * 上方是新建与「一句话生成角色」，筛选页签与搜索作用于下面两组：
+ * - 「工作台里的」：`studio` 非 null（从库里复制来的副本、工作台里新建的），点击直接打开；
+ * - 「从库里复制」：库里的原件，点击 = 复制一份到工作台再打开（复制在工作台页里做，原件不动）。
+ * 两组都按最近修改排序，刚改过的在最前。
  */
 
 interface StudioItem {
@@ -29,6 +33,10 @@ interface StudioItem {
   name: string;
   avatarAssetId: string | null;
   updatedAt: string;
+  /** 工作台的（副本 / 工作台里新建的） */
+  own: boolean;
+  /** 从库里复制来的副本 */
+  copy: boolean;
 }
 
 type Filter = 'all' | StudioKind;
@@ -52,25 +60,31 @@ export function StudioHomePage() {
   const open = (kind: StudioKind, id: string, state?: StudioLocationState) =>
     void navigate(studioPath(kind, id), state ? { state } : undefined);
 
+  // 工作台里新建的都带 studio: true：直接就是工作台的，打开时不会再复制
   const newCharacter = () =>
     createCharacter.mutate(
-      { name: t('studio.home.newCharacterName') },
+      { name: t('studio.home.newCharacterName'), studio: true },
       { onSuccess: (row) => open('character', row.id) },
     );
-  const newPreset = () => createPreset.mutate({}, { onSuccess: (row) => open('preset', row.id) });
+  const newPreset = () =>
+    createPreset.mutate({ studio: true }, { onSuccess: (row) => open('preset', row.id) });
   const newLorebook = () =>
-    createLorebook.mutate({}, { onSuccess: (row) => open('lorebook', row.id) });
+    createLorebook.mutate({ studio: true }, { onSuccess: (row) => open('lorebook', row.id) });
 
   const generate = () => {
     const text = idea.trim();
     if (!text || busy) return;
     createCharacter.mutate(
-      { name: t('studio.home.newCharacterName') },
+      { name: t('studio.home.newCharacterName'), studio: true },
       { onSuccess: (row) => open('character', row.id, { generate: text }) },
     );
   };
 
   /* 三类混排，按最近修改排序：刚改过的就在最前（代替原来单列的「最近编辑」） */
+  const marks = (studio: StudioMarker | null) => ({
+    own: studio != null,
+    copy: studio != null && studio.sourceId !== null,
+  });
   const items: StudioItem[] = [
     ...(characters.data ?? []).map((item): StudioItem => ({
       kind: 'character',
@@ -78,6 +92,7 @@ export function StudioHomePage() {
       name: item.name,
       avatarAssetId: item.avatarAssetId,
       updatedAt: item.updatedAt,
+      ...marks(item.studio),
     })),
     ...(presets.data ?? []).map((item): StudioItem => ({
       kind: 'preset',
@@ -85,6 +100,7 @@ export function StudioHomePage() {
       name: item.name,
       avatarAssetId: null,
       updatedAt: item.updatedAt,
+      ...marks(item.studio),
     })),
     ...(lorebooks.data ?? []).map((item): StudioItem => ({
       kind: 'lorebook',
@@ -92,6 +108,7 @@ export function StudioHomePage() {
       name: item.name,
       avatarAssetId: null,
       updatedAt: item.updatedAt,
+      ...marks(item.studio),
     })),
   ].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   const counts = { character: 0, preset: 0, lorebook: 0 };
@@ -103,24 +120,38 @@ export function StudioHomePage() {
       (filter === 'all' || item.kind === filter) &&
       (needle === '' || item.name.toLowerCase().includes(needle)),
   );
+  const ownList = list.filter((item) => item.own);
+  const libraryList = list.filter((item) => !item.own);
 
   const ready =
     characters.data !== undefined && presets.data !== undefined && lorebooks.data !== undefined;
   const listError = characters.error ?? presets.error ?? lorebooks.error;
 
-  const kicker = (kind: StudioKind) =>
-    kind === 'character' ? undefined : t(`studio.kinds.${kind}`);
+  /** 副本标「副本」（角色卡原本无 kicker）；预设 / 世界书是「预设 · 副本」 */
+  const kicker = (item: StudioItem): string | undefined => {
+    if (item.kind === 'character') return item.copy ? t('studio.home.copyKicker') : undefined;
+    const kind = t(`studio.kinds.${item.kind}`);
+    return item.copy ? t('studio.home.kindCopyKicker', { kind }) : kind;
+  };
 
-  const card = (item: StudioItem) => (
-    <li key={`${item.kind}:${item.id}`}>
-      <EntityCard
-        name={item.name}
-        kind={item.kind}
-        avatarAssetId={item.avatarAssetId}
-        {...(item.kind === 'character' ? {} : { kicker: kicker(item.kind) })}
-        onClick={() => open(item.kind, item.id)}
-      />
-    </li>
+  const card = (item: StudioItem) => {
+    const text = kicker(item);
+    return (
+      <li key={`${item.kind}:${item.id}`}>
+        <EntityCard
+          name={item.name}
+          kind={item.kind}
+          avatarAssetId={item.avatarAssetId}
+          {...(text ? { kicker: text } : {})}
+          // 原件：工作台页先复制一份再打开（见 StudioWorkbenchPage 的 ForkGate）
+          onClick={() => open(item.kind, item.id)}
+        />
+      </li>
+    );
+  };
+
+  const grid = (group: StudioItem[]) => (
+    <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">{group.map(card)}</ul>
   );
 
   return (
@@ -223,9 +254,27 @@ export function StudioHomePage() {
           ) : list.length === 0 ? (
             <p className="py-8 text-center text-sm text-ink-3">{t('studio.home.noMatch')}</p>
           ) : (
-            <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-              {list.map(card)}
-            </ul>
+            <div className="space-y-8">
+              {ownList.length > 0 && (
+                <section aria-labelledby="studio-own-title" data-part="studio-own">
+                  <h2 id="studio-own-title" className="mb-3 text-sm font-medium text-ink">
+                    {t('studio.home.ownTitle')}
+                  </h2>
+                  {grid(ownList)}
+                </section>
+              )}
+              {libraryList.length > 0 && (
+                <section aria-labelledby="studio-library-title" data-part="studio-library">
+                  <div className="mb-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                    <h2 id="studio-library-title" className="text-sm font-medium text-ink">
+                      {t('studio.home.libraryTitle')}
+                    </h2>
+                    <p className="text-[11px] text-ink-3">{t('studio.home.libraryHint')}</p>
+                  </div>
+                  {grid(libraryList)}
+                </section>
+              )}
+            </div>
           ))}
       </section>
     </div>

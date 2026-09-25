@@ -14,6 +14,7 @@ import {
 } from '../services/lorebook-edit.js';
 import { countOpenersByBook } from '../services/openers.js';
 import { DraftInputError } from '../services/studio-draft.js';
+import { studioMarkerFromBody } from '../services/studio-fork.js';
 import {
   simulateLorebook,
   type SimulateActivated,
@@ -75,7 +76,7 @@ export function createLorebooksRoutes(db: Db, importer: Importer) {
         }));
         return c.json(result);
       })
-      /** 新建空世界书：`{ name? }`，缺省「新世界书」 */
+      /** 新建空世界书：`{ name?, studio? }`，缺省「新世界书」；studio: true = 工作台里新建的 */
       .post('/', async (c) => {
         // 请求体可省略（空体 / 非对象都按 {} 处理）
         const body = (await readJsonObject(c)) ?? {};
@@ -83,7 +84,7 @@ export function createLorebooksRoutes(db: Db, importer: Importer) {
           return c.json({ error: 'invalid', message: 'name 非法' }, 400);
         }
         const name = (typeof body.name === 'string' && body.name.trim()) || NEW_LOREBOOK_NAME;
-        const created = createEmptyLorebook(db, name);
+        const created = createEmptyLorebook(db, name, studioMarkerFromBody(body.studio));
         recordCurrentVersion(db, 'lorebook', created.id);
         return c.json(created, 201);
       })

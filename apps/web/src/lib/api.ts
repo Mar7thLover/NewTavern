@@ -80,12 +80,22 @@ export interface HealthResponse {
 
 export type CharacterSpec = 'v2' | 'v3';
 
+/**
+ * 创作工作台标记（角色卡 / 预设 / 世界书的 `studio` 列）：null = 库里的原件；
+ * 非 null = 工作台自己的（`sourceId` 是复制来源，工作台里新建的为 null）。
+ * 从工作台打开原件时先复制一份（`POST /api/studio/fork`），编辑的是副本。
+ */
+export interface StudioMarker {
+  sourceId: string | null;
+}
+
 export interface CharacterSummary {
   id: string;
   name: string;
   spec: CharacterSpec;
   tags: string[];
   avatarAssetId: string | null;
+  studio: StudioMarker | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -122,6 +132,7 @@ export interface PresetSummary {
   name: string;
   format: PresetFormat;
   apiFamily: string | null;
+  studio: StudioMarker | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -147,6 +158,7 @@ export interface LorebookSummary {
   settings: Record<string, unknown> | null;
   entryCount: number;
   openerCounts: LorebookOpenerCounts;
+  studio: StudioMarker | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -736,7 +748,8 @@ export function useUpdatePreset(id: string) {
 export function useCreatePreset() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: { name?: string } = {}) =>
+    // studio: true = 工作台里新建的（库页面的新建不带）
+    mutationFn: (input: { name?: string; studio?: boolean } = {}) =>
       mutate<PresetDetail>('/api/presets', 'POST', { ...input, from: 'default' }),
     onSuccess: (row) => {
       queryClient.setQueryData(queryKeys.preset(row.id), row);
@@ -839,7 +852,8 @@ export function useDeleteLorebook() {
 export function useCreateLorebook() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: { name?: string } = {}) =>
+    // studio: true = 工作台里新建的（库页面的新建不带）
+    mutationFn: (input: { name?: string; studio?: boolean } = {}) =>
       mutate<LorebookDetail>('/api/lorebooks', 'POST', input),
     onSuccess: (row) => {
       queryClient.setQueryData(queryKeys.lorebook(row.id), row);

@@ -413,7 +413,9 @@
       "lorebook": "绑定世界书",
       "lorebookNone": "不绑定",
       "lorebookHint": "用这个档案时一起生效。"
-    }
+    },
+    "studioCopy": "工作台副本",
+    "studioOwn": "工作台新建"
   },
   "chat": {
     "you": "你",
@@ -466,7 +468,9 @@
       "lorebookKicker": "世界书 · {{count}} 段开场",
       "emptyTitle": "还没有可以开场的卡",
       "emptyHint": "到角色库导入角色卡，或到世界书库导入一本世界书。",
-      "lorebookKickerPlain": "世界书"
+      "lorebookKickerPlain": "世界书",
+      "copyKicker": "副本",
+      "copySuffix": "{{label}} · 副本"
     },
     "composer": {
       "placeholder": "说点什么…",
@@ -1211,7 +1215,8 @@
   "studio": {
     "back": "工作台",
     "notFound": "找不到要编辑的对象。",
-    "openInStudio": "在工作台打开",
+    "openInStudio": "复制到工作台编辑",
+    "openCopyInStudio": "在工作台打开",
     "kinds": {
       "character": "角色卡",
       "preset": "预设",
@@ -1265,7 +1270,12 @@
       "filterLabel": "按类型筛选",
       "noMatch": "没有匹配的条目。",
       "emptyTitle": "还没有可编辑的内容",
-      "emptyHint": "从右上角新建一张角色卡、一份预设或一本世界书，或者用一句话让 AI 起草一张卡。"
+      "emptyHint": "从右上角新建一张角色卡、一份预设或一本世界书，或者用一句话让 AI 起草一张卡。",
+      "ownTitle": "工作台里的",
+      "libraryTitle": "从库里复制",
+      "libraryHint": "点一张会复制一份到工作台，原件不动",
+      "copyKicker": "副本",
+      "kindCopyKicker": "{{kind}} · 副本"
     },
     "character": {
       "sections": {
@@ -1487,7 +1497,12 @@
       "tagsPlaceholder": "逗号分隔",
       "deleteTitle": "删除片段？",
       "deleteMessage": "「{{name}}」会从提示库里删除。"
-    }
+    },
+    "forking": "正在复制一份到工作台…",
+    "forkingHint": "编辑的是副本，库里的原件不会被修改。",
+    "forkFailed": "复制到工作台失败：{{message}}",
+    "copyOf": "副本 · 原件《{{name}}》不受影响",
+    "copyBadge": "副本"
   },
   "writing": {
     "title": "写作",

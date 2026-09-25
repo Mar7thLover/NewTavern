@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { assetUrl } from '../../lib/api';
+import { assetUrl, type StudioMarker } from '../../lib/api';
 import { cn } from '../../lib/utils';
 import { useSignature, type AvatarRole, type EmptyIllustrationKind } from '../../themes/signature';
 
@@ -13,6 +13,11 @@ export function formatDate(value: string): string {
 export function errorMessage(error: unknown): string | null {
   if (!error) return null;
   return error instanceof Error ? error.message : String(error);
+}
+
+/** 库列表里工作台实体的小标：从库里复制来的是「工作台副本」，工作台里新建的是「工作台新建」 */
+export function studioBadgeKey(studio: StudioMarker): 'library.studioCopy' | 'library.studioOwn' {
+  return studio.sourceId !== null ? 'library.studioCopy' : 'library.studioOwn';
 }
 
 /** 库页面标题栏：标题 + 计数 + 右侧操作（窄屏换行） */

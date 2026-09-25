@@ -194,19 +194,29 @@ function StartCard({
 }) {
   const { t } = useTranslation();
   const openerCount = item.kind === 'lorebook' ? lorebookOpenerTotal(item.book) : 0;
+  // 从库里复制到工作台的副本标「副本」：同名的原件与副本要能分辨（工作台里新建的没有同名原件，不标）
+  const studio = item.kind === 'character' ? item.character.studio : item.book.studio;
+  const isCopy = studio != null && studio.sourceId !== null;
+  const bookLabel =
+    item.kind === 'lorebook'
+      ? openerCount > 0
+        ? t('chat.start.lorebookKicker', { count: openerCount })
+        : t('chat.start.lorebookKickerPlain')
+      : null;
+  const kicker =
+    bookLabel !== null
+      ? isCopy
+        ? t('chat.start.copySuffix', { label: bookLabel })
+        : bookLabel
+      : isCopy
+        ? t('chat.start.copyKicker')
+        : undefined;
   return (
     <EntityCard
       name={item.name}
       kind={item.kind}
       avatarAssetId={item.kind === 'character' ? item.character.avatarAssetId : null}
-      {...(item.kind === 'lorebook'
-        ? {
-            kicker:
-              openerCount > 0
-                ? t('chat.start.lorebookKicker', { count: openerCount })
-                : t('chat.start.lorebookKickerPlain'),
-          }
-        : {})}
+      {...(kicker ? { kicker } : {})}
       disabled={disabled}
       onClick={onStart}
     />

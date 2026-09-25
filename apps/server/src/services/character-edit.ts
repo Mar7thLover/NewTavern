@@ -2,6 +2,7 @@ import { normalizeCard } from '@newtavern/compat';
 import { eq } from 'drizzle-orm';
 
 import { schema, type Db } from '../db/client.js';
+import type { StudioMarker } from '../db/schema.js';
 import { extractCharacterBook, type CharacterRow } from './character-book.js';
 import { recordCurrentVersion, recordVersion, type VersionAuthor } from './versions.js';
 
@@ -83,8 +84,16 @@ function loadCharacter(db: Db, id: string): CharacterRow | undefined {
   return db.select().from(schema.characters).where(eq(schema.characters.id, id)).get();
 }
 
-/** 新建 V3 空卡：`data` 可选，按 CCv3 默认字段补齐（传入的字段覆盖默认值） */
-export function createCharacter(db: Db, name: unknown, data?: unknown): CharacterRow {
+/**
+ * 新建 V3 空卡：`data` 可选，按 CCv3 默认字段补齐（传入的字段覆盖默认值）。
+ * `studio` 非 null = 工作台里新建的（见 services/studio-fork.ts）；内嵌书抽出来的那本书同样打标记。
+ */
+export function createCharacter(
+  db: Db,
+  name: unknown,
+  data?: unknown,
+  studio: StudioMarker | null = null,
+): CharacterRow {
   if (data !== undefined && !isRecord(data)) throw new CharacterInputError('data 必须是对象');
   const nameText =
     typeof name === 'string' && name.trim()
@@ -105,10 +114,14 @@ export function createCharacter(db: Db, name: unknown, data?: unknown): Characte
       tags: tagsOf(valid),
       // 没有原件：导出本来就从 data 写，editedAt 标上方便「最近编辑」
       editedAt: now,
+      studio,
     })
     .returning()
     .get();
-  extractCharacterBook(db, row);
+  const bookId = extractCharacterBook(db, row);
+  if (bookId && studio) {
+    db.update(schema.lorebooks).set({ studio }).where(eq(schema.lorebooks.id, bookId)).run();
+  }
   recordVersion(db, 'character', row.id, row.data, 'user');
   return loadCharacter(db, row.id) as CharacterRow;
 }
@@ -139,7 +152,16 @@ export function updateCharacter(
     .returning()
     .get();
   // AI 生成整卡时直接写了 character_book：抽进 lorebooks 表（已有 bookId 时是空操作）
-  if (!row.bookId) extractCharacterBook(db, row);
+  if (!row.bookId) {
+    const bookId = extractCharacterBook(db, row);
+    // 工作台的卡抽出来的书也是工作台的
+    if (bookId && row.studio) {
+      db.update(schema.lorebooks)
+        .set({ studio: { sourceId: null } })
+        .where(eq(schema.lorebooks.id, bookId))
+        .run();
+    }
+  }
   recordCurrentVersion(db, 'character', id, author);
   return loadCharacter(db, id) as CharacterRow;
 }

@@ -18,7 +18,14 @@ import {
   type LorebookSummary,
 } from '../../lib/api';
 import { studioPath } from '../../lib/api-studio';
-import { EmptyState, LibraryHeader, QueryStatus, errorMessage, formatDate } from './shared';
+import {
+  EmptyState,
+  LibraryHeader,
+  QueryStatus,
+  errorMessage,
+  formatDate,
+  studioBadgeKey,
+} from './shared';
 
 const LOREBOOK_ACCEPT = '.json';
 
@@ -116,6 +123,11 @@ export function LorebooksPage() {
                     {book.name}
                   </Link>
                   <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-2">
+                    {book.studio && (
+                      <Badge variant="muted" data-part="studio-copy-badge">
+                        {t(studioBadgeKey(book.studio))}
+                      </Badge>
+                    )}
                     {book.scope === 'char' && <Badge>{t('library.lorebooks.scopes.char')}</Badge>}
                     {globalIds.includes(book.id) && (
                       <Badge>{t('library.lorebooks.globalOn')}</Badge>
@@ -146,7 +158,7 @@ export function LorebooksPage() {
                     to={studioPath('lorebook', book.id)}
                     className={buttonVariants({ variant: 'outline', size: 'sm' })}
                   >
-                    {t('studio.openInStudio')}
+                    {book.studio ? t('studio.openCopyInStudio') : t('studio.openInStudio')}
                   </Link>
                   <a
                     href={apiUrls.exportLorebook(book.id)}

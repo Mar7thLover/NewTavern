@@ -12,6 +12,7 @@ import {
 } from '../services/character-edit.js';
 import type { CharacterFormat, Importer } from '../services/importer.js';
 import { ownerRegexRows } from '../services/embedded-regex.js';
+import { studioMarkerFromBody } from '../services/studio-fork.js';
 import { toRegexScript } from '../services/regex-map.js';
 import { deleteVersions, parseAuthor, type VersionAuthor } from '../services/versions.js';
 import { sendDownload } from './download.js';
@@ -28,6 +29,8 @@ export type CharacterDetail = CharacterRow;
 export interface CharacterCreateRequest {
   name: string;
   data?: Record<string, unknown>;
+  /** 工作台里新建的：打上「工作台的」标记（内嵌书被抽成独立世界书时，那本书同样标记） */
+  studio?: boolean;
 }
 
 /** `PUT /api/characters/:id` 请求体：完整 CCv3 data（从 GET 拿到的 data 改出来的） */
@@ -43,6 +46,7 @@ function toSummary(row: CharacterRow) {
     spec: row.spec,
     tags: row.tags,
     avatarAssetId: row.avatarAssetId,
+    studio: row.studio,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -77,11 +81,14 @@ export function createCharactersRoutes(db: Db, importer: Importer, assets: Asset
           .all();
         return c.json(rows.map(toSummary));
       })
-      /** 新建 V3 空卡：`{ name, data? }` → CharacterDetail */
+      /** 新建 V3 空卡：`{ name, data?, studio? }` → CharacterDetail */
       .post('/', async (c) => {
         const body = (await readJsonObject(c)) ?? {};
         try {
-          return c.json(createCharacter(db, body.name, body.data), 201);
+          return c.json(
+            createCharacter(db, body.name, body.data, studioMarkerFromBody(body.studio)),
+            201,
+          );
         } catch (e) {
           if (e instanceof CharacterInputError) {
             return c.json({ error: 'invalid', message: e.message }, 400);
