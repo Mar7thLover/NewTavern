@@ -9,6 +9,7 @@ import {
   backfillEmbeddedRegex,
   backfillPresetScriptRows,
 } from './services/backfill.js';
+import { repairGenerationDefault } from './services/generation-context.js';
 import { seedBuiltinPreset } from './services/presets.js';
 
 const db = createDatabase(dbPath);
@@ -21,6 +22,8 @@ backfillEmbeddedRegex(db);
 backfillPresetScriptRows(db);
 // 内置默认预设写进预设库（幂等；用户删掉后不再种回），并把没选预设的旧会话改绑过去
 seedBuiltinPreset(db);
+// 默认连接指向已删除的连接（老库遗留）：改用最近对话用过的连接与模型
+repairGenerationDefault(db);
 
 const app = createApp({ db, dataDir, webDist });
 

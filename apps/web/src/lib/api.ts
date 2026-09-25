@@ -1011,6 +1011,8 @@ export function useDeleteConnection() {
     mutationFn: (id: string) => mutate(`/api/connections/${enc(id)}`, 'DELETE'),
     onSuccess: (_data, id) => {
       queryClient.removeQueries({ queryKey: queryKeys.connection(id) });
+      // 删的是默认连接时服务端会改用最近用过的 / 清掉默认
+      void queryClient.invalidateQueries({ queryKey: queryKeys.generationDefault });
       return queryClient.invalidateQueries({ queryKey: queryKeys.connections });
     },
   });
@@ -1147,12 +1149,16 @@ export function usePatchChat() {
   return useMutation({
     mutationFn: ({ id, ...patch }: PatchChatInput & { id: string }) =>
       mutate<ChatDetail>(`/api/chats/${enc(id)}`, 'PATCH', patch),
-    onSuccess: (data) => {
+    onSuccess: (data, patch) => {
       // PATCH 返回 ChatDetail；服务端若省略 nodes 则保留缓存里的
       queryClient.setQueryData<ChatDetail>(queryKeys.chat(data.id), (previous) => ({
         ...data,
         nodes: data.nodes ?? previous?.nodes ?? [],
       }));
+      // 选定连接 + 模型会被服务端记成新的全局默认
+      if (patch.overrides) {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.generationDefault });
+      }
       return queryClient.invalidateQueries({ queryKey: queryKeys.chats, exact: true });
     },
   });

@@ -18,6 +18,7 @@ import {
   startPending,
   undoPending,
 } from './editor/pending';
+import { queryKeys } from '../../lib/api';
 import {
   createWritingVersion,
   streamWritingAi,
@@ -179,11 +180,13 @@ export function useWritingAi({
       } finally {
         if (abortRef.current === controller) abortRef.current = null;
         if (foreground) setReasoning(false);
+        // 这次用的连接与模型已被服务端记成全局默认
+        void queryClient.invalidateQueries({ queryKey: queryKeys.generationDefault });
       }
       if (failure && foreground) setError(failure);
       return { error: failure, ...(summary === undefined ? {} : { summary }) };
     },
-    [],
+    [queryClient],
   );
 
   const aiBody = useCallback(

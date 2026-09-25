@@ -11,6 +11,7 @@ import { desc, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 
 import { schema, type Db } from '../db/client.js';
+import { repairGenerationDefault } from '../services/generation-context.js';
 import { resolveImageConnection } from '../services/image-gen.js';
 import {
   DEFAULT_BASE_URLS,
@@ -217,6 +218,8 @@ export function createConnectionsRoutes(db: Db, secrets: Secrets, providers: Pro
         .returning()
         .get();
       if (!row) return c.json({ error: 'not_found' }, 404);
+      // 默认连接被删了：改用最近对话用过的，找不到就清掉（否则会一直显示一个不存在的模型）
+      repairGenerationDefault(db);
       return c.body(null, 204);
     })
     .get('/:id/models', async (c) => {

@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { desc, eq } from 'drizzle-orm';
 
 import { schema, type Db } from '../db/client.js';
 import {
@@ -51,21 +51,85 @@ export class GenerationContextError extends Error {
   }
 }
 
-/** 设置 KV `generation.default` */
-export function readGenerationDefault(db: Db): {
-  connectionId: string | null;
-  model: string | null;
-} {
+const GENERATION_DEFAULT_KEY = 'generation.default';
+
+type GenerationDefault = { connectionId: string | null; model: string | null };
+
+function connectionExists(db: Db, id: string): boolean {
+  return (
+    db
+      .select({ id: schema.connections.id })
+      .from(schema.connections)
+      .where(eq(schema.connections.id, id))
+      .get() !== undefined
+  );
+}
+
+function readStoredDefault(db: Db): GenerationDefault | null {
   const row = db
     .select()
     .from(schema.settings)
-    .where(eq(schema.settings.key, 'generation.default'))
+    .where(eq(schema.settings.key, GENERATION_DEFAULT_KEY))
     .get();
-  const value = (row?.value ?? null) as { connectionId?: unknown; model?: unknown } | null;
+  if (!row) return null;
+  const value = (row.value ?? null) as { connectionId?: unknown; model?: unknown } | null;
   return {
     connectionId: typeof value?.connectionId === 'string' ? value.connectionId : null,
     model: typeof value?.model === 'string' ? value.model : null,
   };
+}
+
+/**
+ * 设置 KV `generation.default`（没有单独选过连接 / 模型的地方都用它）。
+ * 指向已删除的连接时视为没有默认（连同模型一起作废），不把请求发给不存在的连接。
+ */
+export function readGenerationDefault(db: Db): GenerationDefault {
+  const stored = readStoredDefault(db);
+  if (!stored?.connectionId || !connectionExists(db, stored.connectionId)) {
+    return { connectionId: null, model: null };
+  }
+  return stored;
+}
+
+/**
+ * 记住「上次使用的」连接与模型：成功发起一次生成（对话 / 测试对话 / AI 协作 / 写作）或在会话里
+ * 选定连接 + 模型时调用，之后新建的对话、工作台、写作都默认用它。两者缺一不写。
+ */
+export function rememberGenerationDefault(
+  db: Db,
+  connectionId: string | null | undefined,
+  model: string | null | undefined,
+): void {
+  if (!connectionId || !model) return;
+  const stored = readStoredDefault(db);
+  if (stored?.connectionId === connectionId && stored.model === model) return;
+  const value = { connectionId, model };
+  db.insert(schema.settings)
+    .values({ key: GENERATION_DEFAULT_KEY, value, updatedAt: new Date() })
+    .onConflictDoUpdate({ target: schema.settings.key, set: { value, updatedAt: new Date() } })
+    .run();
+}
+
+/**
+ * 默认指向的连接不存在了（被删除）：改用最近一次对话实际用过、且连接仍在的连接 + 模型；
+ * 找不到就删掉这条设置。启动时与删除连接后调用（幂等）。
+ */
+export function repairGenerationDefault(db: Db): void {
+  const stored = readStoredDefault(db);
+  if (!stored || (stored.connectionId && connectionExists(db, stored.connectionId))) return;
+  const recent = db
+    .select({ overrides: schema.chats.overrides })
+    .from(schema.chats)
+    .orderBy(desc(schema.chats.updatedAt))
+    .all();
+  for (const chat of recent) {
+    const overrides = (chat.overrides as ChatOverrides | null) ?? {};
+    if (overrides.connectionId && overrides.model && connectionExists(db, overrides.connectionId)) {
+      rememberGenerationDefault(db, overrides.connectionId, overrides.model);
+      return;
+    }
+  }
+  db.delete(schema.settings).where(eq(schema.settings.key, GENERATION_DEFAULT_KEY)).run();
 }
 
 export async function resolveGenerationContext(

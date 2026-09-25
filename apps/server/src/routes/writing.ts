@@ -12,6 +12,7 @@ import {
   type WritingAiEvents,
   type WritingInspectResponse,
 } from '../services/writing-ai.js';
+import { rememberGenerationDefault } from '../services/generation-context.js';
 import { streamLlm } from '../services/llm.js';
 import {
   createDocument,
@@ -341,6 +342,7 @@ export function createWritingRoutes(db: Db, dataDir: string) {
           if (!target) {
             return c.json({ error: 'no_connection', message: '未指定连接或模型' }, 400);
           }
+          rememberGenerationDefault(db, target.connectionId, target.model);
 
           // 动作前先存一版（与上一版相同则不写）
           const beforeVersion = recordDocumentVersion(db, doc, 'user', `before:${req.action}`);

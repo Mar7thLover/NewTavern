@@ -1,7 +1,8 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { useDefaultPresetId, useGenerationDefault, usePresets } from '../../../lib/api';
+import { queryKeys, useDefaultPresetId, useGenerationDefault, usePresets } from '../../../lib/api';
 import type { StudioKind } from '../../../lib/api-studio';
 import type { StudioPatchOp } from '../types';
 import { AssistHttpError, streamAssist, type AssistMode } from './api';
@@ -156,6 +157,7 @@ export function useAssist({
   presetId,
 }: UseAssistOptions) {
   const { t, i18n } = useTranslation();
+  const queryClient = useQueryClient();
   const [turns, setTurns] = useState<AssistTurn[]>([]);
   const turnsRef = useRef(turns);
   useEffect(() => {
@@ -221,6 +223,8 @@ export function useAssist({
         }
       } finally {
         if (controllerRef.current === controller) controllerRef.current = null;
+        // 这次用的连接与模型已被服务端记成全局默认
+        void queryClient.invalidateQueries({ queryKey: queryKeys.generationDefault });
       }
     },
     [getDraft, t, i18n.language, connectionId, model, presetId, kind, id, testChatId, updateTurn],

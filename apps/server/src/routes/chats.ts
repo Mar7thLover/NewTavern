@@ -41,6 +41,7 @@ import {
 } from '../services/chat-tree.js';
 import {
   GenerationContextError,
+  rememberGenerationDefault,
   resolveGenerationContext,
   type GenerationContext,
 } from '../services/generation-context.js';
@@ -243,6 +244,8 @@ export function createChatsRoutes(db: Db, providers: ProviderService, assets: As
             }
           }
           patch.overrides = overrides;
+          // 在会话里选定了连接 + 模型（还没生成）也算「上次使用」
+          rememberGenerationDefault(db, overrides?.connectionId, overrides?.model);
         }
         if (body.metadata !== undefined) {
           if (body.metadata !== null && typeof body.metadata !== 'object') {
@@ -508,6 +511,8 @@ export function createChatsRoutes(db: Db, providers: ProviderService, assets: As
         }
         const { overrides, connectionId, model, resolved, parentId, layoutMode } = context;
         const provider = resolved.conn.provider;
+        // 「上次使用的」连接与模型成为新的全局默认（新对话 / 工作台 / 写作都跟着它）
+        rememberGenerationDefault(db, connectionId, model);
 
         // 附件在开流之前校验：不存在的 assetId 直接回 400，不产生半截节点
         let userMedia: Part[] = [];

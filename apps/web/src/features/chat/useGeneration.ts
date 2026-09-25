@@ -331,5 +331,7 @@ async function runGeneration(
     }
     useChatStore.getState().endRun(chatId, createdNodeIds);
     void queryClient.invalidateQueries({ queryKey: queryKeys.chats, exact: true });
+    // 这次用的连接与模型已被服务端记成全局默认
+    void queryClient.invalidateQueries({ queryKey: queryKeys.generationDefault });
   }
 }

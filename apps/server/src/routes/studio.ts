@@ -3,7 +3,10 @@ import { streamSSE } from 'hono/streaming';
 
 import type { Db } from '../db/client.js';
 import { toChatDetail } from '../services/chat-tree.js';
-import { readGenerationDefault } from '../services/generation-context.js';
+import {
+  readGenerationDefault,
+  rememberGenerationDefault,
+} from '../services/generation-context.js';
 import {
   ProviderServiceError,
   type ProviderService,
@@ -160,6 +163,8 @@ export function createStudioRoutes(db: Db, dataDir: string, providers: ProviderS
         }
         throw e;
       }
+
+      rememberGenerationDefault(db, connectionId, model);
 
       c.header('X-Accel-Buffering', 'no');
       return streamSSE(c, async (stream) => {
