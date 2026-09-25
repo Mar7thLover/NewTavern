@@ -20,6 +20,8 @@ export interface AssistRequest {
   mode: AssistMode;
   testChatId?: string;
   lang: 'zh-CN' | 'en';
+  /** 协作请求套用的预设（破限 / 文风 / 采样）；缺省 = 不套 */
+  presetId?: string;
 }
 
 export interface AssistUsage {

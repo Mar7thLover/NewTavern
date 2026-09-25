@@ -11,11 +11,21 @@ export interface LorebookPickerProps {
   selected: readonly string[];
   onChange: (bookIds: string[]) => void;
   disabled?: boolean;
+  /** 选中后不能取消的书（工作台 lorebook 测试会话里正在编辑的那本），附 `lockedHint` 说明 */
+  lockedIds?: readonly string[];
+  lockedHint?: string;
   className?: string;
 }
 
 /** 世界书多选：全局书（设置页）与聊天书（会话面板）共用 */
-export function LorebookPicker({ selected, onChange, disabled, className }: LorebookPickerProps) {
+export function LorebookPicker({
+  selected,
+  onChange,
+  disabled,
+  lockedIds,
+  lockedHint,
+  className,
+}: LorebookPickerProps) {
   const { t } = useTranslation();
   const books = useLorebooks();
   if (books.isPending || books.error) {
@@ -53,19 +63,22 @@ export function LorebookPicker({ selected, onChange, disabled, className }: Lore
     >
       {list.map((book) => {
         const checked = selected.includes(book.id);
+        const locked = checked && (lockedIds?.includes(book.id) ?? false);
         return (
           <li key={book.id}>
             <label
+              title={locked ? lockedHint : undefined}
               className={cn(
                 'flex cursor-pointer items-center gap-2.5 px-2.5 py-2 text-sm transition-colors hover:text-accent',
                 disabled && 'pointer-events-none opacity-50',
+                locked && 'cursor-default hover:text-ink',
               )}
             >
               <input
                 type="checkbox"
                 className="size-4 shrink-0 accent-primary"
                 checked={checked}
-                disabled={disabled}
+                disabled={disabled || locked}
                 onChange={() => toggle(book.id)}
               />
               <span className="min-w-0 flex-1 truncate">{book.name}</span>

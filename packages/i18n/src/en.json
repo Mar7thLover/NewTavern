@@ -1237,6 +1237,7 @@
     "leave": "Discard and leave",
     "tabs": {
       "label": "Studio side panel",
+      "session": "Session",
       "test": "Test",
       "assist": "AI",
       "inspector": "Inspector",
@@ -1380,6 +1381,10 @@
     },
     "assist": {
       "connection": "Connection",
+      "preset": "Preset",
+      "presetNone": "None (no preset)",
+      "presetDefault": "{{name}} (default)",
+      "presetHint": "Assist requests are assembled with this preset too: its jailbreak, style and samplers apply; a trailing prefill is dropped.",
       "intro": {
         "character": "Say how you'd like to change this card — fill in the definition, shift the tone, add greetings. Every change is listed so you can pick what to keep.",
         "preset": "Say how you'd like to tune this preset — which prompt to rewrite, what rule to add, how to move the samplers.",
@@ -1437,7 +1442,13 @@
     "test": {
       "title": "Test chat",
       "draftActive": "Using draft",
-      "reset": "Restart the test chat"
+      "reset": "Restart the test chat",
+      "character": "Test character",
+      "noCharacter": "No character",
+      "characterHint": "Switching restarts the test chat (its messages are cleared); persona, preset, connection and chat lorebooks are kept.",
+      "characterBusy": "Generation in progress — switch when it finishes.",
+      "recreateFailed": "Could not restart the test chat: {{message}}",
+      "lockedBook": "The lorebook being edited stays attached so the draft is used in assembly"
     },
     "inspector": {
       "draft": "Draft",

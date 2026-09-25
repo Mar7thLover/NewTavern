@@ -7,7 +7,7 @@ import { Button } from '../../../components/ui/button';
 import { FieldLabel, Input, Select } from '../../../components/ui/field';
 import { IconButton } from '../../../components/ui/icon-button';
 import { Segmented } from '../../../components/ui/segmented';
-import { useConnectionModels, useConnections } from '../../../lib/api';
+import { useConnectionModels, useConnections, usePresets } from '../../../lib/api';
 import type { StudioKind } from '../../../lib/api-studio';
 import { cn } from '../../../lib/utils';
 import { Markdown } from '../../chat/Markdown';
@@ -19,7 +19,7 @@ import { pendingIndexes, type AssistItem, type AssistTurn } from './turns';
 import type { AssistController, useAssistConnection } from './useAssist';
 
 /*
- * AI 协作面板（M6 §4.3）：连接与模型、对话流（文字流式、工具调用折叠条）、本轮改动卡（逐条 / 全部接受）。
+ * AI 协作面板（M6 §4.3）：连接、模型与预设、对话流（文字流式、工具调用折叠条）、本轮改动卡（逐条 / 全部接受）。
  * 接受 = 合进草稿（不自动保存）；保存时草稿含 AI 改动则记作 AI 版本。
  */
 
@@ -182,6 +182,7 @@ function ConnectionBar({ connection }: { connection: ReturnType<typeof useAssist
   const { t } = useTranslation();
   const id = useId();
   const connections = useConnections();
+  const presets = usePresets();
   const chatConnections = (connections.data ?? []).filter((item) => item.kind !== 'image');
   const models = useConnectionModels(connection.connectionId);
   const [model, setModel] = useState(connection.model ?? '');
@@ -239,6 +240,25 @@ function ConnectionBar({ connection }: { connection: ReturnType<typeof useAssist
             <option key={item.id} value={item.id} />
           ))}
         </datalist>
+      </div>
+      {/* 预设单独一行：窄栏里三列放不下预设名 */}
+      <div className="col-span-2 min-w-0" title={t('studio.assist.presetHint')}>
+        <FieldLabel htmlFor={`${id}-preset`}>{t('studio.assist.preset')}</FieldLabel>
+        <Select
+          id={`${id}-preset`}
+          size="sm"
+          value={connection.presetId ?? ''}
+          onChange={(event) => connection.setPreset(event.target.value || null)}
+        >
+          <option value="">{t('studio.assist.presetNone')}</option>
+          {(presets.data ?? []).map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.id === connection.defaultPresetId
+                ? t('studio.assist.presetDefault', { name: item.name })
+                : item.name}
+            </option>
+          ))}
+        </Select>
       </div>
     </div>
   );

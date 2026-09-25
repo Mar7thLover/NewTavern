@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { useGenerationDefault } from '../../../lib/api';
+import { useDefaultPresetId, useGenerationDefault, usePresets } from '../../../lib/api';
 import type { StudioKind } from '../../../lib/api-studio';
 import type { StudioPatchOp } from '../types';
 import { AssistHttpError, streamAssist, type AssistMode } from './api';
@@ -49,6 +49,38 @@ function writeStored(choice: StoredChoice | null): void {
   }
 }
 
+/*
+ * 预设：协作请求也按预设组装（破限 / 文风 / 采样）。默认跟随设置里的默认预设；
+ * 改过就记在本机（单独一个键）。存 `{ presetId: null }` = 明确选了「无」，
+ * 与「没有这个键」（没改过，跟随默认）区分开。
+ */
+const PRESET_STORAGE_KEY = 'nt.studio.assist.preset';
+
+interface StoredPreset {
+  presetId: string | null;
+}
+
+function readStoredPreset(): StoredPreset | null {
+  try {
+    const raw = window.localStorage.getItem(PRESET_STORAGE_KEY);
+    if (!raw) return null;
+    const value = JSON.parse(raw) as Partial<StoredPreset> | null;
+    if (typeof value !== 'object' || value === null) return null;
+    return { presetId: typeof value.presetId === 'string' ? value.presetId : null };
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredPreset(choice: StoredPreset | null): void {
+  try {
+    if (choice) window.localStorage.setItem(PRESET_STORAGE_KEY, JSON.stringify(choice));
+    else window.localStorage.removeItem(PRESET_STORAGE_KEY);
+  } catch {
+    // 同上
+  }
+}
+
 export function useAssistConnection() {
   const generationDefault = useGenerationDefault();
   const [stored, setStored] = useState<StoredChoice | null>(() => readStored());
@@ -58,6 +90,24 @@ export function useAssistConnection() {
     setStored(next);
     writeStored(next);
   }, []);
+
+  const presets = usePresets();
+  const defaultPreset = useDefaultPresetId();
+  const [storedPreset, setStoredPreset] = useState<StoredPreset | null>(() => readStoredPreset());
+  // 列表还没到时先信任 id；到了以后，指向已删除预设的选择按「没改过」处理（回到默认预设）
+  const exists = (presetId: string) =>
+    !presets.data || presets.data.some((item) => item.id === presetId);
+  const defaultPresetId =
+    defaultPreset.data && exists(defaultPreset.data) ? defaultPreset.data : null;
+  const presetId =
+    storedPreset && (storedPreset.presetId === null || exists(storedPreset.presetId))
+      ? storedPreset.presetId
+      : defaultPresetId;
+  const setPreset = useCallback((next: StoredPreset | null) => {
+    setStoredPreset(next);
+    writeStoredPreset(next);
+  }, []);
+
   return {
     connectionId,
     model,
@@ -66,6 +116,14 @@ export function useAssistConnection() {
     setConnection: (id: string | null) => set({ connectionId: id, model: null }),
     setModel: (value: string | null) => set({ connectionId, model: value }),
     reset: () => set(null),
+    /** 协作请求套用的预设；null = 不套预设 */
+    presetId,
+    /** 设置里的默认预设（下拉里标注用） */
+    defaultPresetId,
+    /** 跟随默认时要等默认预设读出来，否则第一轮会不带预设发出去 */
+    presetReady: storedPreset !== null || !defaultPreset.isPending,
+    setPreset: (id: string | null) => setPreset({ presetId: id }),
+    resetPreset: () => setPreset(null),
   };
 }
 
@@ -83,6 +141,8 @@ export interface UseAssistOptions {
   testChatId: string | null;
   connectionId: string | null;
   model: string | null;
+  /** 协作请求套用的预设；null = 不套 */
+  presetId: string | null;
 }
 
 export function useAssist({
@@ -93,6 +153,7 @@ export function useAssist({
   testChatId,
   connectionId,
   model,
+  presetId,
 }: UseAssistOptions) {
   const { t, i18n } = useTranslation();
   const [turns, setTurns] = useState<AssistTurn[]>([]);
@@ -135,6 +196,7 @@ export function useAssist({
             instruction: text,
             mode,
             ...(testChatId ? { testChatId } : {}),
+            ...(presetId ? { presetId } : {}),
             lang: i18n.language.startsWith('zh') ? 'zh-CN' : 'en',
           },
           controller.signal,
@@ -161,7 +223,7 @@ export function useAssist({
         if (controllerRef.current === controller) controllerRef.current = null;
       }
     },
-    [getDraft, t, i18n.language, connectionId, model, kind, id, testChatId, updateTurn],
+    [getDraft, t, i18n.language, connectionId, model, presetId, kind, id, testChatId, updateTurn],
   );
 
   const stop = useCallback(() => controllerRef.current?.abort(), []);

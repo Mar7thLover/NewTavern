@@ -704,7 +704,138 @@ describe('测试会话（§2.4）', () => {
     expect(direct.metadata?.studio).toEqual({ kind: 'preset', entityId: preset.id });
     expect(await body<unknown[]>(await app.request('/api/chats'))).toHaveLength(1);
   });
+
+  it('POST 重开 / 换角色：新建替换旧会话，沿用档案、覆盖、聊天书与作者注释', async () => {
+    const { app, db } = makeTestApp(dataDir);
+    const { card, preset, book } = await setupStudio(app, db);
+    const persona = await body<{ id: string }>(
+      await app.request('/api/personas', json('POST', { name: '旅人' })),
+    );
+
+    // preset 测试会话：还没有普通对话 → 不带卡
+    const first = await body<ChatDetailFull>(
+      await app.request(`/api/studio/test-chat/preset/${preset.id}`),
+    );
+    expect(first.characterIds).toEqual([]);
+    // 在旧会话上改选择：档案、连接覆盖、聊天书、作者注释，外加一条不该带过去的运行态
+    await app.request(
+      `/api/chats/${first.id}`,
+      json('PATCH', {
+        personaId: persona.id,
+        overrides: { model: 'fake-model-2', layoutMode: 'cache-aware' },
+        metadata: {
+          authorsNote: { text: '保持简洁' },
+          frozenVolatile: { stale: true },
+        },
+      }),
+    );
+    await app.request(`/api/chats/${first.id}/lorebooks`, json('PUT', { bookIds: [book.id] }));
+
+    // 换角色
+    const swapped = await app.request(
+      `/api/studio/test-chat/preset/${preset.id}`,
+      json('POST', { characterId: card.id }),
+    );
+    expect(swapped.status).toBe(201);
+    const second = await body<ChatDetailFull>(swapped);
+    expect(second.id).not.toBe(first.id);
+    expect(second.characterIds).toEqual([card.id]);
+    expect(second.presetId).toBe(preset.id);
+    expect(second.personaId).toBe(persona.id);
+    expect(second.overrides).toMatchObject({ model: 'fake-model-2', layoutMode: 'cache-aware' });
+    expect(second.lorebookIds).toEqual([book.id]);
+    expect(second.metadata?.studio).toEqual({ kind: 'preset', entityId: preset.id });
+    expect(second.metadata?.authorsNote).toMatchObject({ text: '保持简洁' });
+    expect(second.metadata?.frozenVolatile).toBeUndefined();
+    // 开场白按新角色落根节点
+    expect(second.nodes.some((n) => n.role === 'assistant')).toBe(true);
+    // 旧会话删掉了；GET 返回新的这条
+    expect((await app.request(`/api/chats/${first.id}`)).status).toBe(404);
+    const current = await body<ChatDetailFull>(
+      await app.request(`/api/studio/test-chat/preset/${preset.id}`),
+    );
+    expect(current.id).toBe(second.id);
+
+    // 不带 characterId = 重开，沿用角色；null = 去掉角色
+    const reopened = await body<ChatDetailFull>(
+      await app.request(`/api/studio/test-chat/preset/${preset.id}`, { method: 'POST' }),
+    );
+    expect(reopened.characterIds).toEqual([card.id]);
+    expect(reopened.personaId).toBe(persona.id);
+    const cleared = await body<ChatDetailFull>(
+      await app.request(
+        `/api/studio/test-chat/preset/${preset.id}`,
+        json('POST', { characterId: null }),
+      ),
+    );
+    expect(cleared.characterIds).toEqual([]);
+    expect(cleared.lorebookIds).toEqual([book.id]);
+
+    // lorebook 类型：换卡后该书仍在聊天书里，即使旧会话把它移除了
+    const bookChat = await body<ChatDetailFull>(
+      await app.request(`/api/studio/test-chat/lorebook/${book.id}`),
+    );
+    await app.request(`/api/chats/${bookChat.id}/lorebooks`, json('PUT', { bookIds: [] }));
+    const bookSwapped = await body<ChatDetailFull>(
+      await app.request(
+        `/api/studio/test-chat/lorebook/${book.id}`,
+        json('POST', { characterId: card.id }),
+      ),
+    );
+    expect(bookSwapped.characterIds).toEqual([card.id]);
+    expect(bookSwapped.lorebookIds).toEqual([book.id]);
+
+    // character 类型：只能重开，不能换卡
+    const cardChat = await body<ChatDetailFull>(
+      await app.request(`/api/studio/test-chat/character/${card.id}`),
+    );
+    const cardReopened = await app.request(`/api/studio/test-chat/character/${card.id}`, {
+      method: 'POST',
+    });
+    expect(cardReopened.status).toBe(201);
+    const cardReopenedChat = await body<ChatDetailFull>(cardReopened);
+    expect(cardReopenedChat.id).not.toBe(cardChat.id);
+    expect(cardReopenedChat.characterIds).toEqual([card.id]);
+    expect(
+      (
+        await app.request(
+          `/api/studio/test-chat/character/${card.id}`,
+          json('POST', { characterId: null }),
+        )
+      ).status,
+    ).toBe(400);
+
+    // 校验
+    expect(
+      (
+        await app.request(
+          `/api/studio/test-chat/preset/${preset.id}`,
+          json('POST', { characterId: 'nope' }),
+        )
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await app.request(
+          `/api/studio/test-chat/preset/${preset.id}`,
+          json('POST', { characterId: 1 }),
+        )
+      ).status,
+    ).toBe(400);
+    expect(
+      (await app.request('/api/studio/test-chat/preset/nope', { method: 'POST' })).status,
+    ).toBe(404);
+    // 每个实体始终只剩一条测试会话
+    const all = await body<{ id: string }[]>(await app.request('/api/chats?includeStudio=1'));
+    expect(all).toHaveLength(3);
+  });
 });
+
+interface ChatDetailFull extends ChatDetail {
+  personaId: string | null;
+  overrides: Record<string, unknown> | null;
+  lorebookIds: string[];
+}
 
 describe('草稿组装（§2.4）', () => {
   it('POST inspect 带 draft：卡 / 预设 / 世界书都用草稿，库里不变；GET 行为不变', async () => {

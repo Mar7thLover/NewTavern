@@ -265,6 +265,18 @@ export function fetchTestChat(kind: StudioKind, id: string): Promise<ChatDetail>
   return fetchJson<ChatDetail>(`/api/studio/test-chat/${kind}/${enc(id)}`);
 }
 
+/**
+ * 新建一条测试会话替换当前那条（旧的删除）：`characterId` 缺省沿用旧会话的角色，null = 不带角色；
+ * 档案、预设、连接等覆盖、聊天书、作者注释沿用旧会话。
+ */
+export function recreateTestChat(
+  kind: StudioKind,
+  id: string,
+  body: { characterId?: string | null } = {},
+): Promise<ChatDetail> {
+  return mutate<ChatDetail>(`/api/studio/test-chat/${kind}/${enc(id)}`, 'POST', body);
+}
+
 export interface DraftInspectParams {
   chatId: string;
   parentId: string | null;

@@ -602,6 +602,183 @@ describe('AI 协作者：预设', () => {
 });
 
 /* ------------------------------------------------------------------ */
+/* 协作请求套用预设                                                     */
+/* ------------------------------------------------------------------ */
+
+type PresetJson = Json & { prompts: Json[]; prompt_order: (Json & { order: Json[] })[] };
+
+/** 建一份预设：main 带 {{user}}、采样参数、chatHistory 之后一条破限 + 一条 assistant 预填 */
+async function createJailbreakPreset(app: App) {
+  const created = await body<{ id: string; data: PresetJson }>(
+    await app.request('/api/presets', json('POST', { name: '破限预设' })),
+  );
+  const data = structuredClone(created.data);
+  const main = data.prompts.find((p) => p.identifier === 'main')!;
+  main.content = 'PRESET MAIN for {{user}}';
+  data.prompts.push(
+    {
+      identifier: 'jb',
+      name: '破限',
+      system_prompt: false,
+      role: 'system',
+      content: 'POST HISTORY JB',
+    },
+    {
+      identifier: 'prefill',
+      name: '预填',
+      system_prompt: false,
+      role: 'assistant',
+      content: 'PREFILL 好的，我这就开始：',
+    },
+  );
+  const order = data.prompt_order.find((l) => l.character_id === 100001)!;
+  order.order.push({ identifier: 'jb', enabled: true }, { identifier: 'prefill', enabled: true });
+  Object.assign(data, { temperature: 0.42, top_p: 0.87, openai_max_tokens: 1234 });
+  const res = await app.request(`/api/presets/${created.id}`, json('PUT', { data }));
+  expect(res.status).toBe(200);
+  return { id: created.id, data };
+}
+
+const segmentText = (s: PromptIR['segments'][number]) =>
+  s.parts.map((p) => (p.type === 'text' ? p.text : '')).join('\n');
+
+describe('AI 协作者：套用预设', () => {
+  it('带 presetId：预设 main 进请求、采样按预设、末尾预填被去掉、历史保持原文', async () => {
+    const { app, db } = makeTestApp(dataDir);
+    const preset = await createJailbreakPreset(app);
+    const persona = await body<{ id: string }>(
+      await app.request('/api/personas', json('POST', { name: '旅人', description: '不该出现' })),
+    );
+    await app.request('/api/settings/defaultPersonaId', json('PUT', persona.id));
+    const card = await createCard(app);
+    const { connectionId, irs } = scripted(db, [
+      callsRound(['get_field', { path: '/description' }]),
+      textRound('看过了。'),
+    ]);
+
+    const events = await assist(app, {
+      connectionId,
+      model: 'fake-model-1',
+      presetId: preset.id,
+      target: { kind: 'character', id: card.id },
+      draft: card.data,
+      conversation: [
+        { role: 'user', content: '描述里用 {{char}} 指代角色，别写死名字' },
+        { role: 'assistant', content: '好，<% print("x") %> 这种写法不会执行。' },
+      ],
+      instruction: '再看看 {{user}} 的称呼',
+      lang: 'zh-CN',
+    });
+    expect(eventsOf(events, 'done')).toHaveLength(1);
+
+    const first = irs[0]!;
+    const text = textOfIr(first);
+    // 预设 main（宏照常展开：{{user}} = 默认档案名；档案描述不注入）
+    expect(text).toContain('PRESET MAIN for 旅人');
+    expect(text).not.toContain('不该出现');
+    expect(text).toContain('POST HISTORY JB');
+    // 采样参数与元信息按预设
+    expect(first.sampling).toMatchObject({ temperature: 0.42, topP: 0.87, maxTokens: 1234 });
+    expect(first.meta.presetId).toBe(preset.id);
+    // 末尾预填去掉了：最后一段是破限（system），整份请求里没有预填
+    expect(text).not.toContain('PREFILL');
+    expect(segmentText(first.segments.at(-1)!)).toBe('POST HISTORY JB');
+    // 工作台系统提示词在预设 main 之前，草稿概览紧随其后
+    const ids = first.segments.map((s) => s.id);
+    const mainAt = first.segments.findIndex((s) => s.origin.ref === 'main');
+    expect(ids.indexOf('studio:system')).toBeGreaterThanOrEqual(0);
+    expect(ids.indexOf('studio:system')).toBeLessThan(mainAt);
+    expect(ids.indexOf('studio:context')).toBe(ids.indexOf('studio:system') + 1);
+    expect(text).toContain('先读后写');
+    // 协作对话与本轮指令保持原文（不做宏替换、不删 EJS 块），本轮指令是最后一条 user
+    const history = first.segments.filter(
+      (s) => s.anchor.slot === 'history' && s.role !== 'system',
+    );
+    expect(history.map((s) => [s.role, segmentText(s)])).toEqual([
+      ['user', '描述里用 {{char}} 指代角色，别写死名字'],
+      ['assistant', '好，<% print("x") %> 这种写法不会执行。'],
+      ['user', '再看看 {{user}} 的称呼'],
+    ]);
+
+    // 第二次调用：工具调用与结果接在末尾，采样仍按预设，预填仍然没有
+    const second = irs[1]!;
+    expect(second.sampling).toMatchObject({ temperature: 0.42, maxTokens: 1234 });
+    expect(second.segments.at(-2)?.parts.some((p) => p.type === 'tool_call')).toBe(true);
+    expect(second.segments.at(-1)?.parts.some((p) => p.type === 'tool_result')).toBe(true);
+    expect(textOfIr(second)).not.toContain('PREFILL');
+  });
+
+  it('编辑的就是这份预设：用请求里的草稿组装（边改边用）', async () => {
+    const { app, db } = makeTestApp(dataDir);
+    const preset = await createJailbreakPreset(app);
+    const draft = structuredClone(preset.data);
+    draft.prompts.find((p) => p.identifier === 'main')!.content = 'DRAFT MAIN';
+    Object.assign(draft, { temperature: 0.11 });
+    const { connectionId, irs } = scripted(db, [textRound('ok')]);
+    await assist(app, {
+      connectionId,
+      model: 'fake-model-1',
+      presetId: preset.id,
+      target: { kind: 'preset', id: preset.id },
+      draft,
+      instruction: '看看',
+      lang: 'zh-CN',
+    });
+    const text = textOfIr(irs[0]!);
+    expect(text).toContain('DRAFT MAIN');
+    expect(text).not.toContain('PRESET MAIN');
+    expect(irs[0]!.sampling.temperature).toBe(0.11);
+  });
+
+  it('不带 presetId（或 null）：与原来一样只有工作台提示词 + 对话，无采样参数', async () => {
+    const { app, db } = makeTestApp(dataDir);
+    await createJailbreakPreset(app);
+    const card = await createCard(app);
+    const { connectionId, irs } = scripted(db, [textRound('ok'), textRound('ok')]);
+    for (const presetId of [undefined, null]) {
+      await assist(app, {
+        connectionId,
+        model: 'fake-model-1',
+        ...(presetId === null ? { presetId } : {}),
+        target: { kind: 'character', id: card.id },
+        draft: card.data,
+        conversation: [{ role: 'user', content: '{{char}}' }],
+        instruction: '看看',
+        lang: 'zh-CN',
+      });
+    }
+    for (const ir of irs) {
+      expect(ir.sampling).toEqual({});
+      expect(ir.meta.presetId).toBe('');
+      expect(ir.segments.map((s) => s.id)).toEqual([
+        'studio:system',
+        'studio:context',
+        'studio:conv:0',
+        'studio:instruction',
+      ]);
+      expect(textOfIr(ir)).not.toContain('PRESET MAIN');
+    }
+  });
+
+  it('presetId 校验：不是字符串 / 指向不存在的预设 → 400', async () => {
+    const { app, db } = makeTestApp(dataDir);
+    const { connectionId } = scripted(db, [textRound('x')]);
+    const base = {
+      connectionId,
+      model: 'fake-model-1',
+      target: { kind: 'character' },
+      draft: {},
+      instruction: '做点什么',
+    };
+    const post = (payload: unknown) => app.request('/api/studio/assist', json('POST', payload));
+    expect((await post({ ...base, presetId: 42 })).status).toBe(400);
+    const missing = await post({ ...base, presetId: 'nope' });
+    expect(missing.status).toBe(400);
+    expect(await body(missing)).toMatchObject({ error: 'invalid' });
+  });
+});
+
+/* ------------------------------------------------------------------ */
 /* 循环控制                                                             */
 /* ------------------------------------------------------------------ */
 

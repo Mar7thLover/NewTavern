@@ -37,7 +37,11 @@ export function Segmented<T extends string>({
       role="tablist"
       data-part="tabs"
       aria-label={label}
-      className={cn('edge-rule flex min-w-0 gap-4 overflow-x-auto border-b', className)}
+      // overflow-x:auto 会连带让 y 也变成 auto：选中项的 -mb-px 下划线多出 1px，Windows 上就冒出纵向滚动条
+      className={cn(
+        'edge-rule flex min-w-0 gap-4 overflow-x-auto overflow-y-hidden border-b',
+        className,
+      )}
     >
       {items.map((item) => {
         const active = item.value === value;

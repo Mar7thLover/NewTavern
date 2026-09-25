@@ -212,7 +212,14 @@ export function AuthorsNoteSection({ chat }: { chat: ChatDetail }) {
 /* 聊天世界书                                                           */
 /* ------------------------------------------------------------------ */
 
-export function ChatLorebooksSection({ chat }: { chat: ChatDetail }) {
+export function ChatLorebooksSection({
+  chat,
+  lockedIds,
+}: {
+  chat: ChatDetail;
+  /** 不能从本会话移除的书（工作台 lorebook 测试会话：移除后草稿就不参与组装了） */
+  lockedIds?: readonly string[];
+}) {
   const { t } = useTranslation();
   const setLorebooks = useSetChatLorebooks();
   const selected = chat.lorebookIds ?? [];
@@ -228,6 +235,8 @@ export function ChatLorebooksSection({ chat }: { chat: ChatDetail }) {
       <LorebookPicker
         selected={selected}
         disabled={setLorebooks.isPending}
+        lockedIds={lockedIds}
+        lockedHint={t('studio.test.lockedBook')}
         onChange={(bookIds) => setLorebooks.mutate({ chatId: chat.id, bookIds })}
       />
       {setLorebooks.error && (

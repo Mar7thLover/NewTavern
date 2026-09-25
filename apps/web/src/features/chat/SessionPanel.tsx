@@ -1,5 +1,5 @@
 import { RefreshCw } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 
@@ -108,9 +108,13 @@ export interface SessionPanelProps {
   chat: ChatDetail;
   /** root→head 路径，用于统计本会话用量 */
   path: MessageNode[];
+  /** 渲染在角色卡面下方的插槽（工作台测试会话的「测试角色」选择）；不传时对话页外观不变 */
+  characterSlot?: ReactNode;
+  /** 对话世界书里不能移除的书（工作台 lorebook 测试会话里正在编辑的那本） */
+  lockedLorebookIds?: readonly string[];
 }
 
-export function SessionPanel({ chat, path }: SessionPanelProps) {
+export function SessionPanel({ chat, path, characterSlot, lockedLorebookIds }: SessionPanelProps) {
   const { t, i18n } = useTranslation();
   const patchChat = usePatchChat();
   const connections = useConnections();
@@ -171,6 +175,7 @@ export function SessionPanel({ chat, path }: SessionPanelProps) {
       ) : (
         <section className="text-sm text-ink-2">{t('chat.panel.noCharacter')}</section>
       )}
+      {characterSlot}
 
       {/* 连接与模型 */}
       <section>
@@ -265,7 +270,7 @@ export function SessionPanel({ chat, path }: SessionPanelProps) {
       {/* 作者注释 / 聊天世界书 / 全局系统提示词覆盖（M3 契约 §7.2）；背景与立绘（M4（二）§A.4 §B.3） */}
       <div className="edge-rule border-t">
         <AuthorsNoteSection chat={chat} />
-        <ChatLorebooksSection chat={chat} />
+        <ChatLorebooksSection chat={chat} lockedIds={lockedLorebookIds} />
         <ChatSystemPromptSection chat={chat} />
         <ChatBackgroundSection chat={chat} />
         {chat.character && (

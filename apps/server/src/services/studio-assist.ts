@@ -2,6 +2,7 @@ import {
   estimateTokens,
   type Part,
   type PromptIR,
+  type SamplingParams,
   type Segment,
   type SegmentOriginKind,
 } from '@newtavern/core';
@@ -9,8 +10,15 @@ import type { CollectedToolCall } from '@newtavern/providers';
 import { eq } from 'drizzle-orm';
 
 import { schema, type Db } from '../db/client.js';
-import { assemblePrompt, type AssembleResult } from './assemble.js';
+import {
+  assemblePrompt,
+  type AssembleHistoryNode,
+  type AssembleInputV2,
+  type AssembleResult,
+} from './assemble.js';
 import { buildAssembleInput } from './assemble-input.js';
+import { withTemplateRenderer } from './ejs.js';
+import { readDefaultPersonaId } from './personas.js';
 import {
   loadChat,
   loadNodes,
@@ -51,8 +59,14 @@ import {
   type StudioPatchOp,
   type ToolName,
 } from './studio-assist-tools.js';
-import { DraftInputError, parseDraft, type AssembleDraft } from './studio-draft.js';
+import {
+  DraftInputError,
+  parseDraft,
+  withPresetDraft,
+  type AssembleDraft,
+} from './studio-draft.js';
 import { getOrCreateTestChat, StudioEntityNotFoundError } from './studio-test-chat.js';
+import { readWISettings } from './wi-settings.js';
 
 export type { StudioAssistKind, StudioAssistMode, StudioLang, StudioPatchOp };
 
@@ -98,6 +112,11 @@ export interface StudioAssistRequest {
   lang: StudioLang;
   /** 可选：本轮的推理设置（同聊天覆盖项 `thinking`） */
   thinking?: ThinkingOptions;
+  /**
+   * 可选：协作请求套用的预设（破限 / 文风等）。给了就用对话组装器按该预设组装提示词，
+   * 工作台自己的系统提示词与草稿概览插在预设 main 之前；缺省 / null = 不经过预设（原行为）。
+   */
+  presetId?: string;
 }
 
 /** SSE 事件（`event:` 名 → `data` 形状） */
@@ -138,7 +157,7 @@ const KINDS: readonly StudioAssistKind[] = ['character', 'preset', 'lorebook'];
 /** 校验并规整请求体；不合法时返回错误信息。connectionId / model 缺省由路由按全局默认补 */
 export function parseAssistRequest(body: unknown): StudioAssistRequest | string {
   if (!isRecord(body)) return '请求体必须是对象';
-  for (const key of ['connectionId', 'model', 'testChatId'] as const) {
+  for (const key of ['connectionId', 'model', 'testChatId', 'presetId'] as const) {
     if (body[key] !== undefined && body[key] !== null && typeof body[key] !== 'string') {
       return `${key} 必须是字符串`;
     }
@@ -205,20 +224,44 @@ export function parseAssistRequest(body: unknown): StudioAssistRequest | string 
       : {}),
     lang,
     ...(thinking ? { thinking } : {}),
+    // 空串与 null 一样当「无预设」
+    ...(typeof body.presetId === 'string' && body.presetId ? { presetId: body.presetId } : {}),
   };
 }
 
 export class AssistTargetNotFoundError extends Error {}
 
+/**
+ * `presetId` 指向不存在的预设。路由按 400 invalid 返回（附说明），**不**静默当「无预设」：
+ * 用户选了破限预设却悄悄空提示词出字，比直接报错更难排查；前端在预设被删后会自行回退。
+ */
+export class AssistPresetNotFoundError extends Error {
+  constructor(readonly presetId: string) {
+    super(`预设不存在：${presetId}`);
+  }
+}
+
+type PresetRow = typeof schema.presets.$inferSelect;
+
 export interface PreparedAssist {
   state: AssistState;
   /** lorebook：库里这本书的最大 uid（新条目 uid 接在后面）；其余为 -1 */
   dbMaxUid: number;
+  /** 请求带了 presetId 时的预设行（已保存版；草稿替换在组装时做） */
+  preset?: PresetRow;
 }
 
-/** 检查 target 存在并建内存副本；target.id 指向不存在的实体时抛 AssistTargetNotFoundError */
+/**
+ * 检查 target 存在并建内存副本；target.id 指向不存在的实体时抛 AssistTargetNotFoundError，
+ * presetId 指向不存在的预设时抛 AssistPresetNotFoundError
+ */
 export function prepareAssist(db: Db, req: StudioAssistRequest): PreparedAssist {
   const { kind, id } = req.target;
+  let preset: PresetRow | undefined;
+  if (req.presetId !== undefined) {
+    preset = db.select().from(schema.presets).where(eq(schema.presets.id, req.presetId)).get();
+    if (!preset) throw new AssistPresetNotFoundError(req.presetId);
+  }
   let characterBookId: string | null = null;
   if (id !== undefined) {
     const table =
@@ -248,6 +291,7 @@ export function prepareAssist(db: Db, req: StudioAssistRequest): PreparedAssist 
       characterBookId,
     }),
     dbMaxUid: kind === 'lorebook' && id !== undefined ? dbMaxUid(db, id) : -1,
+    ...(preset ? { preset } : {}),
   };
 }
 
@@ -597,26 +641,215 @@ function seg(
   };
 }
 
+/** 协作提示词的基底：段落 + 预设带来的采样参数与元信息（无预设时为空） */
+interface AssistPromptBase {
+  segments: Segment[];
+  sampling: SamplingParams;
+  presetId: string;
+  squashSystemMessages?: boolean;
+  warnings: string[];
+}
+
+const INSTRUCTION_NODE_ID = 'studio:instruction';
+const HISTORY_ORIGINS: ReadonlySet<SegmentOriginKind> = new Set(['history', 'user_input']);
+
+function positiveNumber(source: Record<string, unknown> | null | undefined, key: string) {
+  const value = source?.[key];
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined;
+}
+
+/** 无预设（原行为）：工作台系统提示词 + 草稿概览 + 协作对话 + 本轮指令 */
+function plainPromptBase(rt: AssistRuntime, head: Segment[]): AssistPromptBase {
+  return {
+    segments: [
+      ...head,
+      ...rt.req.conversation.map((turn, index) =>
+        seg(
+          `studio:conv:${index}`,
+          turn.role,
+          [{ type: 'text', text: turn.content }],
+          'history',
+          'history',
+        ),
+      ),
+      seg(
+        INSTRUCTION_NODE_ID,
+        'user',
+        [{ type: 'text', text: rt.req.instruction }],
+        'user_input',
+        'turn',
+      ),
+    ],
+    sampling: {},
+    presetId: '',
+    warnings: [],
+  };
+}
+
+/**
+ * 带预设：复用对话组装器 `assemblePrompt`，让破限 / 文风类预设照常生效（用户多用中转站，
+ * 空提示词容易被拒或出字差）。取舍：
+ *
+ * - **预设**：target 就是这份预设时用请求里的草稿（边改边用，规则同 `withPresetDraft`，
+ *   采样参数随草稿重算）；草稿不合法（编辑中途）就退回已保存版。
+ * - **角色**：null；**用户档案**：默认档案只提供 `{{user}}` 名字（描述置空、position none，不注入）。
+ * - **历史**：协作对话各轮 + 本轮指令（最后一条 user）。组装器会对历史做宏替换 / 提示词侧正则 /
+ *   删 EJS 块——但协作对话里常常**就是在讨论** `{{char}}`、`<% %>` 这些写法，所以组装完按
+ *   节点 id 把历史段的正文换回原文（位置、深度注入、裁剪结果仍按组装器的来）。
+ *   预设没有 chatHistory 标记时组装器不放历史，这时把各轮原样追加到末尾。
+ * - **工作台系统提示词 + 草稿概览**：不走 `globalSystemPrompt`（它会过宏替换与 EJS 渲染，
+ *   草稿里的 `{{…}}` / `<% %>` 会被展开甚至执行），而是组装后以原文插在预设 main 段之前
+ *   （语义同 before_main；没有 main 就放最前）。
+ * - **末尾预填**：预设的 assistant 预填（或 depth 0 的 assistant 注入）落在最后时与工具调用冲突
+ *   （模型会接着预填续写正文，工具循环也要往末尾追加 assistant tool_call），去掉末尾所有
+ *   非历史来源的 assistant 段。
+ * - 世界书空、变量空表、正则不用：历史已换回原文，提示词侧正则只作用于历史与世界书，套了也无效。
+ * - dryRun：不推进 WI 时间态、不产生变量副作用；EJS 模板按设置挂渲染器（只渲染预设段）。
+ */
+function presetPromptBase(rt: AssistRuntime, head: Segment[], saved: PresetRow): AssistPromptBase {
+  const { db, req } = rt;
+  let row = saved;
+  if (req.target.kind === 'preset' && req.target.id === saved.id) {
+    try {
+      row =
+        withPresetDraft(saved, parseDraft({ preset: { id: saved.id, data: req.draft } })) ?? saved;
+    } catch (e) {
+      if (!(e instanceof DraftInputError)) throw e;
+    }
+  }
+  const data = row.data as Json;
+  const caps = rt.resolved.adapter.capabilities(rt.model, rt.resolved.conn);
+  // 同 buildAssembleInput：模型能力与预设 openai_max_context 取小
+  const presetMaxContext =
+    positiveNumber(row.sampling, 'openai_max_context') ??
+    positiveNumber(data, 'openai_max_context');
+  const maxContextTokens =
+    presetMaxContext !== undefined ? Math.min(caps.maxContext, presetMaxContext) : caps.maxContext;
+  const maxResponse =
+    positiveNumber(row.sampling, 'openai_max_tokens') ??
+    positiveNumber(data, 'openai_max_tokens') ??
+    0;
+
+  const personaId = readDefaultPersonaId(db);
+  const persona = personaId
+    ? db
+        .select({ id: schema.personas.id, name: schema.personas.name })
+        .from(schema.personas)
+        .where(eq(schema.personas.id, personaId))
+        .get()
+    : undefined;
+
+  const turns: { id: string; role: 'user' | 'assistant'; content: string }[] = [
+    ...req.conversation.map((turn, index) => ({ id: `studio:conv:${index}`, ...turn })),
+    { id: INSTRUCTION_NODE_ID, role: 'user', content: req.instruction },
+  ];
+  const raw = new Map(turns.map((turn) => [turn.id, turn.content]));
+  const history: AssembleHistoryNode[] = turns.map((turn) => ({
+    id: turn.id,
+    role: turn.role,
+    name: null,
+    parts: [{ type: 'text', text: turn.content }],
+  }));
+
+  const input: AssembleInputV2 = {
+    chatId: req.testChatId ?? '',
+    model: rt.model,
+    provider: rt.resolved.conn.provider,
+    preset: {
+      id: row.id,
+      format: row.format,
+      data,
+      sampling: row.sampling ?? null,
+    },
+    character: null,
+    persona: persona
+      ? { id: persona.id, name: persona.name, description: '', position: 'none' }
+      : null,
+    history,
+    layoutMode: 'strict',
+    options: { maxContextTokens },
+    lorebooks: [],
+    wiSettings: readWISettings(db, { maxContext: maxContextTokens, maxResponse }),
+    wiState: null,
+    regexScripts: [],
+    variables: { chat: {}, global: {} },
+    messageCount: history.length,
+    providerCaps: {
+      caching: caps.caching,
+      ...(caps.cacheMinTokens === undefined ? {} : { cacheMinTokens: caps.cacheMinTokens }),
+      ...(caps.maxBreakpoints === undefined ? {} : { maxBreakpoints: caps.maxBreakpoints }),
+      systemInMessages: caps.systemInMessages,
+      prefill: caps.prefill,
+    },
+    rng: { seed: `studio-assist:${row.id}` },
+    now: new Date(),
+    dryRun: true,
+  };
+  const { ir } = assemblePrompt(withTemplateRenderer(db, input));
+
+  // 历史段换回原文（见上）
+  let segments = ir.segments.map((segment): Segment => {
+    const ref = segment.origin.ref;
+    const text = HISTORY_ORIGINS.has(segment.origin.kind) && ref ? raw.get(ref) : undefined;
+    if (text === undefined) return segment;
+    return {
+      ...segment,
+      parts: [...segment.parts.filter((part) => part.type !== 'text'), { type: 'text', text }],
+    };
+  });
+  const warnings = [...ir.meta.warnings];
+  // 预设没有 chatHistory 标记：本轮指令不在里面（裁剪不会丢 user_input），各轮原样追加到末尾
+  if (!segments.some((segment) => segment.origin.ref === INSTRUCTION_NODE_ID)) {
+    warnings.push('预设里没有 chatHistory 标记，协作对话已追加在末尾');
+    segments.push(...plainPromptBase(rt, []).segments);
+  }
+
+  // 去掉末尾的预填（非历史来源的 assistant 段），见上
+  while (segments.length > 0) {
+    const tail = segments[segments.length - 1] as Segment;
+    if (tail.role !== 'assistant' || HISTORY_ORIGINS.has(tail.origin.kind)) break;
+    segments = segments.slice(0, -1);
+  }
+
+  // 工作台系统提示词 + 草稿概览：插在 main 之前（没有 main、或 main 被排到历史后面时放最前）
+  const mainIndex = segments.findIndex(
+    (segment) => segment.origin.kind === 'preset' && segment.origin.ref === 'main',
+  );
+  const firstHistory = segments.findIndex((segment) => HISTORY_ORIGINS.has(segment.origin.kind));
+  const at = mainIndex >= 0 && (firstHistory < 0 || mainIndex < firstHistory) ? mainIndex : 0;
+  segments = [...segments.slice(0, at), ...head, ...segments.slice(at)];
+
+  return {
+    segments,
+    sampling: ir.sampling,
+    presetId: row.id,
+    ...(ir.meta.squashSystemMessages ? { squashSystemMessages: true } : {}),
+    warnings,
+  };
+}
+
 function buildIr(
   model: string,
   segments: Segment[],
   rt: AssistRuntime,
   tools: ReturnType<typeof toolDefs>,
   last: boolean,
+  base: AssistPromptBase,
 ): PromptIR {
   return {
     model,
-    sampling: {},
+    sampling: base.sampling,
     // 拷贝：之后的轮次还会往 segments 里追加
     segments: [...segments],
     cachePlan: { breakpoints: [] },
     meta: {
       chatId: rt.req.testChatId ?? '',
-      presetId: '',
+      presetId: base.presetId,
       layoutMode: 'strict',
       activations: [],
-      warnings: [],
+      warnings: base.warnings,
       tokenEstimate: 0,
+      ...(base.squashSystemMessages ? { squashSystemMessages: true } : {}),
     },
     tools,
     toolChoice: last ? 'none' : 'auto',
@@ -634,7 +867,7 @@ export async function runStudioAssist(rt: AssistRuntime, emit: StudioAssistEmit)
   const available = toolsFor(state.kind, state.targetId !== null);
   const defs = toolDefs(available, lang);
 
-  const segments: Segment[] = [
+  const head: Segment[] = [
     seg(
       'studio:system',
       'system',
@@ -649,23 +882,12 @@ export async function runStudioAssist(rt: AssistRuntime, emit: StudioAssistEmit)
       'global_system',
       'turn',
     ),
-    ...req.conversation.map((turn, index) =>
-      seg(
-        `studio:conv:${index}`,
-        turn.role,
-        [{ type: 'text', text: turn.content }],
-        'history',
-        'history',
-      ),
-    ),
-    seg(
-      'studio:instruction',
-      'user',
-      [{ type: 'text', text: req.instruction }],
-      'user_input',
-      'turn',
-    ),
   ];
+  // 预设只在一轮开始时组装一次：之后的工具步骤往末尾追加 tool_call / tool_result
+  const base = prepared.preset
+    ? presetPromptBase(rt, head, prepared.preset)
+    : plainPromptBase(rt, head);
+  const segments: Segment[] = base.segments;
 
   const usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0 };
   let sawUsage = false;
@@ -677,7 +899,7 @@ export async function runStudioAssist(rt: AssistRuntime, emit: StudioAssistEmit)
     if (signal.aborted) return;
     steps += 1;
     const last = steps >= MAX_ASSIST_STEPS;
-    const ir = buildIr(rt.model, segments, rt, defs, last);
+    const ir = buildIr(rt.model, segments, rt, defs, last, base);
     let result: Awaited<ReturnType<typeof callLlm>>;
     for (let attempt = 0; ; attempt += 1) {
       const pending: Promise<void>[] = [];

@@ -35,13 +35,19 @@ import { useStudioDraft, type StudioDraftApi } from './draft/useStudioDraft';
 import { trackInsertTarget } from './insert-target';
 import { InspectorTab } from './panels/InspectorTab';
 import { PromptLibraryTab } from './panels/PromptLibraryTab';
-import { TestChatPane, useTestChat, type TestChatState } from './panels/TestChatPane';
+import {
+  TestChatPane,
+  TestSessionTab,
+  useTestChat,
+  type TestChatState,
+} from './panels/TestChatPane';
 import { VersionsTab } from './panels/VersionsTab';
 import type { CharacterDraft } from './types';
 
 /*
  * 创作工作台（M6 §4.1）：`/studio/:kind/:id`。
- * 宽屏三栏：左 编辑器；中 测试对话；右 页签「AI 协作 / 检查器 / 版本 / 提示库」。
+ * 宽屏三栏：左 编辑器；中 测试对话；右 页签「会话 / AI 协作 / 检查器 / 版本 / 提示库」。
+ * 「会话」= 测试会话的会话面板（与对话页右栏一致，含角色卡面；preset / lorebook 可换测试角色），默认页签。
  * 1024–1279 两栏（编辑器 + 右栏，测试对话并进右栏页签）；窄屏（<1024）顶部分段切换「编辑 / 测试 / 协作」。
  * 各栏始终挂载（只切显示），切换时流式输出与滚动位置都不丢。
  */
@@ -49,7 +55,7 @@ import type { CharacterDraft } from './types';
 const WIDE_QUERY = '(min-width: 1280px)';
 const MEDIUM_QUERY = '(min-width: 1024px)';
 
-type RightTab = 'assist' | 'inspector' | 'versions' | 'library' | 'test';
+type RightTab = 'session' | 'assist' | 'inspector' | 'versions' | 'library' | 'test';
 type NarrowPane = 'edit' | 'test' | 'assist';
 
 /** 入口页「一句话生成」经路由 state 带过来 */
@@ -89,16 +95,23 @@ function Workbench({ kind, id }: { kind: StudioKind; id: string }) {
     testChatId: testChat.chatId,
     connectionId: connection.connectionId,
     model: connection.model,
+    presetId: connection.presetId,
   });
   const isGenerating = useIsGenerating(testChat.chatId);
 
   const wide = useMediaQuery(WIDE_QUERY);
   const medium = useMediaQuery(MEDIUM_QUERY);
   const layout: 'wide' | 'medium' | 'narrow' = wide ? 'wide' : medium ? 'medium' : 'narrow';
-  const [rightTab, setRightTab] = useState<RightTab>('assist');
+  const [rightTab, setRightTab] = useState<RightTab>('session');
   const [narrowPane, setNarrowPane] = useState<NarrowPane>('edit');
-  // 宽屏没有「测试」页签：从中等宽度拉宽时退回协作
-  const effectiveTab: RightTab = layout === 'wide' && rightTab === 'test' ? 'assist' : rightTab;
+  // 宽屏没有「测试」页签：从中等宽度拉宽时退回会话
+  const effectiveTab: RightTab = layout === 'wide' && rightTab === 'test' ? 'session' : rightTab;
+  // 最近一个非「会话」页签：测试对话头部的会话面板按钮再点一次时切回去
+  const lastOtherTab = useRef<RightTab>('assist');
+  const selectRightTab = useCallback((tab: RightTab) => {
+    if (tab !== 'session') lastOtherTab.current = tab;
+    setRightTab(tab);
+  }, []);
 
   const { state, dirty } = draftApi;
 
@@ -129,14 +142,22 @@ function Workbench({ kind, id }: { kind: StudioKind; id: string }) {
   const generateText = (location.state as StudioLocationState | null)?.generate;
   const startedRef = useRef(false);
   useEffect(() => {
-    if (!generateText || !loaded || startedRef.current) return;
+    if (!generateText || !loaded || !connection.presetReady || startedRef.current) return;
     startedRef.current = true;
     // 清掉路由 state：刷新页面不会再生成一次
     void navigate(location.pathname, { replace: true, state: null });
-    setRightTab('assist');
+    selectRightTab('assist');
     setNarrowPane('assist');
     void assist.send(generateText, 'generate');
-  }, [generateText, loaded, assist, navigate, location.pathname]);
+  }, [
+    generateText,
+    loaded,
+    connection.presetReady,
+    assist,
+    navigate,
+    location.pathname,
+    selectRightTab,
+  ]);
 
   /* ---------- 保存：卡的开场白变了且测试会话还没聊过，就重开测试会话 ---------- */
   const save = useCallback(async () => {
@@ -151,9 +172,9 @@ function Workbench({ kind, id }: { kind: StudioKind; id: string }) {
   }, [state, draftApi, testChat]);
 
   const openInspector = useCallback(() => {
-    setRightTab('inspector');
+    selectRightTab('inspector');
     setNarrowPane('assist');
-  }, []);
+  }, [selectRightTab]);
 
   const unsavedEntries =
     state?.pair.kind === 'lorebook' && state.pair.draft.entries.some((entry) => entry.uid === null);
@@ -196,17 +217,9 @@ function Workbench({ kind, id }: { kind: StudioKind; id: string }) {
     </div>
   );
 
-  const testPane = (
-    <TestChatPane
-      testChat={testChat}
-      dirty={dirty}
-      getDraft={draftApi.assembleDraft}
-      onOpenInspector={openInspector}
-    />
-  );
-
   const tabs: { value: RightTab; label: string }[] = [
     ...(layout === 'medium' ? [{ value: 'test' as const, label: t('studio.tabs.test') }] : []),
+    { value: 'session', label: t('studio.tabs.session') },
     { value: 'assist', label: t('studio.tabs.assist') },
     { value: 'inspector', label: t('studio.tabs.inspector') },
     { value: 'versions', label: t('studio.tabs.versions') },
@@ -215,7 +228,32 @@ function Workbench({ kind, id }: { kind: StudioKind; id: string }) {
   // 窄屏的「协作」分段里不再重复「测试」
   const visibleTabs = layout === 'narrow' ? tabs.filter((tab) => tab.value !== 'test') : tabs;
   const activeTab: RightTab =
-    layout === 'narrow' && effectiveTab === 'test' ? 'assist' : effectiveTab;
+    layout === 'narrow' && effectiveTab === 'test' ? 'session' : effectiveTab;
+  // 会话面板是否正在显示：窄屏还要看当前分段
+  const sessionOpen = activeTab === 'session' && (layout !== 'narrow' || narrowPane === 'assist');
+
+  /** 测试对话头部的「会话面板」按钮：打开 = 切到右栏「会话」页签（窄屏同时切到「协作」分段）；
+   *  已在显示时再点 = 切回上一个页签（中等宽度下回到「测试」才看得到对话，所以那里不会出现「已在显示」） */
+  const toggleSession = () => {
+    if (sessionOpen) {
+      const back = lastOtherTab.current;
+      setRightTab(layout === 'wide' && back === 'test' ? 'assist' : back);
+      return;
+    }
+    setRightTab('session');
+    setNarrowPane('assist');
+  };
+
+  const testPane = (
+    <TestChatPane
+      testChat={testChat}
+      dirty={dirty}
+      getDraft={draftApi.assembleDraft}
+      onOpenInspector={openInspector}
+      sessionOpen={sessionOpen}
+      onToggleSession={toggleSession}
+    />
+  );
 
   const rightPane = (
     <div className="flex h-full min-h-0 flex-col">
@@ -224,13 +262,17 @@ function Workbench({ kind, id }: { kind: StudioKind; id: string }) {
         stretch
         label={t('studio.tabs.label')}
         value={activeTab}
-        onChange={setRightTab}
+        onChange={selectRightTab}
         items={visibleTabs}
       />
       <div className="min-h-0 flex-1">
         {layout === 'medium' && (
           <div className={cn('h-full', activeTab !== 'test' && 'hidden')}>{testPane}</div>
         )}
+        {/* 常驻挂载：折叠状态与滚动位置在切页签时不丢 */}
+        <div className={cn('h-full', activeTab !== 'session' && 'hidden')}>
+          <TestSessionTab testChat={testChat} />
+        </div>
         <div className={cn('h-full', activeTab !== 'assist' && 'hidden')}>
           <AssistPanel
             kind={kind}
@@ -238,7 +280,7 @@ function Workbench({ kind, id }: { kind: StudioKind; id: string }) {
             connection={connection}
             draft={state?.pair.draft}
             unsavedEntries={unsavedEntries}
-            canSend={draftApi.valid}
+            canSend={draftApi.valid && connection.presetReady}
           />
         </div>
         {activeTab === 'inspector' && (

@@ -1237,6 +1237,7 @@
     "leave": "放弃修改并离开",
     "tabs": {
       "label": "工作台侧栏",
+      "session": "会话",
       "test": "测试",
       "assist": "AI 协作",
       "inspector": "检查器",
@@ -1380,6 +1381,10 @@
     },
     "assist": {
       "connection": "连接",
+      "preset": "预设",
+      "presetNone": "无（不套预设）",
+      "presetDefault": "{{name}}（默认）",
+      "presetHint": "协作请求也按这份预设组装：破限、文风与采样参数照常生效，末尾的预填会被去掉。",
       "intro": {
         "character": "说说想怎么改这张卡：补全设定、换个语气、多写几条开场白……改动会逐条列出来，你决定要哪些。",
         "preset": "说说想怎么调这份预设：改哪条提示词、加什么规则、采样参数怎么动。",
@@ -1433,7 +1438,13 @@
     "test": {
       "title": "测试对话",
       "draftActive": "按草稿",
-      "reset": "重新开始测试对话"
+      "reset": "重新开始测试对话",
+      "character": "测试角色",
+      "noCharacter": "无角色",
+      "characterHint": "切换会重开测试会话（当前对话记录清空），档案、预设、连接与聊天书等设置保留。",
+      "characterBusy": "生成进行中，结束后再切换。",
+      "recreateFailed": "重开测试会话失败：{{message}}",
+      "lockedBook": "正在编辑的世界书：测试会话固定挂载，草稿才能参与组装"
     },
     "inspector": {
       "draft": "按草稿组装",
