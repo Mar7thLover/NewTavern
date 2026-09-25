@@ -1258,13 +1258,14 @@
       "generate": "Generate",
       "creating": "Creating…",
       "newCharacterName": "New character",
-      "createTitle": "Create",
       "newCharacter": "New character",
       "newPreset": "New preset",
       "newLorebook": "New lorebook",
-      "openHint": "Open an existing one:",
-      "recentTitle": "Recently edited",
-      "recentEmpty": "Nothing edited yet."
+      "all": "All",
+      "filterLabel": "Filter by type",
+      "noMatch": "Nothing matches.",
+      "emptyTitle": "Nothing to edit yet",
+      "emptyHint": "Create a character, preset or lorebook from the top right, or let the AI draft a card from one sentence."
     },
     "character": {
       "sections": {

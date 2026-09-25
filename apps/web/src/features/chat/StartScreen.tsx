@@ -5,7 +5,6 @@ import { Link } from 'react-router';
 import { Button, buttonVariants } from '../../components/ui/button';
 import { Input, Select } from '../../components/ui/field';
 import {
-  assetUrl,
   lorebookOpenerTotal,
   useCharacters,
   useCreateChat,
@@ -16,6 +15,7 @@ import {
   type CreateChatInput,
   type LorebookSummary,
 } from '../../lib/api';
+import { EntityCard } from '../library/EntityCard';
 import { EmptyState, QueryStatus, errorMessage } from '../library/shared';
 
 export interface StartScreenProps {
@@ -182,10 +182,7 @@ export function StartScreen({ onCreated }: StartScreenProps) {
   );
 }
 
-/**
- * 开场卡：1px 线的 3:4 卡片，中间是 28/300 的名字首字，下方是名字；悬停时线变墨色。
- * 角色卡有头像图时图片铺满上部；世界书没有画像，改用一行小字标出它是书。
- */
+/** 开场卡：卡面见 `EntityCard`；世界书没有画像，用一行小字标出它是书（带开场白数） */
 function StartCard({
   item,
   disabled,
@@ -196,51 +193,22 @@ function StartCard({
   onStart: () => void;
 }) {
   const { t } = useTranslation();
-  const initial = Array.from(item.name.trim())[0]?.toUpperCase() ?? '?';
-  const avatarAssetId = item.kind === 'character' ? item.character.avatarAssetId : null;
   const openerCount = item.kind === 'lorebook' ? lorebookOpenerTotal(item.book) : 0;
   return (
-    <button
-      type="button"
-      data-part="character-card"
-      data-kind={item.kind}
+    <EntityCard
+      name={item.name}
+      kind={item.kind}
+      avatarAssetId={item.kind === 'character' ? item.character.avatarAssetId : null}
+      {...(item.kind === 'lorebook'
+        ? {
+            kicker:
+              openerCount > 0
+                ? t('chat.start.lorebookKicker', { count: openerCount })
+                : t('chat.start.lorebookKickerPlain'),
+          }
+        : {})}
       disabled={disabled}
       onClick={onStart}
-      className="rounded-card edge-rule surface-reading focus-ring flex aspect-[3/4] w-full cursor-pointer flex-col overflow-hidden border text-left transition-colors hover:border-ink disabled:opacity-50"
-    >
-      <span className="flex min-h-0 flex-1 items-center justify-center">
-        {avatarAssetId ? (
-          <img
-            src={assetUrl(avatarAssetId)}
-            alt=""
-            loading="lazy"
-            className="size-full object-cover"
-          />
-        ) : (
-          <span
-            aria-hidden
-            data-part="character-card-initial"
-            className="font-display text-[28px] leading-none font-light text-ink-story select-none"
-          >
-            {initial}
-          </span>
-        )}
-      </span>
-      <span className="flex min-w-0 flex-col px-3 pb-3">
-        {item.kind === 'lorebook' && (
-          <span
-            data-part="start-card-kicker"
-            className="truncate text-[11px] tracking-wide text-ink-2"
-          >
-            {openerCount > 0
-              ? t('chat.start.lorebookKicker', { count: openerCount })
-              : t('chat.start.lorebookKickerPlain')}
-          </span>
-        )}
-        <span data-part="character-card-name" className="truncate text-sm font-medium text-ink">
-          {item.name}
-        </span>
-      </span>
-    </button>
+    />
   );
 }

@@ -1,38 +1,65 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link, useNavigate } from 'react-router';
+import { useNavigate } from 'react-router';
 
-import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
-import { FieldLabel } from '../../components/ui/field';
-import { useCreateLorebook, useCreatePreset } from '../../lib/api';
+import { FieldLabel, Input } from '../../components/ui/field';
+import { Segmented } from '../../components/ui/segmented';
 import {
-  studioPath,
-  useCreateCharacter,
-  useRecentEntities,
-  type StudioKind,
-} from '../../lib/api-studio';
-import { LibraryHeader, QueryStatus, errorMessage, formatDate } from '../library/shared';
+  useCharacters,
+  useCreateLorebook,
+  useCreatePreset,
+  useLorebooks,
+  usePresets,
+} from '../../lib/api';
+import { studioPath, useCreateCharacter, type StudioKind } from '../../lib/api-studio';
+import { EntityCard } from '../library/EntityCard';
+import { EmptyState, LibraryHeader, QueryStatus, errorMessage } from '../library/shared';
 import { AutoTextarea } from './character/fields';
 import type { StudioLocationState } from './StudioWorkbenchPage';
 
 /**
- * 工作台入口（M6 §4.1）：一句话生成角色、新建三种实体、最近编辑。
+ * 工作台入口（M6 §4.1）。版式照对话页开始界面：已有的角色卡 / 预设 / 世界书都以卡面铺成网格，
+ * 点哪张就在工作台里打开哪张（按最近修改排序，刚改过的在最前）；上方是新建与「一句话生成角色」。
  */
+
+interface StudioItem {
+  kind: StudioKind;
+  id: string;
+  name: string;
+  avatarAssetId: string | null;
+  updatedAt: string;
+}
+
+type Filter = 'all' | StudioKind;
+
 export function StudioHomePage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const recent = useRecentEntities(16);
+  const characters = useCharacters();
+  const presets = usePresets();
+  const lorebooks = useLorebooks();
   const createCharacter = useCreateCharacter();
   const createPreset = useCreatePreset();
   const createLorebook = useCreateLorebook();
   const [idea, setIdea] = useState('');
+  const [filter, setFilter] = useState<Filter>('all');
+  const [query, setQuery] = useState('');
 
   const busy = createCharacter.isPending || createPreset.isPending || createLorebook.isPending;
   const error = createCharacter.error ?? createPreset.error ?? createLorebook.error;
 
   const open = (kind: StudioKind, id: string, state?: StudioLocationState) =>
     void navigate(studioPath(kind, id), state ? { state } : undefined);
+
+  const newCharacter = () =>
+    createCharacter.mutate(
+      { name: t('studio.home.newCharacterName') },
+      { onSuccess: (row) => open('character', row.id) },
+    );
+  const newPreset = () => createPreset.mutate({}, { onSuccess: (row) => open('preset', row.id) });
+  const newLorebook = () =>
+    createLorebook.mutate({}, { onSuccess: (row) => open('lorebook', row.id) });
 
   const generate = () => {
     const text = idea.trim();
@@ -43,9 +70,84 @@ export function StudioHomePage() {
     );
   };
 
+  /* 三类混排，按最近修改排序：刚改过的就在最前（代替原来单列的「最近编辑」） */
+  const items: StudioItem[] = [
+    ...(characters.data ?? []).map((item): StudioItem => ({
+      kind: 'character',
+      id: item.id,
+      name: item.name,
+      avatarAssetId: item.avatarAssetId,
+      updatedAt: item.updatedAt,
+    })),
+    ...(presets.data ?? []).map((item): StudioItem => ({
+      kind: 'preset',
+      id: item.id,
+      name: item.name,
+      avatarAssetId: null,
+      updatedAt: item.updatedAt,
+    })),
+    ...(lorebooks.data ?? []).map((item): StudioItem => ({
+      kind: 'lorebook',
+      id: item.id,
+      name: item.name,
+      avatarAssetId: null,
+      updatedAt: item.updatedAt,
+    })),
+  ].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  const counts = { character: 0, preset: 0, lorebook: 0 };
+  for (const item of items) counts[item.kind] += 1;
+
+  const needle = query.trim().toLowerCase();
+  const list = items.filter(
+    (item) =>
+      (filter === 'all' || item.kind === filter) &&
+      (needle === '' || item.name.toLowerCase().includes(needle)),
+  );
+
+  const ready =
+    characters.data !== undefined && presets.data !== undefined && lorebooks.data !== undefined;
+  const listError = characters.error ?? presets.error ?? lorebooks.error;
+
+  const kicker = (kind: StudioKind) =>
+    kind === 'character' ? undefined : t(`studio.kinds.${kind}`);
+
+  const card = (item: StudioItem) => (
+    <li key={`${item.kind}:${item.id}`}>
+      <EntityCard
+        name={item.name}
+        kind={item.kind}
+        avatarAssetId={item.avatarAssetId}
+        {...(item.kind === 'character' ? {} : { kicker: kicker(item.kind) })}
+        onClick={() => open(item.kind, item.id)}
+      />
+    </li>
+  );
+
   return (
-    <div className="mx-auto max-w-4xl">
-      <LibraryHeader title={t('nav.studio')} subtitle={t('studio.home.subtitle')} />
+    <div data-part="studio-home" className="mx-auto max-w-4xl">
+      <LibraryHeader
+        title={t('nav.studio')}
+        subtitle={t('studio.home.subtitle')}
+        actions={
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" disabled={busy} onClick={newCharacter}>
+              {t('studio.home.newCharacter')}
+            </Button>
+            <Button variant="outline" size="sm" disabled={busy} onClick={newPreset}>
+              {t('studio.home.newPreset')}
+            </Button>
+            <Button variant="outline" size="sm" disabled={busy} onClick={newLorebook}>
+              {t('studio.home.newLorebook')}
+            </Button>
+          </div>
+        }
+      />
+
+      {error && (
+        <p role="alert" className="-mt-4 mb-6 text-xs text-danger">
+          {errorMessage(error)}
+        </p>
+      )}
 
       <section className="mb-10">
         <FieldLabel htmlFor="studio-idea">{t('studio.home.ideaLabel')}</FieldLabel>
@@ -53,7 +155,7 @@ export function StudioHomePage() {
           id="studio-idea"
           value={idea}
           onChange={setIdea}
-          minRows={3}
+          minRows={2}
           placeholder={t('studio.home.ideaPlaceholder')}
           onKeyDown={(event) => {
             if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
@@ -70,92 +172,61 @@ export function StudioHomePage() {
         </div>
       </section>
 
-      <section className="mb-10">
-        <h2 className="font-display mb-3 text-sm font-medium">{t('studio.home.createTitle')}</h2>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant="outline"
-            disabled={busy}
-            onClick={() =>
-              createCharacter.mutate(
-                { name: t('studio.home.newCharacterName') },
-                { onSuccess: (row) => open('character', row.id) },
-              )
-            }
-          >
-            {t('studio.home.newCharacter')}
-          </Button>
-          <Button
-            variant="outline"
-            disabled={busy}
-            onClick={() => createPreset.mutate({}, { onSuccess: (row) => open('preset', row.id) })}
-          >
-            {t('studio.home.newPreset')}
-          </Button>
-          <Button
-            variant="outline"
-            disabled={busy}
-            onClick={() =>
-              createLorebook.mutate({}, { onSuccess: (row) => open('lorebook', row.id) })
-            }
-          >
-            {t('studio.home.newLorebook')}
-          </Button>
-        </div>
-        <p className="mt-2 text-[11px] text-ink-3">
-          {t('studio.home.openHint')}{' '}
-          <Link to="/characters" className="text-ink-link underline underline-offset-2">
-            {t('nav.characters')}
-          </Link>{' '}
-          ·{' '}
-          <Link to="/presets" className="text-ink-link underline underline-offset-2">
-            {t('nav.presets')}
-          </Link>{' '}
-          ·{' '}
-          <Link to="/lorebooks" className="text-ink-link underline underline-offset-2">
-            {t('nav.lorebooks')}
-          </Link>
-        </p>
-        {error && (
-          <p role="alert" className="mt-2 text-xs text-danger">
-            {errorMessage(error)}
-          </p>
-        )}
-      </section>
-
       <section>
-        <h2 className="font-display mb-3 text-sm font-medium">{t('studio.home.recentTitle')}</h2>
+        <div className="mb-4 flex min-w-0 flex-wrap items-end justify-between gap-x-4 gap-y-2">
+          <Segmented
+            className="min-w-0"
+            label={t('studio.home.filterLabel')}
+            value={filter}
+            onChange={setFilter}
+            items={[
+              { value: 'all', label: t('studio.home.all'), note: String(items.length) },
+              {
+                value: 'character',
+                label: t('studio.kinds.character'),
+                note: String(counts.character),
+              },
+              { value: 'preset', label: t('studio.kinds.preset'), note: String(counts.preset) },
+              {
+                value: 'lorebook',
+                label: t('studio.kinds.lorebook'),
+                note: String(counts.lorebook),
+              },
+            ]}
+          />
+          <Input
+            value={query}
+            placeholder={t('common.search')}
+            aria-label={t('common.search')}
+            onChange={(event) => setQuery(event.target.value)}
+            className="h-9 w-full min-w-0 sm:w-56"
+          />
+        </div>
+
         <QueryStatus
-          isPending={recent.isPending}
-          error={recent.error}
-          onRetry={() => void recent.refetch()}
+          isPending={!ready && !listError}
+          error={listError}
+          onRetry={() => {
+            void characters.refetch();
+            void presets.refetch();
+            void lorebooks.refetch();
+          }}
         />
-        {recent.data && recent.data.length === 0 && (
-          <p className="text-sm text-ink-3">{t('studio.home.recentEmpty')}</p>
-        )}
-        {(recent.data ?? []).length > 0 && (
-          <ul className="edge-rule divide-y divide-edge border-y">
-            {(recent.data ?? []).map((item) => (
-              <li key={`${item.type}:${item.id}`}>
-                <Link
-                  to={studioPath(item.type, item.id)}
-                  className="focus-ring-inset flex items-center gap-3 px-1 py-2.5 text-sm hover:text-accent"
-                >
-                  <Badge variant="outline" className="w-14 justify-center">
-                    {t(`studio.kinds.${item.type}`)}
-                  </Badge>
-                  <span className="min-w-0 flex-1 truncate">{item.name}</span>
-                  <span className="hidden shrink-0 text-[11px] text-ink-3 sm:inline">
-                    v{item.version} · {t(`studio.versions.author.${item.author}`)}
-                  </span>
-                  <span className="shrink-0 text-[11px] text-ink-3 tabular-nums">
-                    {formatDate(item.updatedAt)}
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
+
+        {ready &&
+          (items.length === 0 ? (
+            <EmptyState
+              kind="characters"
+              title={t('studio.home.emptyTitle')}
+              hint={t('studio.home.emptyHint')}
+            />
+          ) : list.length === 0 ? (
+            <p className="py-8 text-center text-sm text-ink-3">{t('studio.home.noMatch')}</p>
+          ) : (
+            <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+              {list.map(card)}
+            </ul>
+          ))}
       </section>
     </div>
   );

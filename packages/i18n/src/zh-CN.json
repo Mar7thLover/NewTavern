@@ -1258,13 +1258,14 @@
       "generate": "开始生成",
       "creating": "正在新建…",
       "newCharacterName": "新角色",
-      "createTitle": "新建",
       "newCharacter": "新建角色卡",
       "newPreset": "新建预设",
       "newLorebook": "新建世界书",
-      "openHint": "打开已有的：",
-      "recentTitle": "最近编辑",
-      "recentEmpty": "还没有编辑记录。"
+      "all": "全部",
+      "filterLabel": "按类型筛选",
+      "noMatch": "没有匹配的条目。",
+      "emptyTitle": "还没有可编辑的内容",
+      "emptyHint": "从右上角新建一张角色卡、一份预设或一本世界书，或者用一句话让 AI 起草一张卡。"
     },
     "character": {
       "sections": {
